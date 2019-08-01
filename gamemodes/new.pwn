@@ -32,9 +32,10 @@ doda³em ten tekst i teraz wrzucam na githuba
 #include <foreach>
 #include <streamer>
 #include <a_mysql>
+//#include <a_mysql_yinline>
 #include <Pawn.CMD>
 #include <sscanf2>
-#include <samp-precise-timers>
+//#include <samp-precise-timers>
 
 #undef MAX_PLAYERS
 #undef MAX_VEHICLES
@@ -843,7 +844,7 @@ new PosInfo[][sPosData] =
 	{2233.6584,	-1113.2397,	1050.8828,	 2.7833,  	5, 0}
 };
 
-new MysqlHandle;
+new MySQL:MysqlHandle;
 
 new Text:TD_GroupOption[6][MAX_GROUP_SLOTS];
 
@@ -899,6 +900,18 @@ forward UnloadPlayerGroups(playerid);
 forward ShowPlayerGroupOptions(playerid);
 forward HidePlayerGroupOptions(playerid);
 
+forward query_OnLoadPlayerGroups(playerid);
+forward query_OnLoadGroups();
+
+forward query_OnLoadVehicle();
+forward query_OnLoadVehicles();
+
+forward query_OnLoadPlayerItems(playerid);
+forward query_OnListPlayerNearItems(playerid);
+
+forward query_OnListPlayerBagItems(playerid);
+forward query_OnListPlayerVehicles(playerid);
+
 main()
 {
 	print("\n----------------------------------");
@@ -918,7 +931,7 @@ public OnGameModeInit()
 
 	SetGameModeText(""GAMEMODE" ver. "VERSION"");
 	
-	mysql_log(LOG_ALL);
+	mysql_log();
 	
 	AllowInteriorWeapons(false);
 	ShowNameTags(false);
@@ -930,14 +943,14 @@ public OnGameModeInit()
 	DisableInteriorEnterExits();
 	ManualVehicleEngineAndLights();
 	
-	second_timer = SetPreciseTimer("OnSecondTimer", 1000, true);
+	second_timer = SetTimer("OnSecondTimer", 1000, true);
 	return 1;
 }
 
 public OnGameModeExit()
 {
 	mysql_close();
-	DeletePreciseTimer(second_timer);
+	KillTimer(second_timer);
 	return 1;
 }
 
@@ -1172,30 +1185,7 @@ cmd:pojazd(playerid, params[])
 	{
 		new query[256];
 		mysql_format(MysqlHandle, query, sizeof(query), "SELECT `veh_uid`, `veh_model` FROM `myrp_vehicles` WHERE veh_ownertype = '%d' AND veh_owner = '%d'", OWNER_PLAYER, PlayerCache[playerid][pUID]);
-
-		inline OnListPlayerVehicles()
-		{
-			new list_vehicles[256] = "Identyfikator\tNazwa pojazdu",
-				veh_uid, veh_model, rows = cache_get_row_count();
-
-			if(rows > 0)
-			{
-				for(new row = 0; row != rows; row++)
-				{
-					veh_uid = cache_get_row_int(row, 0);
-					veh_model = cache_get_row_int(row, 1);
-
-					format(list_vehicles, sizeof(list_vehicles), "%s\n%d\t%s", list_vehicles, veh_uid, GetVehicleName(veh_model));
-				}
-
-				ShowPlayerDialog(playerid, D_VEH_SPAWN, DIALOG_STYLE_TABLIST_HEADERS, "Lista Twoich pojazdów:", list_vehicles, "(Un)spawn", "Anuluj");
-			}
-			else
-			{
-				TD_ShowSmallInfo(playerid, 5, "Nie posiadasz ~r~zadnych ~w~pojazdow.");
-			}
-		}
-		mysql_tquery_inline(MysqlHandle, query, using inline OnListPlayerVehicles, "");
+		mysql_tquery(MysqlHandle, query, "query_OnListPlayerVehicles", "d", playerid);
 		return 1;
 	}
 	
@@ -1821,7 +1811,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				return 1;
 			}
 			
-			mysql_query_format("SELECT `char_uid`, `char_gid`, `member_premium_time`, `member_game_points` FROM `myrp_characters`, `ipb_members` WHERE BINARY char_name LIKE '%s' AND member_id = char_gid AND members_pass_hash = md5(CONCAT(md5(members_pass_salt), md5('%s'))) LIMIT 1", PlayerCache[playerid][pCharName], password);
+			mysql_format("SELECT `char_uid`, `char_gid`, `member_premium_time`, `member_game_points` FROM `myrp_characters`, `ipb_members` WHERE BINARY char_name LIKE '%s' AND member_id = char_gid AND members_pass_hash = md5(CONCAT(md5(members_pass_salt), md5('%s'))) LIMIT 1", PlayerCache[playerid][pCharName], password);
 			*/
 			orm_select(PlayerCache[playerid][pOrm], "OnPlayerLogin", "d", playerid);
 	        return 1;
@@ -2307,7 +2297,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			{
 			    return 1;
 			}
-			mysql_query_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '%d' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_BAG, PlayerItemCache[playerid][bag_item_id][iUID], item_uid);
+			mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '%d' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_BAG, PlayerItemCache[playerid][bag_item_id][iUID], item_uid);
 
 			if(cache_affected_rows() <= 0)
 			{
@@ -2563,39 +2553,8 @@ stock GetPlayerItemWeight(playerid, itemid)
 public LoadPlayerItems(playerid)
 {
 	new query[256];
-	inline OnLoadItems()
-	{
-		new rows = cache_get_row_count(), itemid, ORM:orm_id;
-
-		if(rows > 0)
-		{
-			for(new row = 0; row != rows; row++)
-			{
-			    itemid = Iter_Free(PlayerItem[playerid]);
-			    orm_id = PlayerItemCache[playerid][itemid][iOrm] = orm_create("myrp_items");
-
-				orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iUID], "item_uid");
-				orm_addvar_string(orm_id, PlayerItemCache[playerid][itemid][iName], 32, "item_name");
-
-				orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iValue][0], "item_value1");
-				orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iValue][1], "item_value2");
-
-				orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iPlace], "item_place");
-				orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iOwner], "item_owner");
-
-				orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iType], "item_type");
-				orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iFavorite], "item_favorite");
-
-				orm_setkey(orm_id, "item_uid");
-				orm_apply_cache(orm_id, row);
-				
-				Iter_Add(PlayerItem[playerid], itemid);
-			}
-		}
-	}
-	
     mysql_format(MysqlHandle, query, sizeof(query), "SELECT `item_uid`, `item_name`, `item_value1`, `item_value2`, `item_place`, `item_owner`, `item_type`, `item_favorite` FROM `myrp_items` WHERE item_place = %d AND item_owner = %d", PLACE_PLAYER, PlayerCache[playerid][pUID]);
-    mysql_tquery_inline(MysqlHandle, query, using inline OnLoadItems, "");
+    mysql_tquery(MysqlHandle, query, "query_OnLoadItems", "d", playerid);
 	return 1;
 }
 
@@ -2750,21 +2709,7 @@ public ListPlayerNearItems(playerid)
 		strcat(main_query, query, sizeof(main_query));
 	}
 	
- 	inline ListNearItems()
- 	{
-		new list_items[1024] = "Identyfikator\tNazwa przedmiotu",
-			item_name[32], rows = cache_get_row_count();
-
-		for(new row = 0; row != rows; row++)
-		{
-			item_uid = cache_get_row_int(row, 0);
-			cache_get_row(row, 1, item_name);
-
-			format(list_items, sizeof(list_items), "%s\n%d\t%s", list_items, item_uid, item_name);
-		}
-		ShowPlayerDialog(playerid, D_ITEM_RAISE, DIALOG_STYLE_TABLIST_HEADERS, "Przedmioty znajduj¹ce siê w pobli¿u:", list_items, "Podnieœ", "Anuluj");
-   	}
-   	mysql_tquery_inline(MysqlHandle, main_query, using inline ListNearItems, "");
+   	mysql_tquery(MysqlHandle, main_query, "query_OnListPlayerNearItems", "d", playerid);
 	return 1;
 }
 
@@ -2964,33 +2909,11 @@ public OnPlayerUseItem(playerid, itemid)
 	if(item_type == ITEM_BAG)
 	{
 	    new query[256];
-	    inline OnListBagItems()
-	    {
-    		new rows = cache_get_row_count(),
-				list_items[512] = "Identyfikator\tNazwa przedmiotu", item_uid, item_name[32];
-
-			for(new row = 0; row != rows; row++)
-			{
-				item_uid = cache_get_row_int(row, 0);
-				cache_get_row(row, 1, item_name);
-
-				format(list_items, sizeof(list_items), "%s\n%d\t\t%s", list_items, item_uid, item_name);
-			}
-			if(rows > 0)
-			{
-				ShowPlayerDialog(playerid, D_ITEM_REMOVE_BAG, DIALOG_STYLE_TABLIST_HEADERS, "Znaleziono przedmioty:", list_items, "Wyjmij", "Wróæ");
-			}
-			else
-			{
-				CallLocalFunction("ListPlayerItems", "d", playerid);
-				TD_ShowSmallInfo(playerid, 5, "Nie znaleziono ~r~zadnych ~w~przedmiotow.");
-			}
-
-			PlayerCache[playerid][pItemArray][ITEM_BAG] = itemid;
-	    }
 	    
 	    mysql_format(MysqlHandle, query, sizeof(query), "SELECT `item_uid`, `item_name` FROM `myrp_items` WHERE item_place = '%d' AND item_owner = '%d'", PLACE_BAG, PlayerItemCache[playerid][itemid][iUID]);
-		mysql_tquery_inline(MysqlHandle, query, using inline OnListBagItems, "");
+		mysql_tquery(MysqlHandle, query, "query_OnListPlayerBagItems", "d", playerid);
+		
+		PlayerCache[playerid][pItemArray][ITEM_BAG] = itemid;
 	    return 1;
 	}
 	
@@ -3018,7 +2941,7 @@ public OnPlayerDropItem(playerid, itemid)
 		ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 
 		ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, 0, 0, 0, 0, 0, 1);
-		mysql_query_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '0', item_posx = '%f', item_posy = '%f', item_posz = '%f', item_interior = '%d', item_world = '%d' WHERE item_uid = '%d' LIMIT 1", PLACE_NONE, PosX, PosY, PosZ, interior_id, virtual_world, PlayerItemCache[playerid][itemid][iUID]);
+		mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '0', item_posx = '%f', item_posy = '%f', item_posz = '%f', item_interior = '%d', item_world = '%d' WHERE item_uid = '%d' LIMIT 1", 256, "dfffddd", PLACE_NONE, PosX, PosY, PosZ, interior_id, virtual_world, PlayerItemCache[playerid][itemid][iUID]);
 
 		new object_id, item_type = PlayerItemCache[playerid][itemid][iType];
 		if(item_type == ITEM_WEAPON || item_type == ITEM_PAINT || item_type == ITEM_INHIBITOR)
@@ -3046,7 +2969,7 @@ public OnPlayerDropItem(playerid, itemid)
 	if(IsPlayerInAnyVehicle(playerid))
 	{
 	    new	vehid = GetVehicleIndex(GetPlayerVehicleID(playerid)), veh_uid = VehicleCache[vehid][vUID];
-		mysql_query_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_uid = '%d' LIMIT 1", PLACE_VEHICLE, veh_uid, PlayerItemCache[playerid][itemid][iUID]);
+		mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_uid = '%d' LIMIT 1", 256, "ddd", PLACE_VEHICLE, veh_uid, PlayerItemCache[playerid][itemid][iUID]);
 
    		format(string, sizeof(string), "* %s odk³ada przedmiot w pojeŸdzie.", PlayerName(playerid));
 		ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
@@ -3072,7 +2995,7 @@ public OnPlayerRaiseItem(playerid, item_uid)
 	
 	if(!IsPlayerInAnyVehicle(playerid))
 	{
-		mysql_query_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '0' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_NONE, item_uid);
+		mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '0' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_NONE, item_uid);
 	
 		if(cache_affected_rows() <= 0)
 		{
@@ -3097,7 +3020,7 @@ public OnPlayerRaiseItem(playerid, item_uid)
 	else
 	{
 	    new vehid = GetVehicleIndex(GetPlayerVehicleID(playerid)), veh_uid = VehicleCache[vehid][vUID];
-	    mysql_query_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '%d' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_VEHICLE, veh_uid, item_uid);
+	    mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '%d' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_VEHICLE, veh_uid, item_uid);
 
 		if(cache_affected_rows() <= 0)
 		{
@@ -3268,91 +3191,21 @@ public DeleteVehicle(veh_uid)
 
 public LoadVehicles()
 {
-	new query[256], vehicleid;
-	inline OnLoadVehicles()
-	{
-		new rows = cache_get_row_count(), vehid, ORM:orm_id;
-		for(new row = 0; row != rows; row++)
-		{
-		    vehid = Iter_Free(Vehicle);
-		    orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles");
+	new query[256];
 
-		    orm_addvar_int(orm_id, VehicleCache[vehid][vUID], "veh_uid");
-		    orm_addvar_int(orm_id, VehicleCache[vehid][vModel], "veh_model");
-
-	    	orm_addvar_float(orm_id, VehicleCache[vehid][vPos][0], "veh_posx");
-			orm_addvar_float(orm_id, VehicleCache[vehid][vPos][1], "veh_posy");
-			orm_addvar_float(orm_id, VehicleCache[vehid][vPos][2], "veh_posz");
-			orm_addvar_float(orm_id, VehicleCache[vehid][vPos][3], "veh_posa");
-
-			orm_addvar_int(orm_id, VehicleCache[vehid][vCol][0], "veh_col1");
-			orm_addvar_int(orm_id, VehicleCache[vehid][vCol][1], "veh_col2");
-
-			orm_addvar_int(orm_id, VehicleCache[vehid][vInt], "veh_int");
-			orm_addvar_int(orm_id, VehicleCache[vehid][vWorld], "veh_world");
-
-			orm_addvar_int(orm_id, VehicleCache[vehid][vOwnerType], "veh_ownertype");
-			orm_addvar_int(orm_id, VehicleCache[vehid][vOwner], "veh_owner");
-			
-			orm_addvar_float(orm_id, VehicleCache[vehid][vHealth], "veh_health");
-			orm_addvar_float(orm_id, VehicleCache[vehid][vMileage], "veh_mileage");
-
-			orm_setkey(orm_id, "veh_uid");
-			orm_apply_cache(orm_id, row);
-
-			Iter_Add(Vehicle, vehid);
-
-            printf("ORM_ID: %d, ID: %d, UID: %d, MODEL: %d", orm_id, vehid, VehicleCache[vehid][vUID], VehicleCache[vehid][vModel]);
-			vehicleid = VehicleCache[vehid][vGID] = CreateVehicle(VehicleCache[vehid][vModel], VehicleCache[vehid][vPos][0], VehicleCache[vehid][vPos][1], VehicleCache[vehid][vPos][2], VehicleCache[vehid][vPos][3], VehicleCache[vehid][vCol][0], VehicleCache[vehid][vCol][1], 3600);
-
-			SetVehicleHealth(vehicleid, VehicleCache[vehid][vHealth]);
-			ChangeVehicleEngineStatus(VehicleCache[vehid][vGID], false);
-		}
-	}
 	mysql_format(MysqlHandle, query, sizeof(query), "SELECT * FROM `myrp_vehicles` WHERE veh_ownertype <> %d", OWNER_PLAYER);
-	mysql_tquery_inline(MysqlHandle, query, using inline OnLoadVehicles, "");
+	mysql_tquery(MysqlHandle, query, "query_OnLoadVehicles", "");
 	return 1;
 }
 
 public LoadVehicle(veh_uid)
 {
-	new query[256], vehid = INVALID_VEHICLE_ID, vehicleid;
-	inline OnLoadVehicle()
-	{
-	    vehid = Iter_Free(Vehicle);
-	 	new ORM:orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles");
+	new query[256];
 
-		orm_addvar_int(orm_id, VehicleCache[vehid][vUID], "veh_uid");
-		orm_addvar_int(orm_id, VehicleCache[vehid][vModel], "veh_model");
-
-		orm_addvar_float(orm_id, VehicleCache[vehid][vPos][0], "veh_posx");
-		orm_addvar_float(orm_id, VehicleCache[vehid][vPos][1], "veh_posy");
-		orm_addvar_float(orm_id, VehicleCache[vehid][vPos][2], "veh_posz");
-		orm_addvar_float(orm_id, VehicleCache[vehid][vPos][3], "veh_posa");
-
-		orm_addvar_int(orm_id, VehicleCache[vehid][vCol][0], "veh_col1");
-		orm_addvar_int(orm_id, VehicleCache[vehid][vCol][1], "veh_col2");
-
-		orm_addvar_int(orm_id, VehicleCache[vehid][vInt], "veh_int");
-		orm_addvar_int(orm_id, VehicleCache[vehid][vWorld], "veh_world");
-
-		orm_addvar_int(orm_id, VehicleCache[vehid][vOwnerType], "veh_ownertype");
-		orm_addvar_int(orm_id, VehicleCache[vehid][vOwner], "veh_owner");
-		
-		orm_addvar_float(orm_id, VehicleCache[vehid][vHealth], "veh_health");
-		orm_addvar_float(orm_id, VehicleCache[vehid][vMileage], "veh_mileage");
-
-		orm_setkey(orm_id, "veh_uid");
-		orm_apply_cache(orm_id, 0);
-
-		Iter_Add(Vehicle, vehid);
-		vehicleid = VehicleCache[vehid][vGID] = CreateVehicle(VehicleCache[vehid][vModel], VehicleCache[vehid][vPos][0], VehicleCache[vehid][vPos][1], VehicleCache[vehid][vPos][2], VehicleCache[vehid][vPos][3], VehicleCache[vehid][vCol][0], VehicleCache[vehid][vCol][1], 3600);
-
-		SetVehicleHealth(vehicleid, VehicleCache[vehid][vHealth]);
-		ChangeVehicleEngineStatus(VehicleCache[vehid][vGID], false);
-	}
 	mysql_format(MysqlHandle, query, sizeof(query), "SELECT * FROM `myrp_vehicles` WHERE veh_uid = '%d' LIMIT 1", veh_uid);
-	mysql_tquery_inline(MysqlHandle, query, using inline OnLoadVehicle, "");
+	mysql_tquery(MysqlHandle, query, "query_OnLoadVehicle", "");
+	
+	new vehid = GetVehicleID(veh_uid);
 	return vehid;
 }
 
@@ -3526,36 +3379,7 @@ public CreateGroup(group_name[32], group_type)
 
 public LoadGroups()
 {
-	inline OnLoadGroups()
-	{
-		new rows = cache_get_row_count(), group_id, ORM:orm_id;
-		for(new row = 0; row != rows; row++)
-		{
-		    group_id = Iter_Free(Group);
-		    orm_id = GroupCache[group_id][gOrm] = orm_create("myrp_groups");
-		    
-	    	orm_addvar_int(orm_id, GroupCache[group_id][gUID], "group_uid");
-			orm_addvar_string(orm_id, GroupCache[group_id][gName], 32, "group_name");
-
-			orm_addvar_int(orm_id, GroupCache[group_id][gType], "group_type");
-			orm_addvar_int(orm_id, GroupCache[group_id][gCash], "group_cash");
-			
-			orm_addvar_string(orm_id, GroupCache[group_id][gTag], 5, "group_tag");
-
-			orm_addvar_int(orm_id, GroupCache[group_id][gColor], "group_color");
-			orm_addvar_int(orm_id, GroupCache[group_id][gFlags], "group_flags");
-			
-			orm_addvar_int(orm_id, GroupCache[group_id][gOwner], "group_owner");
-
-			orm_setkey(orm_id, "group_uid");
-			orm_apply_cache(orm_id, row);
-			
-			Iter_Add(Group, group_id);
-			
-			printf("ORM_ID: %d, ID: %d, UID: %d, NAME: %s", orm_id, group_id, GroupCache[group_id][gUID], GroupCache[group_id][gName]);
-		}
-	}
-	mysql_tquery_inline(MysqlHandle, "SELECT * FROM `myrp_groups`", using inline OnLoadGroups, "");
+	mysql_tquery(MysqlHandle, "SELECT * FROM `myrp_groups`", "query_OnLoadGroups", "");
 	return 1;
 }
 
@@ -3584,35 +3408,9 @@ public DeleteGroup(group_id)
 public LoadPlayerGroups(playerid)
 {
 	new query[256];
-	inline OnLoadPlayerGroups()
-	{
-	    new rows = cache_get_row_count(), group_slot, group_id;
-	    for(new row = 0; row != rows; row++)
-	    {
-	        group_slot = Iter_Free(PlayerGroup[playerid]);
-	        group_id = GetGroupID(cache_get_row_int(row, 0));
-	        
-	        if(group_id == INVALID_GROUP_ID)    continue;
-	        
-	        PlayerGroup[playerid][group_slot][gpUID] = GroupCache[group_id][gUID];
-	        PlayerGroup[playerid][group_slot][gpPerm] = cache_get_row_int(row, 1);
-	        
-	        cache_get_row(row, 2, PlayerGroup[playerid][group_slot][gpTitle], MysqlHandle, 32);
-	        PlayerGroup[playerid][group_slot][gpPayment] = cache_get_row_int(row, 3);
-	        
-	        PlayerGroup[playerid][group_slot][gpSkin] = cache_get_row_int(row, 4);
-	        
-			cache_get_row(row, 5, GroupCache[group_id][gTag], MysqlHandle, 5);
-			
-			GroupCache[group_id][gColor] = cache_get_row_int(row, 6);
-			GroupCache[group_id][gFlags] = cache_get_row_int(row, 7);
-	        
-	        PlayerGroup[playerid][group_slot][gpID] = group_id;
-	        Iter_Add(PlayerGroup[playerid], group_slot);
-	    }
-	}
+
 	mysql_format(MysqlHandle, query, sizeof(query), "SELECT `group_uid`, `group_perm`, `group_title`, `group_payment`, `group_skin`, `group_tag`, `group_color`, `group_flags` FROM `myrp_groups`, `myrp_char_groups` WHERE myrp_groups.group_uid = myrp_char_groups.group_belongs AND char_uid = '%d' LIMIT %d", PlayerCache[playerid][pUID], MAX_GROUP_SLOTS);
-	mysql_tquery_inline(MysqlHandle, query, using inline OnLoadPlayerGroups, "");
+	mysql_tquery(MysqlHandle, query, "query_OnLoadPlayerGroups", "d", playerid);
 	return 1;
 }
 
@@ -3754,7 +3552,7 @@ public ProxDetector(Float:radi, playerid, string[], col1, col2, col3, col4, col5
 	return 1;
 }
 
-public OnQueryError(errorid, error[], callback[], query[], connectionHandle)
+public OnQueryError(errorid, const error[], const callback[], const query[], MySQL:handle)
 {
 	printf("ERROR [%d]: %s (%s) \"%s\"", errorid, error, callback, query);
 	return 1;
@@ -4226,6 +4024,252 @@ SSCANF:group_type(string[])
 		}
 	}
 	return group_type;
+}
+
+
+public query_OnLoadPlayerGroups(playerid)
+{
+	new rows, group_slot, group_id;
+	
+	cache_get_row_count(rows);
+	for(new row = 0; row != rows; row++)
+	{
+ 		group_slot = Iter_Free(PlayerGroup[playerid]);
+   		
+   		cache_get_value_index_int(row, 0, group_id);
+
+		if(group_id == INVALID_GROUP_ID)    continue;
+
+		PlayerGroup[playerid][group_slot][gpUID] = GroupCache[group_id][gUID];
+		cache_get_value_index_int(row, 1, PlayerGroup[playerid][group_slot][gpPerm]);
+		
+		cache_get_value_index(row, 2, PlayerGroup[playerid][group_slot][gpTitle], 32);
+		
+		cache_get_value_index_int(row, 3, PlayerGroup[playerid][group_slot][gpPayment]);
+		cache_get_value_index_int(row, 4, PlayerGroup[playerid][group_slot][gpSkin]);
+
+        cache_get_value_index(row, 5, GroupCache[group_id][gTag], 5);
+
+        cache_get_value_index_int(row, 6, GroupCache[group_id][gColor]);
+        cache_get_value_index_int(row, 7, GroupCache[group_id][gFlags]);
+
+		PlayerGroup[playerid][group_slot][gpID] = group_id;
+		Iter_Add(PlayerGroup[playerid], group_slot);
+	}
+	return rows;
+}
+
+public query_OnLoadGroups()
+{
+	new rows, group_id, ORM:orm_id;
+	cache_get_row_count(rows);
+	
+	for(new row = 0; row != rows; row++)
+	{
+ 		group_id = Iter_Free(Group);
+   		orm_id = GroupCache[group_id][gOrm] = orm_create("myrp_groups");
+
+		orm_addvar_int(orm_id, GroupCache[group_id][gUID], "group_uid");
+		orm_addvar_string(orm_id, GroupCache[group_id][gName], 32, "group_name");
+
+		orm_addvar_int(orm_id, GroupCache[group_id][gType], "group_type");
+		orm_addvar_int(orm_id, GroupCache[group_id][gCash], "group_cash");
+
+		orm_addvar_string(orm_id, GroupCache[group_id][gTag], 5, "group_tag");
+
+		orm_addvar_int(orm_id, GroupCache[group_id][gColor], "group_color");
+		orm_addvar_int(orm_id, GroupCache[group_id][gFlags], "group_flags");
+
+		orm_addvar_int(orm_id, GroupCache[group_id][gOwner], "group_owner");
+
+		orm_setkey(orm_id, "group_uid");
+		orm_apply_cache(orm_id, row);
+
+		Iter_Add(Group, group_id);
+
+		printf("ORM_ID: %d, ID: %d, UID: %d, NAME: %s", orm_id, group_id, GroupCache[group_id][gUID], GroupCache[group_id][gName]);
+	}
+	return rows;
+}
+
+public query_OnLoadVehicle()
+{
+	new query[256], vehid = INVALID_VEHICLE_ID, vehicleid;
+	
+ 	vehid = Iter_Free(Vehicle);
+ 	new ORM:orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles");
+
+	orm_addvar_int(orm_id, VehicleCache[vehid][vUID], "veh_uid");
+	orm_addvar_int(orm_id, VehicleCache[vehid][vModel], "veh_model");
+
+	orm_addvar_float(orm_id, VehicleCache[vehid][vPos][0], "veh_posx");
+	orm_addvar_float(orm_id, VehicleCache[vehid][vPos][1], "veh_posy");
+	orm_addvar_float(orm_id, VehicleCache[vehid][vPos][2], "veh_posz");
+	orm_addvar_float(orm_id, VehicleCache[vehid][vPos][3], "veh_posa");
+
+	orm_addvar_int(orm_id, VehicleCache[vehid][vCol][0], "veh_col1");
+	orm_addvar_int(orm_id, VehicleCache[vehid][vCol][1], "veh_col2");
+
+	orm_addvar_int(orm_id, VehicleCache[vehid][vInt], "veh_int");
+	orm_addvar_int(orm_id, VehicleCache[vehid][vWorld], "veh_world");
+
+	orm_addvar_int(orm_id, VehicleCache[vehid][vOwnerType], "veh_ownertype");
+	orm_addvar_int(orm_id, VehicleCache[vehid][vOwner], "veh_owner");
+
+	orm_addvar_float(orm_id, VehicleCache[vehid][vHealth], "veh_health");
+	orm_addvar_float(orm_id, VehicleCache[vehid][vMileage], "veh_mileage");
+
+	orm_setkey(orm_id, "veh_uid");
+	orm_apply_cache(orm_id, 0);
+
+	Iter_Add(Vehicle, vehid);
+	vehicleid = VehicleCache[vehid][vGID] = CreateVehicle(VehicleCache[vehid][vModel], VehicleCache[vehid][vPos][0], VehicleCache[vehid][vPos][1], VehicleCache[vehid][vPos][2], VehicleCache[vehid][vPos][3], VehicleCache[vehid][vCol][0], VehicleCache[vehid][vCol][1], 3600);
+
+	SetVehicleHealth(vehicleid, VehicleCache[vehid][vHealth]);
+	ChangeVehicleEngineStatus(VehicleCache[vehid][vGID], false);
+	return vehid;
+}
+
+public query_OnLoadVehicles()
+{
+	new rows, vehid, ORM:orm_id, vehicleid;
+	cache_get_row_count(rows);
+	
+	for(new row = 0; row != rows; row++)
+	{
+ 		vehid = Iter_Free(Vehicle);
+ 		orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles");
+
+		orm_addvar_int(orm_id, VehicleCache[vehid][vUID], "veh_uid");
+		orm_addvar_int(orm_id, VehicleCache[vehid][vModel], "veh_model");
+
+		orm_addvar_float(orm_id, VehicleCache[vehid][vPos][0], "veh_posx");
+		orm_addvar_float(orm_id, VehicleCache[vehid][vPos][1], "veh_posy");
+		orm_addvar_float(orm_id, VehicleCache[vehid][vPos][2], "veh_posz");
+		orm_addvar_float(orm_id, VehicleCache[vehid][vPos][3], "veh_posa");
+
+		orm_addvar_int(orm_id, VehicleCache[vehid][vCol][0], "veh_col1");
+		orm_addvar_int(orm_id, VehicleCache[vehid][vCol][1], "veh_col2");
+
+		orm_addvar_int(orm_id, VehicleCache[vehid][vInt], "veh_int");
+		orm_addvar_int(orm_id, VehicleCache[vehid][vWorld], "veh_world");
+
+		orm_addvar_int(orm_id, VehicleCache[vehid][vOwnerType], "veh_ownertype");
+		orm_addvar_int(orm_id, VehicleCache[vehid][vOwner], "veh_owner");
+
+		orm_addvar_float(orm_id, VehicleCache[vehid][vHealth], "veh_health");
+		orm_addvar_float(orm_id, VehicleCache[vehid][vMileage], "veh_mileage");
+
+		orm_setkey(orm_id, "veh_uid");
+		orm_apply_cache(orm_id, row);
+
+		Iter_Add(Vehicle, vehid);
+
+		printf("ORM_ID: %d, ID: %d, UID: %d, MODEL: %d", orm_id, vehid, VehicleCache[vehid][vUID], VehicleCache[vehid][vModel]);
+		vehicleid = VehicleCache[vehid][vGID] = CreateVehicle(VehicleCache[vehid][vModel], VehicleCache[vehid][vPos][0], VehicleCache[vehid][vPos][1], VehicleCache[vehid][vPos][2], VehicleCache[vehid][vPos][3], VehicleCache[vehid][vCol][0], VehicleCache[vehid][vCol][1], 3600);
+
+		SetVehicleHealth(vehicleid, VehicleCache[vehid][vHealth]);
+		ChangeVehicleEngineStatus(VehicleCache[vehid][vGID], false);
+	}
+	return rows;
+}
+
+public query_OnLoadPlayerItems(playerid)
+{
+	new rows, itemid, ORM:orm_id;
+	cache_get_row_count(rows);
+	
+	if(rows > 0)
+	{
+		for(new row = 0; row != rows; row++)
+		{
+			itemid = Iter_Free(PlayerItem[playerid]);
+			orm_id = PlayerItemCache[playerid][itemid][iOrm] = orm_create("myrp_items");
+
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iUID], "item_uid");
+			orm_addvar_string(orm_id, PlayerItemCache[playerid][itemid][iName], 32, "item_name");
+
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iValue][0], "item_value1");
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iValue][1], "item_value2");
+
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iPlace], "item_place");
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iOwner], "item_owner");
+
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iType], "item_type");
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iFavorite], "item_favorite");
+
+			orm_setkey(orm_id, "item_uid");
+			orm_apply_cache(orm_id, row);
+
+			Iter_Add(PlayerItem[playerid], itemid);
+		}
+	}
+	return rows;
+}
+
+public query_OnListPlayerNearItems(playerid)
+{
+	new list_items[1024] = "Identyfikator\tNazwa przedmiotu",
+		item_uid, item_name[32], rows;
+		
+    cache_get_row_count(rows);
+	for(new row = 0; row != rows; row++)
+	{
+		cache_get_value_index_int(row, 0, item_uid);
+		cache_get_value_index(row, 1, item_name, 32);
+		
+		format(list_items, sizeof(list_items), "%s\n%d\t%s", list_items, item_uid, item_name);
+	}
+	ShowPlayerDialog(playerid, D_ITEM_RAISE, DIALOG_STYLE_TABLIST_HEADERS, "Przedmioty znajduj¹ce siê w pobli¿u:", list_items, "Podnieœ", "Anuluj");
+	return rows;
+}
+
+public query_OnListPlayerBagItems(playerid)
+{
+	new rows, list_items[512] = "Identyfikator\tNazwa przedmiotu", item_uid, item_name[32];
+
+    cache_get_row_count(rows);
+	for(new row = 0; row != rows; row++)
+	{
+		cache_get_value_index_int(row, 0, item_uid);
+		cache_get_value_index(row, 1, item_name);
+
+		format(list_items, sizeof(list_items), "%s\n%d\t\t%s", list_items, item_uid, item_name);
+	}
+	if(rows > 0)
+	{
+		ShowPlayerDialog(playerid, D_ITEM_REMOVE_BAG, DIALOG_STYLE_TABLIST_HEADERS, "Znaleziono przedmioty:", list_items, "Wyjmij", "Wróæ");
+	}
+	else
+	{
+		CallLocalFunction("ListPlayerItems", "d", playerid);
+		TD_ShowSmallInfo(playerid, 5, "Nie znaleziono ~r~zadnych ~w~przedmiotow.");
+	}
+	return rows;
+}
+
+public query_OnListPlayerVehicles(playerid)
+{
+	new list_vehicles[256] = "Identyfikator\tNazwa pojazdu",
+		veh_uid, veh_model, rows = cache_num_rows();
+
+	if(rows > 0)
+	{
+		for(new row = 0; row != rows; row++)
+		{
+			cache_get_value_index_int(row, 0, veh_uid);
+			cache_get_value_index_int(row, 1, veh_model);
+
+			format(list_vehicles, sizeof(list_vehicles), "%s\n%d\t%s", list_vehicles, veh_uid, GetVehicleName(veh_model));
+		}
+
+		ShowPlayerDialog(playerid, D_VEH_SPAWN, DIALOG_STYLE_TABLIST_HEADERS, "Lista Twoich pojazdów:", list_vehicles, "(Un)spawn", "Anuluj");
+	}
+	else
+	{
+		TD_ShowSmallInfo(playerid, 5, "Nie posiadasz ~r~zadnych ~w~pojazdow.");
+	}
+	return rows;
 }
 
 // SIMPLE TIMERS
