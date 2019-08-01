@@ -1426,6 +1426,11 @@ cmd:aprzedmiot(playerid, params[])
 	        ShowTipForPlayer(playerid, "/aprzedmiot stworz [Typ przedmiotu] [Wartoœæ 1] [Wartoœæ 2] [Nazwa przedmiotu]");
 	        return 1;
 	    }
+	    if(item_type == INVALID_ITEM_TYPE)
+	    {
+            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdny typ przedmiotu.");
+	        return 1;
+	    }
 	    escape_pl(item_name);
 	    
      	new itemid = CreatePlayerItem(playerid, item_name, item_type, item_value1, item_value2);
@@ -2662,6 +2667,7 @@ public ListPlayerItems(playerid)
 
 				item_weight_sum += item_weight;
 	  		}
+	  		printf("%s %d", PlayerItemCache[playerid][itemid][iName], PlayerItemCache[playerid][itemid][iUID]);
 		}
 		new title[256];
 
