@@ -921,7 +921,7 @@ main()
 
 public OnGameModeInit()
 {
-	MysqlHandle = mysql_connect(SQL_HOST, SQL_USER, SQL_DTBS, SQL_PASS);
+	MysqlHandle = mysql_connect(SQL_HOST, SQL_USER, SQL_PASS, SQL_DTBS);
 
 	Iter_Init(PlayerItem);
 	Iter_Init(PlayerGroup);
@@ -1027,7 +1027,7 @@ public OnPlayerConnect(playerid)
 	for(new sPlayer:e; e < sPlayer; ++e)					PlayerCache[playerid][e] = 0;
 
     GetPlayerName(playerid, PlayerCache[playerid][pCharName], 32);
-    new ORM:orm_id = PlayerCache[playerid][pOrm] = orm_create("myrp_characters");
+    new ORM:orm_id = PlayerCache[playerid][pOrm] = orm_create("myrp_characters", MysqlHandle);
     
     orm_addvar_int(orm_id, PlayerCache[playerid][pUID], "char_uid");
     orm_addvar_int(orm_id, PlayerCache[playerid][pGID], "char_gid");
@@ -1075,7 +1075,7 @@ public OnPlayerLogin(playerid)
 	{
 		case ERROR_OK:
 	 	{
-	  		orm_apply_cache(orm_id, 0);
+     		orm_apply_cache(orm_id, 0, 0);
 	  		orm_setkey(orm_id, "char_uid");
 	  		
 	  		PlayerCache[playerid][pLogged] = true;
@@ -1557,7 +1557,7 @@ cmd:ag(playerid, params[])
 		
 		new query[256];
 		mysql_format(MysqlHandle, query, sizeof(query), "INSERT INTO `myrp_char_groups` (char_uid, group_belongs, group_perm) VALUES ('%d', '%d', '%d')", PlayerCache[giveplayer_id][pUID], GroupCache[group_id][gUID], PlayerGroup[giveplayer_id][gpPerm]);
-		mysql_query(MysqlHandle, query);
+		mysql_query(MysqlHandle, query, false);
 		
 		ShowPlayerInfoDialog(giveplayer_id, D_TYPE_INFO, "Administrator %s przypisa³ Ci lidera grupy %s (SampID: %d, UID: %d).\nSkorzystaj z komendy /pomoc, by zapoznaæ siê z komendami lidera.", PlayerName(playerid), GroupCache[group_id][gName], group_id, GroupCache[group_id][gUID]);
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Gracz %s (ID: %d, UID: %d) otrzyma³ lidera grupy %s (SampID: %d, UID: %d).", PlayerName(giveplayer_id), giveplayer_id, PlayerCache[giveplayer_id][pUID], GroupCache[group_id][gName], group_id, GroupCache[group_id][gUID]);
@@ -2292,18 +2292,21 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-     		new item_uid = strval(inputtext), bag_item_id = PlayerCache[playerid][pItemArray][ITEM_BAG];
+     		new item_uid = strval(inputtext), bag_item_id = PlayerCache[playerid][pItemArray][ITEM_BAG], query[256];
 			if(!Iter_Contains(PlayerItem[playerid], bag_item_id))
 			{
 			    return 1;
 			}
-			mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '%d' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_BAG, PlayerItemCache[playerid][bag_item_id][iUID], item_uid);
+			mysql_format(MysqlHandle, query, sizeof(query), "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '%d' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_BAG, PlayerItemCache[playerid][bag_item_id][iUID], item_uid);
+			new Cache:cache_id = mysql_query(MysqlHandle, query, true);
 
 			if(cache_affected_rows() <= 0)
 			{
 		    	ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Tego przedmiotu ju¿ tutaj nie ma.");
 		    	return 1;
 			}
+			
+			cache_delete(cache_id);
 			
 			new itemid = LoadPlayerItem(playerid, item_uid);
 			TD_ShowSmallInfo(playerid, 5, "Przedmiot zostal ~g~pomyslnie ~w~wyjety.");
@@ -2554,7 +2557,7 @@ public LoadPlayerItems(playerid)
 {
 	new query[256];
     mysql_format(MysqlHandle, query, sizeof(query), "SELECT `item_uid`, `item_name`, `item_value1`, `item_value2`, `item_place`, `item_owner`, `item_type`, `item_favorite` FROM `myrp_items` WHERE item_place = %d AND item_owner = %d", PLACE_PLAYER, PlayerCache[playerid][pUID]);
-    mysql_tquery(MysqlHandle, query, "query_OnLoadItems", "d", playerid);
+    mysql_tquery(MysqlHandle, query, "query_OnLoadPlayerItems", "d", playerid);
 	return 1;
 }
 
@@ -2572,7 +2575,7 @@ public UnloadPlayerItems(playerid)
 public LoadPlayerItem(playerid, item_uid)
 {
  	new itemid = Iter_Free(PlayerItem[playerid]),
-	 	ORM:orm_id = PlayerItemCache[playerid][itemid][iOrm] = orm_create("myrp_items");
+	 	ORM:orm_id = PlayerItemCache[playerid][itemid][iOrm] = orm_create("myrp_items", MysqlHandle);
 
 	PlayerItemCache[playerid][itemid][iUID] = item_uid;
 
@@ -2598,8 +2601,8 @@ public LoadPlayerItem(playerid, item_uid)
 
 public UnloadPlayerItem(playerid, itemid)
 {
-	for(new sPlayerItem:e; e < sPlayerItem; ++e)	PlayerItemCache[playerid][itemid][e] = 0;
 	orm_destroy(PlayerItemCache[playerid][itemid][iOrm]);
+	for(new sPlayerItem:e; e < sPlayerItem; ++e)	PlayerItemCache[playerid][itemid][e] = 0;
 	return 1;
 }
 
@@ -2931,7 +2934,7 @@ public OnPlayerDropItem(playerid, itemid)
 
 	if(GetPlayerState(playerid) == PLAYER_STATE_ONFOOT)
 	{
-	    new Float:PosX, Float:PosY, Float:PosZ, Float:PosA,
+	    new Float:PosX, Float:PosY, Float:PosZ, Float:PosA, query[512],
 	        virtual_world = GetPlayerVirtualWorld(playerid), interior_id = GetPlayerInterior(playerid);
 
 		GetPlayerPos(playerid, PosX, PosY, PosZ);
@@ -2941,7 +2944,9 @@ public OnPlayerDropItem(playerid, itemid)
 		ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 
 		ApplyAnimation(playerid, "BOMBER", "BOM_Plant", 4.1, 0, 0, 0, 0, 0, 1);
-		mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '0', item_posx = '%f', item_posy = '%f', item_posz = '%f', item_interior = '%d', item_world = '%d' WHERE item_uid = '%d' LIMIT 1", 256, "dfffddd", PLACE_NONE, PosX, PosY, PosZ, interior_id, virtual_world, PlayerItemCache[playerid][itemid][iUID]);
+
+		mysql_format(MysqlHandle, query, sizeof(query), "UPDATE `myrp_items` SET item_place = '%d', item_owner = '0', item_posx = '%f', item_posy = '%f', item_posz = '%f', item_interior = '%d', item_world = '%d' WHERE item_uid = '%d' LIMIT 1", PLACE_NONE, PosX, PosY, PosZ, interior_id, virtual_world, PlayerItemCache[playerid][itemid][iUID]);
+		mysql_query(MysqlHandle, query, false);
 
 		new object_id, item_type = PlayerItemCache[playerid][itemid][iType];
 		if(item_type == ITEM_WEAPON || item_type == ITEM_PAINT || item_type == ITEM_INHIBITOR)
@@ -2962,14 +2967,15 @@ public OnPlayerDropItem(playerid, itemid)
 
 		// printf("[%d][item] %s (UID: %d, GID: %d) od³o¿y³ przedmiot %s (UID: %d) na ziemiê (PosX: %.3f, PosY: %.3f, PosZ: %.3f, InteriorID: %d, WorldID: %d).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], ItemCache[itemid][iName], ItemCache[itemid][iUID], PosX, PosY, PosZ, interior_id, virtual_world);
 
+		UnloadPlayerItem(playerid, itemid);
 		Iter_Remove(PlayerItem[playerid], itemid);
 		return 1;
 	}
 	
 	if(IsPlayerInAnyVehicle(playerid))
 	{
-	    new	vehid = GetVehicleIndex(GetPlayerVehicleID(playerid)), veh_uid = VehicleCache[vehid][vUID];
-		mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_uid = '%d' LIMIT 1", 256, "ddd", PLACE_VEHICLE, veh_uid, PlayerItemCache[playerid][itemid][iUID]);
+	    new	vehid = GetVehicleIndex(GetPlayerVehicleID(playerid)), veh_uid = VehicleCache[vehid][vUID], query[256];
+		mysql_format(MysqlHandle, query, sizeof(query), "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_uid = '%d' LIMIT 1", PLACE_VEHICLE, veh_uid, PlayerItemCache[playerid][itemid][iUID]);
 
    		format(string, sizeof(string), "* %s odk³ada przedmiot w pojeŸdzie.", PlayerName(playerid));
 		ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
@@ -2995,13 +3001,16 @@ public OnPlayerRaiseItem(playerid, item_uid)
 	
 	if(!IsPlayerInAnyVehicle(playerid))
 	{
-		mysql_format(MysqlHandle, "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '0' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_NONE, item_uid);
+	    new query[256];
+		mysql_format(MysqlHandle, query, sizeof(query), "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE item_place = '%d' AND item_owner = '0' AND item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], PLACE_NONE, item_uid);
+	    new Cache:cache_id = mysql_query(MysqlHandle, query, true);
 	
 		if(cache_affected_rows() <= 0)
 		{
 	    	ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Tego przedmiotu ju¿ tutaj nie ma.");
 	    	return 1;
 		}
+		cache_delete(cache_id);
 	
 		new object_id, object_extra_id = (item_uid * -1);
 		for (new player_object = 0; player_object <= MAX_OBJECTS; player_object++)
@@ -3355,7 +3364,7 @@ public CreateGroup(group_name[32], group_type)
 	GroupCache[group_id][gType] = group_type;
 	GroupCache[group_id][gColor] = COLOR_WHITE;
 
-	new ORM:orm_id = GroupCache[group_id][gOrm] = orm_create("myrp_groups");
+	new ORM:orm_id = GroupCache[group_id][gOrm] = orm_create("myrp_groups", MysqlHandle);
 	
 	orm_addvar_int(orm_id, GroupCache[group_id][gUID], "group_uid");
 	orm_addvar_string(orm_id, GroupCache[group_id][gName], 32, "group_name");
@@ -4067,7 +4076,7 @@ public query_OnLoadGroups()
 	for(new row = 0; row != rows; row++)
 	{
  		group_id = Iter_Free(Group);
-   		orm_id = GroupCache[group_id][gOrm] = orm_create("myrp_groups");
+   		orm_id = GroupCache[group_id][gOrm] = orm_create("myrp_groups", MysqlHandle);
 
 		orm_addvar_int(orm_id, GroupCache[group_id][gUID], "group_uid");
 		orm_addvar_string(orm_id, GroupCache[group_id][gName], 32, "group_name");
@@ -4083,7 +4092,7 @@ public query_OnLoadGroups()
 		orm_addvar_int(orm_id, GroupCache[group_id][gOwner], "group_owner");
 
 		orm_setkey(orm_id, "group_uid");
-		orm_apply_cache(orm_id, row);
+		orm_apply_cache(orm_id, row, 0);
 
 		Iter_Add(Group, group_id);
 
@@ -4097,7 +4106,7 @@ public query_OnLoadVehicle()
 	new query[256], vehid = INVALID_VEHICLE_ID, vehicleid;
 	
  	vehid = Iter_Free(Vehicle);
- 	new ORM:orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles");
+ 	new ORM:orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles", MysqlHandle);
 
 	orm_addvar_int(orm_id, VehicleCache[vehid][vUID], "veh_uid");
 	orm_addvar_int(orm_id, VehicleCache[vehid][vModel], "veh_model");
@@ -4120,7 +4129,7 @@ public query_OnLoadVehicle()
 	orm_addvar_float(orm_id, VehicleCache[vehid][vMileage], "veh_mileage");
 
 	orm_setkey(orm_id, "veh_uid");
-	orm_apply_cache(orm_id, 0);
+	orm_apply_cache(orm_id, 0, 0);
 
 	Iter_Add(Vehicle, vehid);
 	vehicleid = VehicleCache[vehid][vGID] = CreateVehicle(VehicleCache[vehid][vModel], VehicleCache[vehid][vPos][0], VehicleCache[vehid][vPos][1], VehicleCache[vehid][vPos][2], VehicleCache[vehid][vPos][3], VehicleCache[vehid][vCol][0], VehicleCache[vehid][vCol][1], 3600);
@@ -4138,7 +4147,7 @@ public query_OnLoadVehicles()
 	for(new row = 0; row != rows; row++)
 	{
  		vehid = Iter_Free(Vehicle);
- 		orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles");
+ 		orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles", MysqlHandle);
 
 		orm_addvar_int(orm_id, VehicleCache[vehid][vUID], "veh_uid");
 		orm_addvar_int(orm_id, VehicleCache[vehid][vModel], "veh_model");
@@ -4161,7 +4170,7 @@ public query_OnLoadVehicles()
 		orm_addvar_float(orm_id, VehicleCache[vehid][vMileage], "veh_mileage");
 
 		orm_setkey(orm_id, "veh_uid");
-		orm_apply_cache(orm_id, row);
+		orm_apply_cache(orm_id, row, 0);
 
 		Iter_Add(Vehicle, vehid);
 
@@ -4184,7 +4193,7 @@ public query_OnLoadPlayerItems(playerid)
 		for(new row = 0; row != rows; row++)
 		{
 			itemid = Iter_Free(PlayerItem[playerid]);
-			orm_id = PlayerItemCache[playerid][itemid][iOrm] = orm_create("myrp_items");
+			orm_id = PlayerItemCache[playerid][itemid][iOrm] = orm_create("myrp_items", MysqlHandle);
 
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iUID], "item_uid");
 			orm_addvar_string(orm_id, PlayerItemCache[playerid][itemid][iName], 32, "item_name");
@@ -4199,7 +4208,7 @@ public query_OnLoadPlayerItems(playerid)
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iFavorite], "item_favorite");
 
 			orm_setkey(orm_id, "item_uid");
-			orm_apply_cache(orm_id, row);
+			orm_apply_cache(orm_id, row, 0);
 
 			Iter_Add(PlayerItem[playerid], itemid);
 		}
