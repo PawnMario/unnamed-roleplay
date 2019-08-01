@@ -1,0 +1,68 @@
+stock LoadSpecialPlaces()
+{
+	Code_ExTimer_Begin(LoadSpecialPlaces);
+	new rows, Cache:tmp_cache, p_id;
+	tmp_cache = mysql_query(mySQLconnection, "SELECT * FROM `ipb_special_places`");
+	
+	cache_get_row_count(rows);
+
+	for(new row = 0; row != rows; row++)
+	{
+		p_id = Iter_Free(Places);
+
+		cache_get_value_index_int(row, 0, Place[p_id][place_uid]);
+		cache_get_value_index_int(row, 1, Place[p_id][place_type]);
+		cache_get_value_index_float(row, 2, Place[p_id][place_pos][0]);
+		cache_get_value_index_float(row, 3, Place[p_id][place_pos][1]);
+		cache_get_value_index_float(row, 4, Place[p_id][place_pos][2]);
+		cache_get_value_index_int(row, 5, Place[p_id][place_world]);
+
+		Iter_Add(Places, p_id);
+	}
+
+	if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
+	printf("Wczytano interaktywne miejsca [wczytanych: %d] [czas %d ms]", Iter_Count(Places), Code_ExTimer_End(LoadSpecialPlaces));
+	return 1;
+}
+
+stock CreateSpecialPlace(type, Float:sx, Float:sy, Float:sz, svw)
+{
+	mysql_query(mySQLconnection, sprintf("INSERT INTO `ipb_special_places` (`place_type`, `place_x`, `place_y`, `place_z`, place_world) VALUES ('%d', '%f', '%f', '%f', '%d')", type, sx, sy, sz, svw));
+
+	new p_id = Iter_Free(Places);
+
+	Place[p_id][place_uid] = place_uid;
+	Place[p_id][place_type] = type;
+	Place[p_id][place_pos][0] = sx;
+	Place[p_id][place_pos][1] = sy;
+	Place[p_id][place_pos][2] = sz;
+	Place[p_id][place_world] = svw;
+
+	Iter_Add(Places, p_id);
+
+	return cache_insert_id();
+}
+
+stock GetPlaceByUid(uid)
+{
+	foreach(new ga_id : Places)
+	{
+		if( Place[ga_id][place_uid] == uid ) return ga_id;
+	}
+	return -1;
+}
+
+stock DeleteSpecialPlace(uid)
+{
+	mysql_query(mySQLconnection, sprintf("DELETE FROM `ipb_special_places` WHERE `place_uid` = %d", uid));
+
+	new placeid = GetPlaceByUid(uid);
+
+	if(placeid != -1)
+	{
+		for(new z=0; e_places:z != e_places; z++)
+		{
+			Place[placeid][e_places:z] = 0;
+		}
+	}
+}

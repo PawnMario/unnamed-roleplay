@@ -1,0 +1,85 @@
+// TextDraw developed using Zamaroht's Textdraw Editor 1.0
+
+// On top of script:
+new Text:Textdraw0;
+new Text:Textdraw2;
+new Text:Textdraw3;
+new Text:Textdraw4;
+new Text:Textdraw5;
+new Text:Textdraw6;
+
+// In OnGameModeInit prefferably, we procced to create our textdraws:
+Textdraw0 = TextDrawCreate(225.000000, 167.000000, "INFO");
+TextDrawAlignment(Textdraw0, 2);
+TextDrawBackgroundColor(Textdraw0, 255);
+TextDrawFont(Textdraw0, 1);
+TextDrawLetterSize(Textdraw0, 0.250000, 1.199999);
+TextDrawColor(Textdraw0, -1);
+TextDrawSetOutline(Textdraw0, 1);
+TextDrawSetProportional(Textdraw0, 1);
+TextDrawUseBox(Textdraw0, 1);
+TextDrawBoxColor(Textdraw0, 136);
+TextDrawTextSize(Textdraw0, 10.000000, -50.000000);
+
+Textdraw2 = TextDrawCreate(225.000000, 187.000000, "Magazyn");
+TextDrawAlignment(Textdraw2, 2);
+TextDrawBackgroundColor(Textdraw2, 255);
+TextDrawFont(Textdraw2, 1);
+TextDrawLetterSize(Textdraw2, 0.250000, 1.199999);
+TextDrawColor(Textdraw2, -1);
+TextDrawSetOutline(Textdraw2, 1);
+TextDrawSetProportional(Textdraw2, 1);
+TextDrawUseBox(Textdraw2, 1);
+TextDrawBoxColor(Textdraw2, 136);
+TextDrawTextSize(Textdraw2, 10.000000, -50.000000);
+
+Textdraw3 = TextDrawCreate(225.000000, 207.000000, "Sluzba");
+TextDrawAlignment(Textdraw3, 2);
+TextDrawBackgroundColor(Textdraw3, 255);
+TextDrawFont(Textdraw3, 1);
+TextDrawLetterSize(Textdraw3, 0.250000, 1.199999);
+TextDrawColor(Textdraw3, -1);
+TextDrawSetOutline(Textdraw3, 1);
+TextDrawSetProportional(Textdraw3, 1);
+TextDrawUseBox(Textdraw3, 1);
+TextDrawBoxColor(Textdraw3, 136);
+TextDrawTextSize(Textdraw3, 10.000000, -50.000000);
+
+Textdraw4 = TextDrawCreate(275.000000, 207.000000, "Zadania");
+TextDrawAlignment(Textdraw4, 2);
+TextDrawBackgroundColor(Textdraw4, 255);
+TextDrawFont(Textdraw4, 1);
+TextDrawLetterSize(Textdraw4, 0.250000, 1.199999);
+TextDrawColor(Textdraw4, -1);
+TextDrawSetOutline(Textdraw4, 1);
+TextDrawSetProportional(Textdraw4, 1);
+TextDrawUseBox(Textdraw4, 1);
+TextDrawBoxColor(Textdraw4, 136);
+TextDrawTextSize(Textdraw4, 10.000000, -50.000000);
+
+Textdraw5 = TextDrawCreate(275.000000, 187.000000, "Online");
+TextDrawAlignment(Textdraw5, 2);
+TextDrawBackgroundColor(Textdraw5, 255);
+TextDrawFont(Textdraw5, 1);
+TextDrawLetterSize(Textdraw5, 0.250000, 1.199999);
+TextDrawColor(Textdraw5, -1);
+TextDrawSetOutline(Textdraw5, 1);
+TextDrawSetProportional(Textdraw5, 1);
+TextDrawUseBox(Textdraw5, 1);
+TextDrawBoxColor(Textdraw5, 136);
+TextDrawTextSize(Textdraw5, 10.000000, -50.000000);
+
+Textdraw6 = TextDrawCreate(275.000000, 167.000000, "Pojazdy");
+TextDrawAlignment(Textdraw6, 2);
+TextDrawBackgroundColor(Textdraw6, 255);
+TextDrawFont(Textdraw6, 1);
+TextDrawLetterSize(Textdraw6, 0.250000, 1.199999);
+TextDrawColor(Textdraw6, -1);
+TextDrawSetOutline(Textdraw6, 1);
+TextDrawSetProportional(Textdraw6, 1);
+TextDrawUseBox(Textdraw6, 1);
+TextDrawBoxColor(Textdraw6, 136);
+TextDrawTextSize(Textdraw6, 10.000000, -50.000000);
+
+// You can now use TextDrawShowForPlayer(-ForAll), TextDrawHideForPlayer(-ForAll) and
+// TextDrawDestroy functions to show, hide, and destroy the textdraw.
