@@ -2667,7 +2667,6 @@ public ListPlayerItems(playerid)
 
 				item_weight_sum += item_weight;
 	  		}
-	  		printf("%s %d", PlayerItemCache[playerid][itemid][iName], PlayerItemCache[playerid][itemid][iUID]);
 		}
 		new title[256];
 
