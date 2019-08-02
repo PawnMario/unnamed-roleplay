@@ -1,15 +1,26 @@
-/**--------------------------------------------------------------------------**\
-					=================================
-					 y_dialog - Dialogs wrapper.
-					=================================
-Description:
-	Provides functions for dealing with dialogs, without needing to worry about
-	IDs or huge "OnDialogResponse" callbacks.
+#if defined _INC_y_dialog
+	#endinput
+#endif
+#define _INC_y_dialog
+
+/**
+ * <library name="y_dialog">
+ * <section>
+ *  Description
+ * </section>
+ *  Provides functions for dealing with dialogs, without needing to worry about
+ *  IDs or huge "OnDialogResponse" callbacks.
+ * <section>
+ *  Version
+ * </section>
+ *  0.1
+ * </library>
+ *//** *//*
 Legal:
 	Version: MPL 1.1
 	
 	The contents of this file are subject to the Mozilla Public License Version 
-	1.1 (the "License"); you may not use this file except in compliance with 
+	1.1 the "License"; you may not use this file except in compliance with 
 	the License. You may obtain a copy of the License at 
 	http://www.mozilla.org/MPL/
 	
@@ -18,55 +29,63 @@ Legal:
 	for the specific language governing rights and limitations under the
 	License.
 	
-	The Original Code is the YSI utils include.
+	The Original Code is the YSI framework.
 	
 	The Initial Developer of the Original Code is Alex "Y_Less" Cole.
-	Portions created by the Initial Developer are Copyright (C) 2011
+	Portions created by the Initial Developer are Copyright C 2011
 	the Initial Developer. All Rights Reserved.
-	
-	Contributors:
-		ZeeX, koolk, JoeBullet/Google63, g_aSlice/Slice
-	
-	Thanks:
-		JoeBullet/Google63 - Handy arbitrary ASM jump code using SCTRL.
-		ZeeX - Very productive conversations.
-		koolk - IsPlayerinAreaEx code.
-		TheAlpha - Danish translation.
-		breadfish - German translation.
-		Fireburn - Dutch translation.
-		yom - French translation.
-		50p - Polish translation.
-		Zamaroht - Spanish translation.
-		Dracoblue, sintax, mabako, Xtreme, other coders - Producing other modes
-			for me to strive to better.
-		Pixels^ - Running XScripters where the idea was born.
-		Matite - Pestering me to release it and using it.
-	
-	Very special thanks to:
-		Thiadmer - PAWN, whose limits continue to amaze me!
-		Kye/Kalcor - SA:MP.
-		SA:MP Team past, present and future - SA:MP.
-	
-Version:
-	0.1
-Changelog:
-	25/02/12:
-		First version.
-Functions:
-	Stock:
-		-
-	Inline:
-		-
-Variables:
-	Global:
-		-
-</remarks>
-\**--------------------------------------------------------------------------**/
 
-#if defined _INC_y_dialog
-	#endinput
-#endif
-#define _INC_y_dialog
+Contributors:
+	Y_Less
+	koolk
+	JoeBullet/Google63
+	g_aSlice/Slice
+	Misiur
+	samphunter
+	tianmeta
+	maddinat0r
+	spacemud
+	Crayder
+	Dayvison
+	Ahmad45123
+	Zeex
+	irinel1996
+	Yiin-
+	Chaprnks
+	Konstantinos
+	Masterchen09
+	Southclaws
+	PatchwerkQWER
+	m0k1
+	paulommu
+	udan111
+
+Thanks:
+	JoeBullet/Google63 - Handy arbitrary ASM jump code using SCTRL.
+	ZeeX - Very productive conversations.
+	koolk - IsPlayerinAreaEx code.
+	TheAlpha - Danish translation.
+	breadfish - German translation.
+	Fireburn - Dutch translation.
+	yom - French translation.
+	50p - Polish translation.
+	Zamaroht - Spanish translation.
+	Los - Portuguese translation.
+	Dracoblue, sintax, mabako, Xtreme, other coders - Producing other modes for
+		me to strive to better.
+	Pixels^ - Running XScripters where the idea was born.
+	Matite - Pestering me to release it and using it.
+
+Very special thanks to:
+	Thiadmer - PAWN, whose limits continue to amaze me!
+	Kye/Kalcor - SA:MP.
+	SA:MP Team past, present and future - SA:MP.
+
+Optional plugins:
+	Gamer_Z - GPS.
+	Incognito - Streamer.
+	Me - sscanf2, fixes2, Whirlpool.
+*/
 
 // y_dialog - does stuff with dialogs.
 
@@ -127,7 +146,7 @@ global Dialog_ObtainID()
 		}
 	}
 	return -1;
-	// http://supertech.csail.mit.edu/papers/debruijn.pdf
+	// <a href="http://supertech.csail.mit.edu/papers/debruijn.pdf" />
 }
 
 foreign Dialog_TryObtainID(id);
@@ -289,6 +308,13 @@ stock Dialog_SetCallbackData(dialogid, callback[E_CALLBACK_DATA])
 	YSI_g_sDialogInfo[dialogid] = callback;
 }
 
+// xhunterx editing all day
+
+hook OnPlayerConnect(playerid) {
+    YSI_g_sPlayerDialog[playerid] = -1;
+    return 1;
+}
+
 // Need to somehow integrate this new dialogs library with the text library.
 
 hook OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
@@ -296,12 +322,21 @@ hook OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	P:1("Dialog_OnDialogResponse called: %d %d %d %d %s", playerid, dialogid, response, listitem, inputtext);
 	// Apparently there's a hack to alter this.
 	dialogid = Dialog_Get(playerid);
+    
 	P:5("Dialog_OnDialogResponse: dialog = %d", dialogid);
 	if (dialogid == -1)
 	{
 		return 0;
 	}
+	
 	P:5("Dialog_OnDialogResponse: master = %d, %d", YSI_g_sDialogMasters[dialogid], _@);
+	if(YSI_g_sDialogMasters[dialogid] == -1) {
+	    if(Master_Caller() == _@) {
+	    	SetTimerEx("DialogSetToNone", 0, false, "i", playerid);
+		}
+	    return 0;
+	}
+	
 	if (YSI_g_sDialogMasters[dialogid] != _@)
 	{
 		return 0;
@@ -335,6 +370,12 @@ hook OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	}
 	//Dialog_Set(playerid, -1);
 	return 0;
+}
+
+forward DialogSetToNone(playerid);
+public DialogSetToNone(playerid) {
+	Dialog_Set(playerid, -1);
+	return 1;
 }
 
 /*stock _ShowPlayerDialog(playerid, dialog, style, string:title[], string:caption[], string:button1[], string:button2[])

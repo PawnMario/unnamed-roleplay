@@ -27,15 +27,17 @@ doda³em ten tekst i teraz wrzucam na githuba
 #include <YSI\y_va>
 #include <YSI\y_timers>
 #include <YSI\y_inline>
+#include <YSI\y_iterate>
 
 #include <a_samp>
-#include <foreach>
+#include <dynamicgui>
+
+//#include <foreach>
 #include <streamer>
 #include <a_mysql>
-//#include <a_mysql_yinline>
 #include <Pawn.CMD>
 #include <sscanf2>
-//#include <samp-precise-timers>
+#include <samp-precise-timers>
 
 #undef MAX_PLAYERS
 #undef MAX_VEHICLES
@@ -68,7 +70,7 @@ doda³em ten tekst i teraz wrzucam na githuba
 #define SQL_DTBS        "roleplay_database"
 #define SQL_PASS        ""
 
-#pragma tabsize 0
+//#pragma tabsize 0
 //#pragma dynamic 8196
 
 #define GetVehicleName(%0) \
@@ -168,7 +170,7 @@ doda³em ten tekst i teraz wrzucam na githuba
 #define D_LOGIN     		1
 
 #define D_ITEM_USE  		2
-#define D_ITEM_MANAGE   	3
+#define D_ITEM_MANAGE    	3
 #define D_ITEM_RAISE    	4
 #define D_ITEM_DROP     	5
 #define D_ITEM_CHECK    	6
@@ -323,8 +325,8 @@ doda³em ten tekst i teraz wrzucam na githuba
 
 new second_timer;
 
-new Iterator:Vehicle<MAX_VEHICLES>;
-new Iterator:Group<MAX_GROUPS>;
+new Iterator:Vehicles<MAX_VEHICLES>;
+new Iterator:Groups<MAX_GROUPS>;
 
 new Iterator:PlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
 new Iterator:PlayerGroup[MAX_PLAYERS]<MAX_GROUP_SLOTS>;
@@ -943,14 +945,14 @@ public OnGameModeInit()
 	DisableInteriorEnterExits();
 	ManualVehicleEngineAndLights();
 	
-	second_timer = SetTimer("OnSecondTimer", 1000, true);
+	second_timer = SetPreciseTimer("OnSecondTimer", 1000, true);
 	return 1;
 }
 
 public OnGameModeExit()
 {
 	mysql_close();
-	KillTimer(second_timer);
+	DeletePreciseTimer(second_timer);
 	return 1;
 }
 
@@ -1194,7 +1196,7 @@ cmd:pojazd(playerid, params[])
  		new list_vehicles[256] = "Identyfikator\tNazwa pojazdu",
 		 	vehicle_counts;
  		
-		foreach(new vehid : Vehicle)
+		foreach(new vehid : Vehicles)
 		{
 			if(VehicleCache[vehid][vOwnerType] == OWNER_PLAYER && VehicleCache[vehid][vOwner] == PlayerCache[playerid][pUID])
 		    {
@@ -1567,7 +1569,7 @@ cmd:ag(playerid, params[])
 	if(!strcmp(type, "lista", true))
 	{
 	    new string[256];
-	    foreach(new group_id : Group)
+	    foreach(new group_id : Groups)
 	    {
 	        format(string, sizeof(string), "%s\n%d\t%s\t%s", string, GroupCache[group_id][gUID], GroupCache[group_id][gName], GroupCache[group_id][gTag]);
 	    }
@@ -1824,14 +1826,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	
 	if(dialogid == D_ITEM_USE)
 	{
-	    if(response)
-	    {
-    		// Funkcja zaznaczania
+		 if(response)
+		 {
+			// Funkcja zaznaczania
 			if(listitem == 0)
 			{
-	    		ListPlayerCheckedItems(playerid);
-	    		return 1;
-	        }
+				ListPlayerCheckedItems(playerid);
+				return 1;
+		 	}
 
 			// Przedmioty w pobli¿u
 			if(listitem == 1)
@@ -1839,38 +1841,37 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				ListPlayerNearItems(playerid);
 				return 1;
 			}
-			
+
 			if(listitem == 2)
 			{
-			    ListPlayerItems(playerid);
-			    return 1;
+				ListPlayerItems(playerid);
+				return 1;
 			}
-	    
-	        new item_uid = strval(inputtext),
-				itemid = GetPlayerItemID(playerid, item_uid);
-				
+
+			new itemid = DynamicGui_GetDataInt(playerid, listitem);
 			OnPlayerUseItem(playerid, itemid);
-	        return 1;
-	    }
-	    else
-	    {
-	        if(listitem <= 2)   return 1;
-	        
-	        new item_uid = strval(inputtext),
-				itemid = GetPlayerItemID(playerid, item_uid), title[128];
-	        format(title, sizeof(title), "Opcje przedmiotu: %s (UID: %d)", PlayerItemCache[playerid][itemid][iName], PlayerItemCache[playerid][itemid][iUID]);
-	        
-	        PlayerCache[playerid][pItemArray][ITEM_NONE] = itemid;
-	        ShowPlayerDialog(playerid, D_ITEM_MANAGE, DIALOG_STYLE_TABLIST_HEADERS, title, "*\tAkcja\n01\tOd³ó¿ w pobli¿u\n02\tPoka¿ informacje\n03\tSprzedaj innemu graczowi\n04\tW³ó¿ do przedmiotu\n05\tDodaj do craftingu\n06\tWsadŸ do schowka\n07\tOddaj innemu graczowi za darmo\n08\tRozdziel przedmiot\n09\tDodaj do ulubionych", "Wybierz", "Wróæ");
-	        return 1;
-	    }
+			return 1;
+		}
+		else
+		{
+			if(listitem <= 2)   return 1;
+
+			new itemid = DynamicGui_GetDataInt(playerid, listitem), title[128];
+			format(title, sizeof(title), "Opcje przedmiotu: %s (UID: %d)", PlayerItemCache[playerid][itemid][iName], PlayerItemCache[playerid][itemid][iUID]);
+
+			DynamicGui_Init(playerid);
+			DynamicGui_SetDialogValue(playerid, itemid);
+
+			ShowPlayerDialog(playerid, D_ITEM_MANAGE, DIALOG_STYLE_TABLIST_HEADERS, title, "*\tAkcja\n01\tOd³ó¿ w pobli¿u\n02\tPoka¿ informacje\n03\tSprzedaj innemu graczowi\n04\tW³ó¿ do przedmiotu\n05\tDodaj do craftingu\n06\tWsadŸ do schowka\n07\tOddaj innemu graczowi za darmo\n08\tRozdziel przedmiot\n09\tDodaj do ulubionych", "Wybierz", "Wróæ");
+			return 1;
+		}
 	}
-	
+
 	if(dialogid == D_ITEM_MANAGE)
 	{
 		if(response)
 		{
-		    new itemid = PlayerCache[playerid][pItemArray][ITEM_NONE];
+		    new itemid = DynamicGui_GetDialogValue(playerid);
 			switch(listitem)
 			{
 			    case 0:
@@ -1883,16 +1884,25 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    }
 			    case 2:
 			    {
-			    
+
 			    }
 			    case 3:
 			    {
 			        if(PlayerItemCache[playerid][itemid][iType] == ITEM_BAG)
 			        {
 			            new format_input[48];
+
+						DynamicGui_Init(playerid);
+						
+						DynamicGui_AddRow(playerid, D_ITEM_USE, 0);
+			            DynamicGui_AddRow(playerid, D_ITEM_USE, 0);
+			            DynamicGui_AddRow(playerid, D_ITEM_USE, 0);
+			            
+			            DynamicGui_AddRow(playerid, D_ITEM_USE, itemid);
+			            
 			            format(format_input, sizeof(format_input), "%d\t%s", PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
 			            CallLocalFunction("OnDialogResponse", "dddds", playerid, D_ITEM_USE, 0, 3, format_input);
-			            
+
 			            TD_ShowSmallInfo(playerid, 5, "Nie mozesz ~r~wlozyc ~w~tego przedmiotu.");
 			            return 1;
 			        }
@@ -1905,10 +1915,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					        {
 					            item_count ++;
 								format(list_bags, sizeof(list_bags), "%s\n%d\t%s", list_bags, PlayerItemCache[playerid][i][iUID], PlayerItemCache[playerid][i][iName]);
-					        }
+
+							}
 					    }
 					}
-					
+
 					if(item_count > 0)
 					{
 	    				ShowPlayerDialog(playerid, D_ITEM_PUT_BAG, DIALOG_STYLE_TABLIST_HEADERS, "W³ó¿ do przedmiotu:", list_bags, "W³ó¿", "Wróæ");
@@ -1920,15 +1931,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    }
 			    case 4:
 			    {
-			    
+
 			    }
 			    case 5:
 			    {
-			    
+
 			    }
 			    case 6:
 			    {
-			    
+
 			    }
 			    case 7:
 			    {
@@ -1941,7 +1952,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			            TD_ShowSmallInfo(playerid, 5, "Nie mozesz ~r~rozdzielic ~w~tego przedmiotu.");
 			            return 1;
 			        }
-			        
+
 			        ShowPlayerDialog(playerid, D_ITEM_SEPARATE, DIALOG_STYLE_INPUT, "Rozdziel przedmiot", "WprowadŸ poni¿ej ile sztuk chcesz pozyskaæ z tego przedmiotu.\nPo poprawnie wykonanej akcji przedmiot zostanie podzielony.", "Rozdziel", "Wróæ");
 			    }
 			    case 8:
@@ -1990,7 +2001,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
     	    if(PlayerCache[playerid][pPuttingBag])
     	    {
     	        new bag_item_id = PlayerCache[playerid][pItemArray][ITEM_BAG] = GetPlayerItemID(playerid, strval(inputtext));
-
 				if(!Iter_Contains(PlayerItem[playerid], bag_item_id))
     	        {
     	            return 1;
@@ -2100,7 +2110,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 							    {
 							        item_count ++;
 							        format(list_bags, sizeof(list_bags), "%s\n%d\t%s", list_bags, PlayerItemCache[playerid][i][iUID], PlayerItemCache[playerid][i][iName]);
-							    }
+								}
 							}
 
 							if(item_count > 0)
@@ -2121,7 +2131,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 						format(main_query, sizeof(main_query), "UPDATE `myrp_items` SET item_place = '%d', item_owner = '%d' WHERE ", PLACE_BAG, PlayerItemCache[playerid][bag_item_id][iUID]);
                         format(items_list_info, sizeof(items_list_info), "Przedmioty zosta³y w³o¿one do przedmiotu %s (UID: %d):\n", PlayerItemCache[playerid][bag_item_id][iName], PlayerItemCache[playerid][bag_item_id][iUID]);
                         
-						PlayerCache[playerid][pPuttingBag] = false;
+                        PlayerCache[playerid][pPuttingBag] = false;
 					}
 					case 5:
 					{
@@ -2206,9 +2216,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	            return 1;
 	        }
 	    
-			new item_uid = strval(inputtext),
-				itemid = GetPlayerItemID(playerid, item_uid);
-			
+			new itemid = DynamicGui_GetDataInt(playerid, listitem);
 			if(PlayerItemCache[playerid][itemid][iChecked])
 			{
 				PlayerItemCache[playerid][itemid][iChecked] = false;
@@ -2611,6 +2619,12 @@ public ListPlayerItems(playerid)
 	new list_items[2048], item_count = Iter_Count(PlayerItem[playerid]), item_weight, item_weight_sum;
 	format(list_items, sizeof(list_items), "UID\tNazwa przedmiotu\tWaga\n \t» Funkcja zaznaczania\n \t» Przedmioty w pobli¿u\n---\n");
 	
+	DynamicGui_Init(playerid);
+	
+	DynamicGui_AddRow(playerid, D_ITEM_USE, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_USE, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_USE, 0);
+	
 	if(item_count > 0)
 	{
 		foreach(new itemid : PlayerItem[playerid])
@@ -2628,6 +2642,7 @@ public ListPlayerItems(playerid)
 				}
 
 				item_weight_sum += item_weight;
+				DynamicGui_AddRow(playerid, D_ITEM_USE, itemid);
 	  		}
 		}
 		new title[256];
@@ -2721,6 +2736,16 @@ public ListPlayerCheckedItems(playerid)
 	new list_items[2048], items_to_check;
 	format(list_items, sizeof(list_items), "Zaznaczone przedmioty:\n{C0C0C0} • 1 - Od³ó¿ w pobli¿u\n{C0C0C0} • 2 - W³ó¿ do przedmiotu\n{C0C0C0} • 3 - Schowaj do schowka\n{C0C0C0} • 4 - Dodaj do craftingu\n{C0C0C0} • 5 - Po³¹cz ze sob¹\n---\n");
 	
+	DynamicGui_Init(playerid);
+	
+	DynamicGui_AddRow(playerid, D_ITEM_CHECK, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_CHECK, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_CHECK, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_CHECK, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_CHECK, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_CHECK, 0);
+    DynamicGui_AddRow(playerid, D_ITEM_CHECK, 0);
+	
 	foreach(new itemid : PlayerItem[playerid])
 	{
 	    if(PlayerItemCache[playerid][itemid][iUID])
@@ -2736,6 +2761,7 @@ public ListPlayerCheckedItems(playerid)
 		            format(list_items, sizeof(list_items), "%s\n%d\t[ ]\t%s", list_items, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
 		        }
 				items_to_check ++;
+				DynamicGui_AddRow(playerid, D_ITEM_CHECK, itemid);
 		    }
 		}
 	}
@@ -3086,7 +3112,7 @@ public ShowPlayerItemInfo(playerid, item_uid)
 stock GetVehicleID(veh_uid)
 {
 	new vehid = INVALID_VEHICLE_ID;
-	foreach(new v : Vehicle)
+	foreach(new v : Vehicles)
 	{
 	    if(VehicleCache[v][vUID] == veh_uid)
 	    {
@@ -3100,7 +3126,7 @@ stock GetVehicleID(veh_uid)
 stock GetVehicleUID(vehid)
 {
 	new veh_uid;
-	foreach(new v : Vehicle)
+	foreach(new v : Vehicles)
 	{
 	    if(VehicleCache[v][vGID] == vehid)
 	    {
@@ -3114,7 +3140,7 @@ stock GetVehicleUID(vehid)
 stock GetVehicleIndex(vehid)
 {
 	new index;
-	foreach(new v : Vehicle)
+	foreach(new v : Vehicles)
 	{
 	    if(VehicleCache[v][vGID] == vehid)
 	    {
@@ -3128,7 +3154,7 @@ stock GetVehicleIndex(vehid)
 stock GetPlayerVehiclesCount(playerid)
 {
 	new vehicles_count;
-	foreach(new vehid : Vehicle)
+	foreach(new vehid : Vehicles)
 	{
 	    if(VehicleCache[vehid][vOwnerType] == OWNER_PLAYER && VehicleCache[vehid][vOwner] == PlayerCache[playerid][pUID])
 	    {
@@ -3141,7 +3167,7 @@ stock GetPlayerVehiclesCount(playerid)
 
 public OnCreateVehicle(modelid, Float:cpos_x, Float:cpos_y, Float:cpos_z, Float:cpos_a, col1, col2)
 {
-	new vehid = Iter_Free(Vehicle), vehicleid;
+	new vehid = Iter_Free(Vehicles), vehicleid;
 	VehicleCache[vehid][vModel] = modelid;
 
 	VehicleCache[vehid][vPos][0] = cpos_x;
@@ -3179,7 +3205,7 @@ public OnCreateVehicle(modelid, Float:cpos_x, Float:cpos_y, Float:cpos_z, Float:
     orm_setkey(orm_id, "veh_uid");
 	orm_insert(orm_id);
 
-	Iter_Add(Vehicle, vehid);
+	Iter_Add(Vehicles, vehid);
 
     vehicleid = VehicleCache[vehid][vGID] = CreateVehicle(modelid, cpos_x, cpos_y, cpos_z, cpos_a, col1, col2, 3600);
 
@@ -3194,7 +3220,7 @@ public DeleteVehicle(veh_uid)
 	DestroyVehicle(VehicleCache[vehid][vGID]);
 	orm_delete(VehicleCache[vehid][vOrm]);
 
-	Iter_Remove(Vehicle, vehid);
+	Iter_Remove(Vehicles, vehid);
 	return 1;
 }
 
@@ -3226,7 +3252,7 @@ public UnloadVehicle(veh_uid)
 	orm_destroy(VehicleCache[vehid][vOrm]);
 	
 	for(new sVehicle:e; e < sVehicle; ++e)  VehicleCache[vehid][e] = 0;
-	Iter_Remove(Vehicle, vehid);
+	Iter_Remove(Vehicles, vehid);
 	return 1;
 }
 
@@ -3234,7 +3260,7 @@ public UnloadVehicle(veh_uid)
 stock GetGroupID(group_uid)
 {
 	new group_id = INVALID_GROUP_ID;
-	foreach(new g : Group)
+	foreach(new g : Groups)
 	{
 	    if(GroupCache[g][gUID] == group_uid)
 	    {
@@ -3356,7 +3382,7 @@ stock HavePlayerGroupPerm(playerid, group_uid, permission)
 
 public CreateGroup(group_name[32], group_type)
 {
-	new group_id = Iter_Free(Group);
+	new group_id = Iter_Free(Groups);
 	
 	strmid(GroupCache[group_id][gName], group_name, 0, strlen(group_name), 32);
 	strmid(GroupCache[group_id][gTag], "NONE", 0, 5, 5);
@@ -3382,7 +3408,7 @@ public CreateGroup(group_name[32], group_type)
 	orm_setkey(orm_id, "group_uid");
 	orm_insert(orm_id);
 	
-	Iter_Add(Group, group_id);
+	Iter_Add(Groups, group_id);
 	return group_id;
 }
 
@@ -3410,7 +3436,7 @@ public DeleteGroup(group_id)
 	mysql_query(MysqlHandle, query);
 
 	orm_delete(GroupCache[group_id][gOrm]);
-	Iter_Remove(Group, group_id);
+	Iter_Remove(Groups, group_id);
 	return 1;
 }
 
@@ -4075,7 +4101,7 @@ public query_OnLoadGroups()
 	
 	for(new row = 0; row != rows; row++)
 	{
- 		group_id = Iter_Free(Group);
+ 		group_id = Iter_Free(Groups);
    		orm_id = GroupCache[group_id][gOrm] = orm_create("myrp_groups", MysqlHandle);
 
 		orm_addvar_int(orm_id, GroupCache[group_id][gUID], "group_uid");
@@ -4094,7 +4120,7 @@ public query_OnLoadGroups()
 		orm_setkey(orm_id, "group_uid");
 		orm_apply_cache(orm_id, row, 0);
 
-		Iter_Add(Group, group_id);
+		Iter_Add(Groups, group_id);
 
 		printf("ORM_ID: %d, ID: %d, UID: %d, NAME: %s", orm_id, group_id, GroupCache[group_id][gUID], GroupCache[group_id][gName]);
 	}
@@ -4105,7 +4131,7 @@ public query_OnLoadVehicle()
 {
 	new query[256], vehid = INVALID_VEHICLE_ID, vehicleid;
 	
- 	vehid = Iter_Free(Vehicle);
+ 	vehid = Iter_Free(Vehicles);
  	new ORM:orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles", MysqlHandle);
 
 	orm_addvar_int(orm_id, VehicleCache[vehid][vUID], "veh_uid");
@@ -4131,7 +4157,7 @@ public query_OnLoadVehicle()
 	orm_setkey(orm_id, "veh_uid");
 	orm_apply_cache(orm_id, 0, 0);
 
-	Iter_Add(Vehicle, vehid);
+	Iter_Add(Vehicles, vehid);
 	vehicleid = VehicleCache[vehid][vGID] = CreateVehicle(VehicleCache[vehid][vModel], VehicleCache[vehid][vPos][0], VehicleCache[vehid][vPos][1], VehicleCache[vehid][vPos][2], VehicleCache[vehid][vPos][3], VehicleCache[vehid][vCol][0], VehicleCache[vehid][vCol][1], 3600);
 
 	SetVehicleHealth(vehicleid, VehicleCache[vehid][vHealth]);
@@ -4146,7 +4172,7 @@ public query_OnLoadVehicles()
 	
 	for(new row = 0; row != rows; row++)
 	{
- 		vehid = Iter_Free(Vehicle);
+ 		vehid = Iter_Free(Vehicles);
  		orm_id = VehicleCache[vehid][vOrm] = orm_create("myrp_vehicles", MysqlHandle);
 
 		orm_addvar_int(orm_id, VehicleCache[vehid][vUID], "veh_uid");
@@ -4172,7 +4198,7 @@ public query_OnLoadVehicles()
 		orm_setkey(orm_id, "veh_uid");
 		orm_apply_cache(orm_id, row, 0);
 
-		Iter_Add(Vehicle, vehid);
+		Iter_Add(Vehicles, vehid);
 
 		printf("ORM_ID: %d, ID: %d, UID: %d, MODEL: %d", orm_id, vehid, VehicleCache[vehid][vUID], VehicleCache[vehid][vModel]);
 		vehicleid = VehicleCache[vehid][vGID] = CreateVehicle(VehicleCache[vehid][vModel], VehicleCache[vehid][vPos][0], VehicleCache[vehid][vPos][1], VehicleCache[vehid][vPos][2], VehicleCache[vehid][vPos][3], VehicleCache[vehid][vCol][0], VehicleCache[vehid][vCol][1], 3600);
