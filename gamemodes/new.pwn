@@ -325,11 +325,15 @@ doda³em ten tekst i teraz wrzucam na githuba
 
 new second_timer;
 
+new Cache:ground_items_cache[MAX_PLAYERS];
+
 new Iterator:Vehicles<MAX_VEHICLES>;
 new Iterator:Groups<MAX_GROUPS>;
 
 new Iterator:PlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
 new Iterator:PlayerGroup[MAX_PLAYERS]<MAX_GROUP_SLOTS>;
+
+new Iterator:CheckedPlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
 
 enum sPlayer
 {
@@ -353,6 +357,7 @@ enum sPlayer
 	bool: pLogged,
 	bool: pSpawned,
 	
+	pExtra,
 	pItemArray[ITEM_COUNT],
 	
 	bool: pPuttingBag,
@@ -927,6 +932,7 @@ public OnGameModeInit()
 
 	Iter_Init(PlayerItem);
 	Iter_Init(PlayerGroup);
+	Iter_Init(CheckedPlayerItem);
 	
 	LoadVehicles();
 	LoadGroups();
@@ -1984,8 +1990,49 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new item_uid = strval(inputtext);
-			OnPlayerRaiseItem(playerid, item_uid);
+	        // Podnieœ zaznaczone
+	        if(listitem == 0)
+	        {
+	            return 1;
+	        }
+	        
+	        if(listitem == 1)   return 1;
+	    
+	        new item_uid = DynamicGui_GetDataInt(playerid, listitem);
+	        if(strval(inputtext) != item_uid)   return 1;
+	        
+        	new list_items[1024], item_name[32], rows;
+        	format(list_items, sizeof(list_items), "Identyfikator\t*\tNazwa przedmiotu\n» Podnieœ\n---\n");
+
+			DynamicGui_Init(playerid);
+
+			DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
+			DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
+
+			cache_set_active(ground_items_cache[playerid]);
+
+		    cache_get_row_count(rows);
+			for(new row = 0; row != rows; row++)
+			{
+				cache_get_value_index_int(row, 0, item_uid);
+				cache_get_value_index(row, 1, item_name, 32);
+
+				if(Iter_Contains(CheckedPlayerItem[playerid], item_uid))
+				{
+					format(list_items, sizeof(list_items), "%s\n%d\t[X]\t%s", list_items, item_uid, item_name);
+				}
+				else
+				{
+				    format(list_items, sizeof(list_items), "%s\n%d\t[ ]\t%s", list_items, item_uid, item_name);
+				}
+				DynamicGui_AddRow(playerid, D_ITEM_RAISE, item_uid);
+			}
+			cache_unset_active();
+	        
+	        Iter_Add(CheckedPlayerItem[playerid], item_uid);
+			ShowPlayerDialog(playerid, D_ITEM_RAISE, DIALOG_STYLE_TABLIST_HEADERS, "Przedmioty znajduj¹ce siê w pobli¿u:", list_items, "Zaznacz", "Anuluj");
+
+			//OnPlayerRaiseItem(playerid, item_uid);
 	        return 1;
 	    }
 	    else
@@ -2661,6 +2708,8 @@ public ListPlayerNearItems(playerid)
 {
 	new main_query[2048], query[256], item_uid;
 	format(main_query, sizeof(main_query), "SELECT `item_uid`, `item_name` FROM `myrp_items` WHERE ");
+	
+	Iter_Clear(CheckedPlayerItem[playerid]);
 	
 	if(!IsPlayerInAnyVehicle(playerid))
 	{
@@ -4244,17 +4293,32 @@ public query_OnLoadPlayerItems(playerid)
 
 public query_OnListPlayerNearItems(playerid)
 {
-	new list_items[1024] = "Identyfikator\tNazwa przedmiotu",
-		item_uid, item_name[32], rows;
+	new list_items[1024], item_uid, item_name[32], rows;
+	format(list_items, sizeof(list_items), "Identyfikator\t*\tNazwa przedmiotu\n» Podnieœ\n---\n");
+		
+	DynamicGui_Init(playerid);
+	
+	DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
 		
     cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
 	{
 		cache_get_value_index_int(row, 0, item_uid);
 		cache_get_value_index(row, 1, item_name, 32);
-		
-		format(list_items, sizeof(list_items), "%s\n%d\t%s", list_items, item_uid, item_name);
+
+		if(Iter_Contains(CheckedPlayerItem[playerid], item_uid))
+		{
+			format(list_items, sizeof(list_items), "%s\n%d\t[X]\t%s", list_items, item_uid, item_name);
+		}
+		else
+		{
+			format(list_items, sizeof(list_items), "%s\n%d\t[ ]\t%s", list_items, item_uid, item_name);
+		}
+		DynamicGui_AddRow(playerid, D_ITEM_RAISE, item_uid);
 	}
+	
+	ground_items_cache[playerid] = cache_save();
 	ShowPlayerDialog(playerid, D_ITEM_RAISE, DIALOG_STYLE_TABLIST_HEADERS, "Przedmioty znajduj¹ce siê w pobli¿u:", list_items, "Podnieœ", "Anuluj");
 	return rows;
 }

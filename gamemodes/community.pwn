@@ -10,14 +10,15 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #include <mysql>
 #include <zcmd>
 #include <md5>
-#include <foreach>
 #include <sscanf2>
+//#include <foreach>
 #include <streamer>
 #include <audio>
-#include <mtime>
+//#include <mtime>
 
 #include <YSI\y_va>
 #include <YSI\y_timers>
+#include <YSI\y_iterate>
 
 // Main config
 #define GAMEMODE		"CRP ©"
@@ -30,10 +31,10 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define SQL_USER        "game"
 #define SQL_PASS        "X6fmyNFXEdbHGJcY"
 #define SQL_DTBS        "community_db"
-#define SQL_PREF     	"crp_"
+#define SQL_PREF     	"mrp_"
 
-#pragma tabsize 0
-#pragma dynamic 8196
+//#pragma tabsize 0
+//#pragma dynamic 8196
 
 #define INVALID_GROUP_ID    (-1)
 #define INVALID_SLOT_ID 	(-1)
@@ -163,8 +164,9 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define chrtolower(%1) \
         (((%1) > 0x40 && (%1) <= 0x5A) ? ((%1) | 0x20) : (%1))
 
-#define isnull(%1) \
+/*#define isnull(%1) \
 		((!(%1[0])) || (((%1[0]) == '\1') && (!(%1[1]))))
+*/
 
 #define PRESSED(%0) \
 		(((newkeys & (%0)) == (%0)) && ((oldkeys & (%0)) != (%0)))
@@ -850,6 +852,8 @@ forward CreatePlayerCorpse(playerid, killer_uid, weapon_uid);
 forward GivePlayerAchievement(playerid, achieve_type);
 
 // New's
+new connHandle;
+
 new Text:TextDrawServerLogo;
 new Text:TextDrawNews;
 new Text:TextDrawGroupOption[MAX_GROUP_SLOTS][5];
@@ -880,8 +884,8 @@ new PunishTime;
 new PickupWork;
 
 // Iterators
-new Iterator:Group<MAX_GROUPS>;
-new Iterator:Vehicle<MAX_VEHICLES>;
+new Iterator:Groups<MAX_GROUPS>;
+new Iterator:Vehicles<MAX_VEHICLES>;
 
 new Iterator:Door<MAX_DOORS>;
 new Iterator:Area<MAX_AREAS>;
@@ -2050,8 +2054,9 @@ public OnGameModeInit()
 	PickupWork = CreatePickup(1210, 2, 1464.1624, -1749.0228, 15.4453);
 
 	// Connect to database
-	mysql_init(LOG_ALL);
-	if(mysql_connect(SQL_HOST, SQL_USER, SQL_PASS, SQL_DTBS))
+	//mysql_init(LOG_ALL);
+ 	connHandle = mysql_connect(SQL_HOST, SQL_USER, SQL_PASS, SQL_DTBS);
+	if(connHandle)
 	{
 	    print("Pomyœlnie po³¹czono z baz¹ danych.\n\n----------\nHost: "SQL_HOST"\nUser: "SQL_USER"\nDatabase: "SQL_DTBS"\n----------\n\nRozpoczynam wczytywanie danych...");
 
@@ -2076,7 +2081,7 @@ public OnGameModeInit()
 		print("Wczytywanie danych zosta³o zakoñczone pomyœlnie.");
 	    SetGameModeText(""GAMEMODE" v"VERSION"");
 	    
-  		//if(!GetServerVarAsBool("testserver"))	mysql_query("DELETE FROM `"SQL_PREF"logged_players`");
+  		//if(!GetServerVarAsBool("testserver"))	mysql_query(connHandle, "DELETE FROM `"SQL_PREF"logged_players`");
 	}
 	else
 	{
@@ -2261,7 +2266,7 @@ task OnMinuteTask[60000]()
 	}
 	LastHour = NewHour;
 	
-	foreach(Player, i)
+	foreach(new i :Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -2408,7 +2413,7 @@ task OnMinuteTask[60000]()
 
 		// Rozdaj wyp³aty (online)
 		new group_id, payment_sum;
-  		foreach(Player, i)
+  		foreach(new i : Player)
   		{
     		if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
     		{
@@ -2438,7 +2443,7 @@ task OnMinuteTask[60000]()
 		}
 
 		// Zresetuj pkt. aktywnoœci
-		foreach(Group, g)
+		foreach(new g : Groups)
 		{
   			if(GroupData[g][gUID])
 	    	{
@@ -2452,14 +2457,14 @@ task OnMinuteTask[60000]()
 		mysql_query_format("UPDATE `"SQL_PREF"groups`, `"SQL_PREF"characters` SET group_activity = 0, char_payday = 0 WHERE group_activity >= '%d' AND char_payday = 1", ACTIVITY_LIMIT);
 	}
 	
-	foreach(Door, doorid)
+	foreach(new doorid : Door)
 	{
 		if(DoorCache[doorid][dFireData][FIRE_TIME])
 	 	{
 			new string[128], group_id;
 			DoorCache[doorid][dFireData][FIRE_TIME] ++;
 
-			foreach(Player, i)
+			foreach(new i : Player)
 			{
 	  			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	   			{
@@ -2550,7 +2555,7 @@ task OnSecondTask[1000]()
 		}
 	}
 	
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(GetPlayerState(i) == PLAYER_STATE_ONFOOT && !PlayerCache[i][pSpawned])
 	    {
@@ -2660,7 +2665,7 @@ task OnSecondTask[1000]()
 						new icon_id, carid, group_id,
 				   		    Float:VehPosX, Float:VehPosY, Float:VehPosZ;
 
-				   		foreach(Player, playerid)
+				   		foreach(new playerid : Player)
 				   		{
 				   		    if(i != playerid)
 				   		    {
@@ -2764,7 +2769,7 @@ task OnSecondTask[1000]()
 						}
 						if(Health < CarInfo[vehid][cHealth])
 						{
-						    OnPlayerTakeDamage(i, INVALID_PLAYER_ID, ((CarInfo[vehid][cHealth] - Health) / ((PlayerCache[i][pBelts]) ? 10 : 5)), 0);
+						    OnPlayerTakeDamage(i, INVALID_PLAYER_ID, ((CarInfo[vehid][cHealth] - Health) / ((PlayerCache[i][pBelts]) ? 10 : 5)), 0, 0);
 		 					GetVehicleHealth(vehid, CarInfo[vehid][cHealth]);
 		 					
 		 					CarInfo[vehid][cSavePoint] ++;
@@ -3371,7 +3376,7 @@ task OnSecondTask[1000]()
 			// Boombox
 			if(PlayerCache[i][pItemBoombox] != INVALID_ITEM_ID)
 			{
-          		foreach(Player, playerid)
+          		foreach(new playerid : Player)
 				{
 				    if(PlayerCache[playerid][pLogged] && PlayerCache[playerid][pSpawned])
 				    {
@@ -3414,7 +3419,7 @@ task OnSecondTask[1000]()
 	     					if(GetPlayerWeaponID(i) > 0 && GetPlayerWeaponID(i) < 46)
 					        {
 					            new bool: weapon_found;
-					            foreach(Item, itemid)
+					            foreach(new itemid : Item)
 					            {
 					                if(ItemCache[itemid][iPlace] == PLACE_PLAYER && ItemCache[itemid][iOwner] == PlayerCache[i][pUID])
 					                {
@@ -3785,7 +3790,7 @@ public OnPlayerConnect(playerid)
 	mysql_query_format("SELECT `char_uid`, `char_gid` FROM `"SQL_PREF"characters` WHERE BINARY char_name LIKE '%s' LIMIT 1", PlayerOriginalName(playerid));
 
 	mysql_store_result();
-	if(mysql_fetch_row(data, "|"))
+	if(mysql_fetch_row_format(data, "|"))
 	{
  		sscanf(data, "p<|>dd", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID]);
 
@@ -3815,7 +3820,7 @@ public OnPlayerLogin(playerid)
 	mysql_query_format("SELECT * FROM `"SQL_PREF"characters` WHERE char_uid = '%d' LIMIT 1", PlayerCache[playerid][pUID]);
 	
  	mysql_store_result();
-  	if(mysql_fetch_row(data, "|"))
+  	if(mysql_fetch_row_format(data, "|"))
    	{
     	sscanf(data, "p<|>dds[24]ddddddfddfffddddddfdddddddddddfd",
 
@@ -3934,7 +3939,7 @@ public OnPlayerLogin(playerid)
 	SpawnPlayer(playerid);
     PlayerCache[playerid][pLogged] = true;
     
-	gpci(playerid, string, sizeof(string));
+	//gpci(playerid, string, sizeof(string));
  	printf("[part] %s (UID: %d, GID: %d, SERIAL: %s) zalogowa³ siê pomyœlnie (%d/3).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], string, PlayerCache[pLogTries]);
 
 	PlayerCache[playerid][pSession][SESSION_GAME] = gettime();
@@ -4015,7 +4020,7 @@ public OnPlayerDisconnect(playerid, reason)
 	new Text3D:reason_label = CreateDynamic3DTextLabel(string, 0xB4B5B788, PosX, PosY, PosZ + 0.3, 15.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 0, virtual_world, interior_id);
 	defer OnDestroyReasonLabel[15000](_:reason_label);
 	
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -4069,7 +4074,7 @@ public OnPlayerDisconnect(playerid, reason)
 		new	Float:DoorDistance,
 			Float:LastDistance = 8000.0;
 			
-		foreach(Door, d)
+		foreach(new d : Door)
 		{
 		    if(DoorCache[d][dEnterVW] == 0)
 		    {
@@ -4124,7 +4129,7 @@ public OnPlayerDisconnect(playerid, reason)
 	if(PlayerCache[playerid][pLastVeh] != INVALID_VEHICLE_ID)
 	{
 	    new vehid = PlayerCache[playerid][pLastVeh];
-	    if(Iter_Contains(Vehicle, vehid))
+	    if(Iter_Contains(Vehicles, vehid))
 	    {
 	        new driverid = GetVehicleDriver(vehid);
 		    if(driverid == INVALID_PLAYER_ID || driverid == playerid)
@@ -4222,7 +4227,7 @@ public OnPlayerDisconnect(playerid, reason)
  	if(PlayerCache[playerid][pItemBoombox] != INVALID_ITEM_ID)
  	{
 		new areaid = PlayerCache[playerid][pCurrentArea];
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 			if(i != playerid)
    			{
@@ -4527,7 +4532,7 @@ public OnPlayerSave(playerid, what)
     	format(query, sizeof(query), " WHERE char_uid = '%d' LIMIT 1", PlayerCache[playerid][pUID]);
 		strcat(main_query, query, sizeof(main_query));
 
-		mysql_query(main_query);
+		mysql_query(connHandle, main_query);
 	}
 	return 1;
 }
@@ -4626,7 +4631,7 @@ public OnVehicleSpawn(vehicleid)
 
 public OnVehicleDeath(vehicleid, killerid)
 {
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -4725,7 +4730,7 @@ public OnPlayerText(playerid, text[])
 			}
 			chat_title[0] = chrtoupper(chat_title[0]);
 
-			foreach(Player, i)
+			foreach(new i : Player)
 			{
 				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				{
@@ -4817,7 +4822,7 @@ public OnPlayerText(playerid, text[])
 			}
 			chat_title[0] = chrtoupper(chat_title[0]);
 
-			foreach(Player, i)
+			foreach(new i : Player)
 			{
 				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				{
@@ -4881,7 +4886,7 @@ public OnPlayerText(playerid, text[])
 			}
 			chat_title[0] = chrtoupper(chat_title[0]);
 
-			foreach(Player, i)
+			foreach(new i : Player)
 			{
 				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				{
@@ -4959,7 +4964,7 @@ public OnPlayerText(playerid, text[])
 			}
 			chat_title[0] = chrtoupper(chat_title[0]);
 
-			foreach(Player, i)
+			foreach(new i : Player)
 			{
 				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				{
@@ -4981,7 +4986,7 @@ public OnPlayerText(playerid, text[])
 	if(text[0] == '.')
 	{
 	    new bool: found = false;
-	    foreach(Anim, anim_id)
+	    foreach(new anim_id : Anim)
 	    {
     		if(!strcmp(text, AnimCache[anim_id][aCommand], true))
    			{
@@ -5257,7 +5262,7 @@ public OnPlayerExitVehicle(playerid, vehicleid)
 public OnPlayerStateChange(playerid, newstate, oldstate)
 {
 	// Spectate
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -5539,7 +5544,7 @@ public OnPlayerEnterRaceCheckpoint(playerid)
 	new curr_checkpoint = MAX_RACE_CP,
 	    racers_count;
 	    
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -5559,7 +5564,7 @@ public OnPlayerEnterRaceCheckpoint(playerid)
 	new time_minutes,
 		time_seconds;
 		
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -5581,7 +5586,7 @@ public OnPlayerEnterRaceCheckpoint(playerid)
 		new	race_minutes = floatround((gettime() - RaceInfo[playerid][rStart]) / 60, floatround_floor) % 60,
 			race_seconds = floatround((gettime() - RaceInfo[playerid][rStart]), floatround_floor) % 60;
 
-		foreach(Player, i)
+		foreach(new i : Player)
   		{
 	      if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	      {
@@ -5631,7 +5636,7 @@ public OnPlayerObjectMoved(playerid, objectid)
 
 public OnDynamicObjectMoved(objectid)
 {
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -5735,7 +5740,7 @@ public OnPlayerExitedMenu(playerid)
 public OnPlayerInteriorChange(playerid, newinteriorid, oldinteriorid)
 {
 	// Spectate
- 	foreach(Player, i)
+ 	foreach(new i : Player)
   	{
    		if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
      	{
@@ -5755,7 +5760,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 	{
 		if(newkeys == KEY_WALK + KEY_SPRINT)
 		{
-	        foreach(Door, doorid)
+	        foreach(new doorid : Door)
 	        {
 				if(IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dEnterVW])
           		{
@@ -6402,7 +6407,7 @@ public OnRconLoginAttempt(ip[], password[], success)
 	if(!success)
 	{
 		new IP[16];
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 			{
@@ -6661,7 +6666,7 @@ public OnPlayerUpdate(playerid)
 	return 1;
 }
 
-public OnPlayerTakeDamage(playerid, issuerid, Float:amount, weaponid)
+public OnPlayerTakeDamage(playerid, issuerid, Float:amount, weaponid, bodypart)
 {
 	if(!PlayerCache[playerid][pLogged] || !PlayerCache[playerid][pSpawned])
 	{
@@ -6742,7 +6747,7 @@ public OnPlayerTakeDamage(playerid, issuerid, Float:amount, weaponid)
 	return 1;
 }
 
-public OnPlayerGiveDamage(playerid, damagedid, Float:amount, weaponid)
+public OnPlayerGiveDamage(playerid, damagedid, Float:amount, weaponid, bodypart)
 {
 	if(damagedid != INVALID_PLAYER_ID && weaponid != 0)
 	{
@@ -6839,7 +6844,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_query_format("SELECT `name`, `member_premium_time`, `member_game_points`, `member_game_admin_perm`, `member_game_warns` FROM `ipb_members` WHERE member_id = '%d' AND members_pass_hash = md5(CONCAT(md5(members_pass_salt), md5('%s'))) LIMIT 1", PlayerCache[playerid][pGID], password);
 
 	    	mysql_store_result();
-	    	if(mysql_fetch_row(data, "|"))
+	    	if(mysql_fetch_row_format(data, "|"))
 	    	{
 	    	    sscanf(data, "p<|>s[64]ddd", PlayerCache[playerid][pGlobName], PlayerCache[playerid][pPremium], PlayerCache[playerid][pPoints], PlayerCache[playerid][pAdmin], PlayerCache[playerid][pWarns]);
 
@@ -6922,7 +6927,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    }
 			
   				new list_anims[1024];
-				foreach(Anim, anim_id)
+				foreach(new anim_id : Anim)
 				{
 				    format(list_anims, sizeof(list_anims), "%s\n%s", list_anims, AnimCache[anim_id][aCommand]);
 				}
@@ -6990,8 +6995,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        new giveplayer_id = strval(inputtext), list_perms[256],
 				admin_perms = PlayerCache[giveplayer_id][pAdmin];
 
-			format(list_perms, sizeof(list_perms), "{C0C0C0}Uprawnienia administratora %s:{FFFFFF}", PlayerName(giveplayer_id));
-			
+			format(list_perms, sizeof(list_perms), "{C0C0C0}Uprawnienia administratora %s:{FFFFFF}\n%d", PlayerName(giveplayer_id), admin_perms);
 			ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_LIST, "Uprawnienia", list_perms, "OK", "");
 	        return 1;
 	    }
@@ -7084,7 +7088,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			else
 			{
  				DestroyVehicle(vehid);
-				Iter_Remove(Vehicle, vehid);
+				Iter_Remove(Vehicles, vehid);
 				
 				SaveVehicle(vehid, SAVE_VEH_COUNT);
 				
@@ -7363,7 +7367,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					else
 					{
 				        // Wy³¹cz muze wszystkim, którzy s¹ w pomieszczeniu
-				        foreach(Player, i)
+				        foreach(new i : Player)
 				        {
 				            if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				            {
@@ -7420,7 +7424,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 						new index, color1, color2, modelid, txdname[32], texturename[64],
 						    matsize, fontsize, bold, alignment, fonttype[12], text[64];
 					
-						while(mysql_fetch_row(data, "|"))
+						while(mysql_fetch_row_format(data, "|"))
 						{
 					     	sscanf(data, "p<|>ddffffffddffffff{d}s[128]", object_uid, object_model, object_pos[0], object_pos[1], object_pos[2], object_rot[0], object_rot[1], object_rot[2], object_world, object_interior, object_gate[0], object_gate[1], object_gate[2], object_gate[3], object_gate[4], object_gate[5], object_material);
 							object_id = CreateDynamicObject(object_model, object_pos[0], object_pos[1], object_pos[2], object_rot[0], object_rot[1], object_rot[2], object_world, object_interior, -1, MAX_DRAW_DISTANCE);
@@ -7502,7 +7506,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					mysql_query_format("SELECT `item_uid`, `item_name` FROM `"SQL_PREF"items` WHERE item_place = '%d' AND item_owner = '%d'", PLACE_CLOSET, DoorCache[doorid][dUID]);
 
 					mysql_store_result();
-					while(mysql_fetch_row(data, "|"))
+					while(mysql_fetch_row_format(data, "|"))
 					{
 					    sscanf(data, "p<|>ds[32]", item_uid, item_name);
 					    format(list_items, sizeof(list_items), "%s\n%d\t%s", list_items, item_uid, item_name);
@@ -7647,7 +7651,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        SaveDoor(doorid, SAVE_DOOR_AUDIO);
 
 	        // Za³¹cz muze dla wszystkich, którzy s¹ w pomieszczeniu
-	        foreach(Player, i)
+	        foreach(new i : Player)
 	        {
 	            if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	            {
@@ -7722,7 +7726,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				}
 			
 				new list_players[256], string[128];
-				foreach(Player, i)
+				foreach(new i : Player)
 				{
 				    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				    {
@@ -7757,7 +7761,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		        }
 			        
 				new list_items[256], string[128];
-				foreach(Item, bag_itemid)
+				foreach(new bag_itemid : Item)
 				{
     				if(ItemCache[bag_itemid][iUID])
 				    {
@@ -8359,7 +8363,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        if(list_item == 3)
 	        {
 	            new list_players[256];
-	            foreach(Player, i)
+	            foreach(new i : Player)
 	            {
 	                if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	                {
@@ -8394,7 +8398,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				format(list_contacts, sizeof(list_contacts), "911\t\tNumer alarmowy\n333\t\tHurtownia\n777\t\tTaxi\n444\t\tLos Santos News\n-----");
 				
 				mysql_store_result();
-				while(mysql_fetch_row(data, "|"))
+				while(mysql_fetch_row_format(data, "|"))
 				{
 				    contacts ++;
 				
@@ -8711,7 +8715,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_query_format("SELECT `char_uid`, `char_gid` FROM `"SQL_PREF"characters` WHERE char_banknumb = '%d' LIMIT 1", bank_number);
 
 			mysql_store_result();
-			if(mysql_fetch_row(data, "|"))
+			if(mysql_fetch_row_format(data, "|"))
 			{
 			    sscanf(data, "p<|>dd", char_uid, char_gid);
 			}
@@ -8922,7 +8926,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        mysql_query_format("SELECT `channel_ownertype`, `channel_owner`, `channel_password`  FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
 
 	        mysql_store_result();
-	        if(mysql_fetch_row(data, "|"))
+	        if(mysql_fetch_row_format(data, "|"))
 	        {
 	            sscanf(data, "p<|>dds[32]", channel_ownertype, channel_owner, channel_password);
 	            if(channel_ownertype == OWNER_PLAYER || (channel_ownertype == OWNER_GROUP && IsPlayerInGroup(playerid, channel_owner)))
@@ -9058,7 +9062,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        mysql_query_format("SELECT `channel_ownertype`, `channel_owner` FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
 
 	        mysql_store_result();
-			if(mysql_fetch_row(data, "|"))
+			if(mysql_fetch_row_format(data, "|"))
 			{
 				sscanf(data, "p<|>dd", channel_ownertype, channel_owner);
     			if((channel_ownertype == OWNER_PLAYER && channel_owner == PlayerCache[playerid][pUID]) || (channel_ownertype == OWNER_GROUP && HavePlayerGroupPerm(playerid, channel_owner, G_PERM_LEADER)))
@@ -9131,7 +9135,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        mysql_query_format("SELECT `channel_ownertype`, `channel_owner` FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
 
 	        mysql_store_result();
-			if(mysql_fetch_row(data, "|"))
+			if(mysql_fetch_row_format(data, "|"))
 			{
 				sscanf(data, "p<|>dd", channel_ownertype, channel_owner);
     			if((channel_ownertype == OWNER_PLAYER && channel_owner == PlayerCache[playerid][pUID]) || (channel_ownertype == OWNER_GROUP && HavePlayerGroupPerm(playerid, channel_owner, G_PERM_LEADER)))
@@ -9188,7 +9192,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        mysql_query_format("SELECT `channel_ownertype`, `channel_owner` FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
 
 	        mysql_store_result();
-			if(mysql_fetch_row(data, "|"))
+			if(mysql_fetch_row_format(data, "|"))
 			{
 				sscanf(data, "p<|>dd", channel_ownertype, channel_owner);
     			if(channel_ownertype == OWNER_PLAYER && channel_owner == PlayerCache[playerid][pUID])
@@ -9331,7 +9335,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		mysql_query_format("SELECT `access_model`, `access_bone`, `access_posx`, `access_posy`, `access_posz`, `access_rotx`, `access_roty`, `access_rotz`, `access_scalex`, `access_scaley`, `access_scalez` FROM `"SQL_PREF"access` WHERE access_uid = '%d' LIMIT 1", access_uid);
 
 		mysql_store_result();
-		if(mysql_fetch_row(data, "|"))
+		if(mysql_fetch_row_format(data, "|"))
 		{
   			sscanf(data, "p<|>ddfffffffff", access_model, access_bone, access_posx, access_posy, access_posz, access_rotx, access_roty, access_rotz, access_scalex, access_scaley, access_scalez);
 			SetPlayerAttachedObject(playerid, slot_index, access_model, access_bone, access_posx, access_posy, access_posz, access_rotx, access_roty, access_rotz, access_scalex, access_scaley, access_scalez);
@@ -9410,7 +9414,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_query_format("SELECT `char_name`, `directory_reason`, `directory_date`, `directory_pdp` FROM `"SQL_PREF"directory`, `"SQL_PREF"characters` WHERE char_uid = directory_giver AND directory_uid = '%d' LIMIT 1", directory_uid);
 
 			mysql_store_result();
-			if(mysql_fetch_row(data, "|"))
+			if(mysql_fetch_row_format(data, "|"))
 			{
 			    sscanf(data, "p<|>s[32]s[64]s[32]d", giver_name, directory_reason, directory_date, directory_pdp);
 		    	new pos = strfind(giver_name, "_", true);
@@ -9568,7 +9572,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_query_format("SELECT `order_uid`, `order_name`, `order_price` FROM `"SQL_PREF"orders` WHERE order_cat = '%d' AND order_owner = '%d' AND order_extraid = '0' OR order_cat = '%d' AND order_owner = '0' AND order_extraid = '%d'", order_category, GroupData[group_id][gType], order_category, GroupData[group_id][gUID]);
 			
 			mysql_store_result();
-			while(mysql_fetch_row(data, "|"))
+			while(mysql_fetch_row_format(data, "|"))
 			{
 			    sscanf(data, "p<|>ds[32]d", order_uid, order_name, order_price);
 			    format(list_orders, sizeof(list_orders), "%s\n%d\t$%d\t%s", list_orders, order_uid, order_price, order_name);
@@ -9682,7 +9686,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_query_format("SELECT `order_item_type`, `order_item_value1`, `order_item_value2`, `order_type` FROM `"SQL_PREF"orders` WHERE order_uid = '%d' LIMIT 1", OrderCache[playerid][oUID]);
 
 			mysql_store_result();
-			if(mysql_fetch_row(data, "|"))
+			if(mysql_fetch_row_format(data, "|"))
 			{
 				sscanf(data, "p<|>dddd", order_item_type, order_item_value1, order_item_value2, order_type);
 			}
@@ -9773,7 +9777,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	    if(response)
 	    {
 	        new package_id = GetPackageID(strval(inputtext));
-	        foreach(Player, i)
+	        foreach(new i : Player)
 	        {
 	            if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	            {
@@ -9989,7 +9993,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
   			new string[256], group_id = PlayerCache[playerid][pCallingTo];
 			format(string, sizeof(string), "Wzywaj¹cy: %d, treœæ: %s", PlayerCache[playerid][pPhoneNumber], inputtext);
 
-			foreach(Player, i)
+			foreach(new i : Player)
 			{
 			    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 			    {
@@ -10034,7 +10038,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			}
 			
 			format(string, sizeof(string), "Zg³aszaj¹cy: %d, treœæ: %s", PlayerCache[playerid][pPhoneNumber], inputtext);
-			foreach(Player, i)
+			foreach(new i : Player)
 			{
    				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 			    {
@@ -10078,7 +10082,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
             format(text, sizeof(text), "Treœæ zg³oszenia: %s", inputtext);
 
 			new group_id;
-			foreach(Player, i)
+			foreach(new i : Player)
 			{
 			    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 			    {
@@ -10125,7 +10129,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        mysql_query_format("SELECT `salon_model`, `salon_price` FROM `"SQL_PREF"salon_vehicles` WHERE salon_cat = '%d'", category_uid);
 	        
 	        mysql_store_result();
-	        while(mysql_fetch_row(data, "|"))
+	        while(mysql_fetch_row_format(data, "|"))
 	        {
 	            sscanf(data, "p<|>dd", salon_model, salon_price);
 
@@ -10231,7 +10235,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					    strcat(main_query, ";", sizeof(main_query));
 					    
 					    print(main_query);
-					    mysql_query(main_query);
+					    mysql_query(connHandle, main_query);
 					    
 					    strdel(main_query, 37, strlen(main_query));
 					}
@@ -10240,7 +10244,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			}
 			
 			print(main_query);
-			mysql_query(main_query);
+			mysql_query(connHandle, main_query);
 			
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wyœcig zosta³ pomyœlnie zapisany.\nSkorzystaj z komendy /wyscig wczytaj, by nim zarz¹dzaæ.\n\nWyœcig zosta³ podpisany pod grupê, co oznacza\n¿e wczytaæ go mo¿e ka¿dy jej cz³onek.");
 		    return 1;
@@ -10299,7 +10303,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    mysql_query_format("SELECT `route_cpx`, `route_cpy`, `route_cpz` FROM `crp_races_route` WHERE route_owner = '%d'", race_uid);
 			    
 			    mysql_store_result();
-			    while(mysql_fetch_row(data, "|"))
+			    while(mysql_fetch_row_format(data, "|"))
 			    {
 			        sscanf(data, "p<|>fff",
 					RaceInfo[playerid][rCPX][checkpoint],
@@ -10546,7 +10550,7 @@ public OnPlayerEditObject(playerid, playerobject, objectid, response, Float:fX, 
 
 public OnPlayerSelectDynamicObject(playerid, objectid, modelid, Float:x, Float:y, Float:z)
 {
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -10653,7 +10657,7 @@ public OnPlayerEditAttachedObject(playerid, response, index, modelid, boneid, Fl
 	                mysql_query_format("SELECT `access_posx`, `access_posy`, `access_posz`, `access_rotx`, `access_roty`, `access_rotz`, `access_scalex`, `access_scaley`, `access_scalez` FROM `"SQL_PREF"access` WHERE access_uid = '%d' LIMIT 1", access_uid);
 	                
 					mysql_store_result();
-					if(mysql_fetch_row(data, "|"))
+					if(mysql_fetch_row_format(data, "|"))
 					{
 					    sscanf(data, "p<|>fffffffff", access_posx, access_posy, access_posz, access_rotx, access_roty, access_rotz, access_scalex, access_scaley, access_scalez);
 					    SetPlayerAttachedObject(playerid, index, modelid, boneid, access_posx, access_posy, access_posz, access_rotx, access_roty, access_rotz, access_scalex, access_scaley, access_scalez);
@@ -10866,7 +10870,7 @@ public CreateGroup(GroupName[])
 	mysql_query_format("INSERT INTO `"SQL_PREF"groups` (`group_name`) VALUES ('%s')", group_name);
 
 	group_uid = mysql_insert_id();
-	group_id = Iter_Free(Group);
+	group_id = Iter_Free(Groups);
 
 	GroupData[group_id][gUID] = group_uid;
 	strmid(GroupData[group_id][gName], group_name, 0, strlen(group_name), 32);
@@ -10886,7 +10890,7 @@ public CreateGroup(GroupName[])
 	GroupData[group_id][gLastTax] = gettime();
 
 	GroupData[group_id][gToggleChat] = false;
-	Iter_Add(Group, group_id);
+	Iter_Add(Groups, group_id);
 
 	return group_id;
 }
@@ -10919,7 +10923,7 @@ public DeleteGroup(group_id)
 	mysql_query_format("DELETE FROM `"SQL_PREF"char_groups` WHERE group_belongs = '%d'", GroupData[group_id][gUID]);
 
 	new group_slot;
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -10997,19 +11001,19 @@ public DeleteGroup(group_id)
 	GroupData[group_id][gLastTax]   = 0;
 	GroupData[group_id][gFlags]     = 0;
 	
-	Iter_Remove(Group, group_id);
+	Iter_Remove(Groups, group_id);
 	return 1;
 }
 
 public LoadGroups()
 {
 	new group_id, data[128];
-	mysql_query("SELECT * FROM `"SQL_PREF"groups`");
+	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"groups`");
 
 	print("[load] Rozpoczynam proces wczytywania wszystkich grup...");
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 		sscanf(data, "p<|>ds[32]ddddddxds[5]dd",
 		GroupData[group_id][gUID],
@@ -11032,12 +11036,12 @@ public LoadGroups()
 
 		GroupData[group_id][gFlags]);
 
-		Iter_Add(Group, group_id);
+		Iter_Add(Groups, group_id);
 		group_id ++;
 	}
 	mysql_free_result();
 	
-	printf("[load] Proces wczytywania grup zosta³ zakoñczony (count: %d).", Iter_Count(Group));
+	printf("[load] Proces wczytywania grup zosta³ zakoñczony (count: %d).", Iter_Count(Groups));
 	return 1;
 }
 
@@ -11077,7 +11081,7 @@ public ShowPlayerGroupInfo(playerid, group_id)
 	if(GroupData[group_id][gFlags] & G_FLAG_TAX)
 	{
  		new time_string[64];
-   		mtime_UnixToDate(time_string, sizeof(time_string), GroupData[group_id][gLastTax] + (7 * 86000));
+   		//mtime_UnixToDate(time_string, sizeof(time_string), GroupData[group_id][gLastTax] + (7 * 86000));
    		
 		strmid(time_string, time_string, 0, 10, 64);
 		format(list_stats, sizeof(list_stats), "%s\nPodatek:\t\t%s", list_stats, time_string);
@@ -11094,7 +11098,7 @@ public LoadPlayerGroups(playerid)
 	mysql_query_format("SELECT `group_uid`, `group_perm`, `group_title`, `group_payment`, `group_skin`, `group_tag`, `group_color`, `group_flags` FROM `crp_groups`, `crp_char_groups` WHERE crp_groups.group_uid = crp_char_groups.group_belongs AND char_uid = '%d' LIMIT %d", PlayerCache[playerid][pUID], MAX_GROUP_SLOTS);
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>d", group_uid);
 	    group_id = GetGroupID(group_uid);
@@ -11135,11 +11139,11 @@ public CreateStaticVehicle(modelid, Float:PosX, Float:PosY, Float:PosZ, Float:Po
 
 public LoadVehicle(veh_uid)
 {
-	new data[512], vehid = Iter_Free(Vehicle);
+	new data[512], vehid = Iter_Free(Vehicles);
 	mysql_query_format("SELECT * FROM `crp_vehicles` WHERE vehicle_uid = '%d'", veh_uid);
 
 	mysql_store_result();
-	if(mysql_fetch_row(data, "|"))
+	if(mysql_fetch_row_format(data, "|"))
 	{
 		sscanf(data, "p<|>ddffffddddfdffda<i>[4]ddds[12]dd",
 		CarInfo[vehid][cUID],
@@ -11174,7 +11178,7 @@ public LoadVehicle(veh_uid)
 		CarInfo[vehid][cOwner],
 		CarInfo[vehid][cOwnerType]);
 
-		Iter_Add(Vehicle, vehid);
+		Iter_Add(Vehicles, vehid);
 		CreateVehicle(CarInfo[vehid][cModel], CarInfo[vehid][cPosX], CarInfo[vehid][cPosY], CarInfo[vehid][cPosZ], CarInfo[vehid][cPosA], CarInfo[vehid][cColor1], CarInfo[vehid][cColor2], 3600);
 
 		// Usuñ opis
@@ -11213,7 +11217,7 @@ public LoadVehicle(veh_uid)
 		mysql_query_format("SELECT `item_value1` FROM `"SQL_PREF"items` WHERE item_vehuid = '%d'", CarInfo[vehid][cUID]);
 
 		mysql_store_result();
-		while(mysql_fetch_row(data, "|"))
+		while(mysql_fetch_row_format(data, "|"))
 		{
 			sscanf(data, "p<|>d", component_id);
 		    crp_AddVehicleComponent(vehid, component_id);
@@ -11318,7 +11322,7 @@ public SaveVehicle(vehid, what)
 	format(query, sizeof(query), " WHERE vehicle_uid = '%d' LIMIT 1", CarInfo[vehid][cUID]);
 	strcat(main_query, query, sizeof(main_query));
 
-	mysql_query(main_query);
+	mysql_query(connHandle, main_query);
 	CarInfo[vehid][cSavePoint] = 0;
 	return 1;
 }
@@ -11342,7 +11346,7 @@ public DeleteVehicle(vehid)
 	CarInfo[vehid][cFuelType] = 0;
 	
 	DestroyVehicle(vehid);
-	Iter_Remove(Vehicle, vehid);
+	Iter_Remove(Vehicles, vehid);
 	return 1;
 }
 
@@ -11350,13 +11354,13 @@ public LoadVehicles()
 {
     new vehid, data[256];
 
-	Iter_Add(Vehicle, 0);
+	Iter_Add(Vehicles, 0);
 	mysql_query_format("SELECT * FROM `"SQL_PREF"vehicles` WHERE vehicle_ownertype <> '%d'", OWNER_PLAYER);
 
 	print("[load] Rozpoczynam proces wczytywania pojazdów...");
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 		vehid ++;
 
@@ -11393,7 +11397,7 @@ public LoadVehicles()
 		CarInfo[vehid][cOwner],
 		CarInfo[vehid][cOwnerType]);
 		
-		Iter_Add(Vehicle, vehid);
+		Iter_Add(Vehicles, vehid);
 		CreateVehicle(CarInfo[vehid][cModel], CarInfo[vehid][cPosX], CarInfo[vehid][cPosY], CarInfo[vehid][cPosZ], CarInfo[vehid][cPosA], CarInfo[vehid][cColor1], CarInfo[vehid][cColor2], 3600);
 
 		CarInfo[vehid][cDistTicker] = 0;
@@ -11412,10 +11416,10 @@ public LoadVehicles()
 	
 	// Komponenty
 	new veh_uid, component_id;
-	mysql_query("SELECT `item_vehuid`, `item_value1` FROM `"SQL_PREF"items` WHERE item_vehuid != '0'");
+	mysql_query(connHandle, "SELECT `item_vehuid`, `item_value1` FROM `"SQL_PREF"items` WHERE item_vehuid != '0'");
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 		sscanf(data, "p<|>dd", veh_uid, component_id);
 
@@ -11427,7 +11431,7 @@ public LoadVehicles()
 	}
 	mysql_free_result();
 	
-	printf("[load] Proces wczytywania pojazdów zosta³ zakoñczony (count: %d).", Iter_Count(Vehicle));
+	printf("[load] Proces wczytywania pojazdów zosta³ zakoñczony (count: %d).", Iter_Count(Vehicles));
 	return 1;
 }
 
@@ -11505,7 +11509,7 @@ public LoadDoor(door_uid)
 	mysql_query_format("SELECT * FROM `"SQL_PREF"doors` WHERE door_uid = '%d' LIMIT 1", door_uid);
 
 	mysql_store_result();
-	if(mysql_fetch_row(data, "|"))
+	if(mysql_fetch_row_format(data, "|"))
 	{
 		sscanf(data, "p<|>ds[32]ffffddffffddddddds[128]d",
 		DoorCache[doorid][dUID],
@@ -11632,7 +11636,7 @@ public SaveDoor(doorid, what)
 	format(query, sizeof(query), " WHERE door_uid = '%d' LIMIT 1", DoorCache[doorid][dUID]);
 	strcat(main_query, query, sizeof(main_query));
 
-	mysql_query(main_query);
+	mysql_query(connHandle, main_query);
 	return 1;
 }
 
@@ -11674,7 +11678,7 @@ public DeleteDoor(doorid)
 	new product_next;
 	mysql_query_format("DELETE FROM `"SQL_PREF"products` WHERE product_owner = '%d'", DoorCache[doorid][dUID]);
 
-	foreach(Product, product_id)
+	foreach(new product_id : Product)
 	{
 	    if(ProductData[product_id][pUID])
 	    {
@@ -11701,7 +11705,7 @@ public DeleteDoor(doorid)
 	new package_next;
 	mysql_query_format("DELETE FROM `"SQL_PREF"packages` WHERE package_dooruid = '%d'", DoorCache[doorid][dUID]);
 
-	foreach(Package, package_id)
+	foreach(new package_id : Package)
 	{
 	    if(PackageCache[package_id][pUID])
 	    {
@@ -11770,12 +11774,12 @@ public LoadDoors()
 	new data[512], doorid;
 	
 	Iter_Add(Door, 0);
-	mysql_query("SELECT * FROM `"SQL_PREF"doors`");
+	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"doors`");
 
 	print("[load] Rozpoczynam proces wczytywania wszystkich drzwi...");
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    doorid ++;
 	
@@ -11900,7 +11904,7 @@ public LoadItemCache(item_uid)
    	mysql_query_format("SELECT `item_uid`, `item_name`, `item_value1`, `item_value2`, `item_type`, `item_place`, `item_owner`, `item_group` FROM `"SQL_PREF"items` WHERE item_uid = '%d' LIMIT 1", item_uid);
 
 	mysql_store_result();
-	if(mysql_fetch_row(data, "|"))
+	if(mysql_fetch_row_format(data, "|"))
 	{
 		sscanf(data, "p<|>ds[32]dddddd",
 		ItemCache[itemid][iUID],
@@ -12004,7 +12008,7 @@ public SaveItem(itemid, what)
 	format(query, sizeof(query), " WHERE item_uid = '%d' LIMIT 1", ItemCache[itemid][iUID]);
 	strcat(main_query, query, sizeof(main_query));
 
-	mysql_query(main_query);
+	mysql_query(connHandle, main_query);
 	return 1;
 }
 
@@ -12050,7 +12054,7 @@ public ListPlayerItems(playerid)
 		item_count, weight_sum;
     format(list_items, sizeof(list_items), "{C0C0C0} -- Lista posiadanych przedmiotów:");
 		
-	foreach(Item, itemid)
+	foreach(new itemid : Item)
 	{
 		if(ItemCache[itemid][iUID])
 		{
@@ -12090,7 +12094,7 @@ public ListPlayerItemsForPlayer(playerid, giveplayer_id)
 	new list_items[1024], item_count, string[128];
 	format(list_items, sizeof(list_items), "{C0C0C0}UID\t\tWAGA\t\tNAZWA");
 
-	foreach(Item, itemid)
+	foreach(new itemid : Item)
 	{
 	    if(ItemCache[itemid][iUID])
 	    {
@@ -12120,7 +12124,7 @@ public ListVehicleItemsForPlayer(vehicleid, playerid)
 	mysql_query_format("SELECT `item_uid`, `item_name` FROM `"SQL_PREF"items` WHERE item_place = '%d' AND item_owner = '%d'", PLACE_VEHICLE, CarInfo[vehicleid][cUID]);
 
 	mysql_store_result();
-   	while(mysql_fetch_row(data, "|"))
+   	while(mysql_fetch_row_format(data, "|"))
    	{
      	sscanf(data, "p<|>ds[32]", item_uid, item_name);
      	format(list_items, sizeof(list_items), "%s\n%d\t%s", list_items, item_uid, item_name);
@@ -12175,7 +12179,7 @@ public ListPlayerNearItems(playerid)
 	new	item_uid, item_name[32];
 
 	mysql_store_result();
-   	while(mysql_fetch_row(data, "|"))
+   	while(mysql_fetch_row_format(data, "|"))
    	{
      	sscanf(data, "p<|>ds[32]", item_uid, item_name);
      	format(list_items, sizeof(list_items), "%s\n%d\t\t%s", list_items, item_uid, item_name);
@@ -12284,7 +12288,7 @@ public OnPlayerUseItem(playerid, itemid)
 	        return 1;
 	    }
 		
-		foreach(Item, i)
+		foreach(new i : Item)
 		{
   			if(ItemCache[i][iPlace] == PLACE_PLAYER && ItemCache[i][iOwner] == PlayerCache[playerid][pUID])
      		{
@@ -12389,7 +12393,7 @@ public OnPlayerUseItem(playerid, itemid)
 	    }
 	    
 	    new list_items[256];
-	    foreach(Item, weapon_itemid)
+	    foreach(new weapon_itemid : Item)
 	    {
 	        if(ItemCache[weapon_itemid][iUID])
 	        {
@@ -12622,7 +12626,7 @@ public OnPlayerUseItem(playerid, itemid)
 	    mysql_query_format("SELECT * FROM `"SQL_PREF"chits` WHERE chit_uid = '%d' LIMIT 1", ItemCache[itemid][iValue1]);
 
 	    mysql_store_result();
-		if(mysql_fetch_row(data, "|"))
+		if(mysql_fetch_row_format(data, "|"))
 		{
 		    sscanf(data, "p<|>ds[128]s[24]s[24]", chit_uid, chit_desc, chit_writer, chit_time);
 
@@ -12702,7 +12706,7 @@ public OnPlayerUseItem(playerid, itemid)
 	    mysql_query_format("SELECT `item_uid`, `item_name` FROM `"SQL_PREF"items` WHERE item_place = '%d' AND item_owner = '%d'", PLACE_BAG, ItemCache[itemid][iUID]);
 
 	    mysql_store_result();
-		while(mysql_fetch_row(data, "|"))
+		while(mysql_fetch_row_format(data, "|"))
 		{
 			sscanf(data, "p<|>ds[32]", item_uid, item_name);
 			format(list_items, sizeof(list_items), "%s\n%d\t\t%s", list_items, item_uid, item_name);
@@ -12757,13 +12761,13 @@ public OnPlayerUseItem(playerid, itemid)
     			mysql_query_format("SELECT `audio_url` FROM `"SQL_PREF"audiourls` WHERE audio_uid = '%d' LIMIT 1", ItemCache[itemid][iValue1]);
 
 				mysql_store_result();
-				if(mysql_fetch_row(data, "|"))
+				if(mysql_fetch_row_format(data, "|"))
 				{
 				    sscanf(data, "p<|>s[128]", audio_url);
 				    strmid(CarInfo[vehid][cAudioURL], audio_url, 0, strlen(audio_url), 64);
 
 				    // Za³¹cz muzê u wszystkich, nie tylko u siebie
-				    foreach(Player, i)
+				    foreach(new i : Player)
 				    {
 				        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				        {
@@ -12791,7 +12795,7 @@ public OnPlayerUseItem(playerid, itemid)
 	            new list_items[256];
 	            PlayerCache[playerid][pManageItem] = itemid;
 	            
-	            foreach(Item, i)
+	            foreach(new i : Item)
 	            {
 	                if(ItemCache[i][iUID])
 	                {
@@ -12863,7 +12867,7 @@ public OnPlayerUseItem(playerid, itemid)
 			mysql_query_format("SELECT `audio_url` FROM `"SQL_PREF"audiourls` WHERE audio_uid = '%d' LIMIT 1", ItemCache[itemid][iValue1]);
 
 			mysql_store_result();
-			if(mysql_fetch_row(data, "|"))
+			if(mysql_fetch_row_format(data, "|"))
 			{
    				sscanf(data, "p<|>s[128]", audio_url);
    				PlayStreamedAudioForPlayer(playerid, audio_url);
@@ -13236,7 +13240,7 @@ public OnPlayerUseItem(playerid, itemid)
 		mysql_query_format("SELECT `corpse_death`, `corpse_owner`, `corpse_killer`, `corpse_weapon`, `corpse_date` FROM `"SQL_PREF"corpses` WHERE corpse_uid = '%d' LIMIT 1", corpse_uid);
 
 		mysql_store_result();
-		if(mysql_fetch_row(data, "|"))
+		if(mysql_fetch_row_format(data, "|"))
 		{
 		    sscanf(data, "p<|>ddddd", corpse_death, corpse_owner, corpse_killer, corpse_weapon, corpse_date);
 		}
@@ -13271,7 +13275,7 @@ public OnPlayerUseItem(playerid, itemid)
 				{
   					new corpse_desc[512], time_string[64];
   					
-			   		mtime_UnixToDate(time_string, sizeof(time_string), corpse_date);
+			   		//mtime_UnixToDate(time_string, sizeof(time_string), corpse_date);
 					format(corpse_desc, sizeof(corpse_desc), "Dok³adna data zgonu %s.\nPrzyczyna œmierci: %s", time_string, DeathTypeData[corpse_death][0]);
 
 					if(corpse_weapon)
@@ -13279,7 +13283,7 @@ public OnPlayerUseItem(playerid, itemid)
 						mysql_query_format("SELECT `item_value1` FROM `"SQL_PREF"items` WHERE item_uid = '%d' LIMIT 1", corpse_weapon);
 						mysql_store_result();
 						
-						new weapon_id = mysql_fetch_int();
+						new weapon_id = cache_get_row_int(0, 0);
 						mysql_free_result();
 
   						new weapon_type = GetWeaponType(weapon_id), weapon_name[24];
@@ -13329,7 +13333,7 @@ public OnPlayerUseItem(playerid, itemid)
 		    return 0;
 		}
 	   	new firefighter_count, group_id;
-	    foreach(Player, i)
+	    foreach(new i : Player)
 	    {
      		if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
        		{
@@ -13358,7 +13362,7 @@ public OnPlayerUseItem(playerid, itemid)
 		DoorCache[doorid][dFireData][FIRE_OBJECT] = CreateDynamicObject(18690, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ] - 2.0, 0.0, 0.0, 0.0, DoorCache[doorid][dEnterVW], DoorCache[doorid][dEnterInt], -1, MAX_DRAW_DISTANCE);
 		DoorCache[doorid][dFireData][FIRE_LABEL] = _:CreateDynamic3DTextLabel("Ten budynek stan¹³ w p³omieniach!\nSzacowane zniszczenia: 0%", 0x33AA33FF, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ] + 0.3, 15.0);
 
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
   			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
    			{
@@ -13421,7 +13425,7 @@ public OnPlayerUseItem(playerid, itemid)
    		if(ItemCache[itemid][iUsed])
 		{
   			areaid = PlayerCache[playerid][pCurrentArea];
-       		foreach(Player, i)
+       		foreach(new i : Player)
 			{
 				if(i != playerid)
     			{
@@ -13457,10 +13461,10 @@ public OnPlayerUseItem(playerid, itemid)
 			mysql_query_format("SELECT `audio_url` FROM `"SQL_PREF"audiourls` WHERE audio_uid = '%d' LIMIT 1", ItemCache[itemid][iValue1]);
 
 			mysql_store_result();
-			if(mysql_fetch_row(data, "|"))
+			if(mysql_fetch_row_format(data, "|"))
 			{
    				sscanf(data, "p<|>s[128]", audio_url);
-   				foreach(Player, i)
+   				foreach(new i : Player)
    				{
    				    if(i != playerid)
    				    {
@@ -13588,7 +13592,7 @@ public OnPlayerRaiseItem(playerid, item_uid)
 	mysql_query_format("SELECT `item_place` FROM `"SQL_PREF"items` WHERE item_uid = '%d' LIMIT 1", item_uid);
 	
 	mysql_store_result();
-	if(mysql_fetch_row(data, "|"))
+	if(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>d", item_place);
 	}
@@ -13614,7 +13618,7 @@ public OnPlayerRaiseItem(playerid, item_uid)
 		{
 		    if(IsValidPlayerObject(playerid, player_object))
 		    {
-		        object_id = GetDynamicPlayerObjectId(player_object, playerid);
+		        object_id = Streamer_GetItemStreamerID(playerid, STREAMER_TYPE_OBJECT, player_object);
     			if(Streamer_GetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID) == object_extra_id)
 			   	{
 					DestroyDynamicObject(object_id);
@@ -13639,7 +13643,7 @@ public LoadPlayerItems(playerid)
 	mysql_query_format("SELECT `item_uid`, `item_name`, `item_value1`, `item_value2`, `item_type`, `item_place`, `item_owner`, `item_group`, `item_used` FROM `"SQL_PREF"items` WHERE item_place = '%d' AND item_owner = '%d'", PLACE_PLAYER, PlayerCache[playerid][pUID]);
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 		itemid = Iter_Free(Item);
 
@@ -13683,7 +13687,7 @@ public LoadPlayerItems(playerid)
 public UnloadPlayerItems(playerid)
 {
 	new item_next;
-	foreach(Item, itemid)
+	foreach(new itemid : Item)
 	{
 	    if(ItemCache[itemid][iUID])
 	    {
@@ -13740,7 +13744,7 @@ public LoadArea(area_uid)
 	mysql_query_format("SELECT * FROM `"SQL_PREF"areas` WHERE area_uid = '%d' LIMIT 1", area_uid);
 	
 	mysql_store_result();
-	if(mysql_fetch_row(data, "|"))
+	if(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>dffffdd",
 	    AreaCache[areaid][aUID],
@@ -13779,12 +13783,12 @@ public LoadAreas()
 	new data[128], areaid;
 	
 	GangZoneCreate(0.0, 0.0, 0.0, 0.0);
-	mysql_query("SELECT * FROM `"SQL_PREF"areas`");
+	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"areas`");
 	
 	print("[load] Rozpoczynam proces wczytywania wszystkich stref...");
 	
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    areaid ++;
 	
@@ -13830,7 +13834,7 @@ public SaveArea(areaid)
 public CreateDoorProduct(doorid, ProductName[], ProductType, ProductValue1, ProductValue2, ProductPrice, ProductCount)
 {
 	// Sumuj produkt z innymi
-	foreach(Product, product)
+	foreach(new product : Product)
 	{
 	    if(ProductData[product][pUID])
 	    {
@@ -13877,12 +13881,12 @@ public CreateDoorProduct(doorid, ProductName[], ProductType, ProductValue1, Prod
 public LoadAllProducts()
 {
 	new data[128], product_id;
-	mysql_query("SELECT * FROM `"SQL_PREF"products`");
+	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"products`");
 
 	print("[load] Rozpoczynam proces wczytywania produktów...");
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 		sscanf(data, "p<|>ds[32]ddddddd",
 		ProductData[product_id][pUID],
@@ -13968,7 +13972,7 @@ public SaveProduct(product_id, what)
 	format(query, sizeof(query), " WHERE product_uid = '%d' LIMIT 1", ProductData[product_id][pUID]);
 	strcat(main_query, query, sizeof(main_query));
 
-	mysql_query(main_query);
+	mysql_query(connHandle, main_query);
 	return 1;
 }
 
@@ -13980,7 +13984,7 @@ public ListGroupProductsForPlayer(group_id, playerid, list_type)
 	mysql_query_format("SELECT `product_uid`, `product_name`, `product_price`, `product_count` FROM `"SQL_PREF"products` WHERE product_owner = '%d'", GroupData[group_id][gUID]);
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 		sscanf(data, "p<|>ds[32]dd", product_uid, product_name, product_price, product_count);
 		
@@ -14059,7 +14063,7 @@ public DeleteObject(object_id)
 public LoadAllObjects()
 {
 	new data[512], object_id;
-	mysql_query("SELECT * FROM `"SQL_PREF"objects`");
+	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"objects`");
 
 	print("[load] Rozpoczynam proces wczytywania wszystkich obiektów...");
 
@@ -14072,7 +14076,7 @@ public LoadAllObjects()
 	    matsize, fontsize, bold, alignment, fonttype[12], text[64];
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
      	sscanf(data, "p<|>ddffffffddffffff{d}s[128]", object_uid, object_model, object_pos[0], object_pos[1], object_pos[2], object_rot[0], object_rot[1], object_rot[2], object_world, object_interior, object_gate[0], object_gate[1], object_gate[2], object_gate[3], object_gate[4], object_gate[5], object_material);
 		object_id = CreateDynamicObject(object_model, object_pos[0], object_pos[1], object_pos[2], object_rot[0], object_rot[1], object_rot[2], object_world, object_interior, -1, MAX_DRAW_DISTANCE);
@@ -14126,7 +14130,7 @@ public Add3DTextLabel(LabelDesc[128], LabelColor, Float:LabelPosX, Float:LabelPo
 public Load3DTextLabels()
 {
 	new data[512];
-	mysql_query("SELECT * FROM `"SQL_PREF"3dlabels`");
+	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"3dlabels`");
 
 	new Text3D:label_id, label_uid, label_desc[128], label_color,
 		Float:label_posx, Float:label_posy, Float:label_posz,
@@ -14135,7 +14139,7 @@ public Load3DTextLabels()
     print("[load] Rozpoczynam proces wczytywania wszystkich 3D tekstów...");
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>ds[128]dffffdd", label_uid, label_desc, label_color, label_posx, label_posy, label_posz, label_drawdist, label_world, label_interior);
   		label_id = CreateDynamic3DTextLabel(WordWrap(label_desc, WRAP_MANUAL), label_color, label_posx, label_posy, label_posz, label_drawdist, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, label_world, label_interior, -1, 100.0);
@@ -14180,7 +14184,7 @@ public LoadPlayerAccess(playerid)
 	mysql_query_format("SELECT `access_model`, `access_bone`, `access_posx`, `access_posy`, `access_posz`, `access_rotx`, `access_roty`, `access_rotz`, `access_scalex`, `access_scaley`, `access_scalez` FROM `"SQL_PREF"items`, `"SQL_PREF"access` WHERE (item_place = '%d' AND item_owner = '%d' AND item_type = '%d' AND item_used = '1') AND (access_uid = item_value1 OR access_uid = item_value2)", PLACE_PLAYER, PlayerCache[playerid][pUID], ITEM_CLOTH_ACCESS);
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    slot_index = GetPlayerFreeSlotAccess(playerid);
 	    
@@ -14199,7 +14203,7 @@ public LoadAllAccess()
 	print("[load] Rozpoczynam proces wczytywania akcesorii...");
 	
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>dds[32]dfffffffffd",
 	    AccessData[access_id][aUID],
@@ -14239,7 +14243,7 @@ public LoadAllSkins()
 	print("[load] Rozpoczynam proces wczytywania skinów...");
 	
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>ds[32]d",
 	    SkinData[skin_id][sModel],
@@ -14259,12 +14263,12 @@ public LoadAllSkins()
 public LoadAllAnims()
 {
 	new data[128], anim_id;
-	mysql_query("SELECT * FROM `"SQL_PREF"anim` ORDER BY `anim_command` ASC");
+	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"anim` ORDER BY `anim_command` ASC");
 
 	print("[load] Rozpoczynam proces wczytywania animacji...");
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 		sscanf(data, "p<|>ds[12]s[16]s[24]fdddddd",
 		AnimCache[anim_id][aUID],
@@ -14300,7 +14304,7 @@ public LoadAllCorpses()
 	mysql_query_format("SELECT `item_uid`, `item_posx`, `item_posy`, `item_posz`, `item_interior`, `item_world` FROM `"SQL_PREF"items`, `"SQL_PREF"corpses` WHERE item_type = '%d' AND item_place = '%d' AND corpse_uid = item_value1 AND corpse_date + (7 * 86000) >= '%d'", ITEM_CORPSE, PLACE_NONE, gettime());
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>dfffdd", item_uid, PosX, PosY, PosZ, InteriorID, VirtualWorldID);
     	object_id = CreateDynamicObject(ItemTypeInfo[ITEM_CORPSE][iTypeObjModel], PosX, PosY, PosZ - 1.0, ItemTypeInfo[ITEM_CORPSE][iTypeObjRotX], ItemTypeInfo[ITEM_CORPSE][iTypeObjRotY], 180.0, VirtualWorldID, InteriorID, -1, MAX_DRAW_DISTANCE);
@@ -15436,7 +15440,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 		SetVehicleZAngle(vehid, DoorCache[doorid][dExitA]);
 		LinkVehicleToInterior(vehid, DoorCache[doorid][dExitInt]);
 
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
@@ -15500,7 +15504,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 			    if(GroupData[group_id][gLastTax] + (7 * 86000) <= gettime())
 			    {
      				new time_string[64];
-			   		mtime_UnixToDate(time_string, sizeof(time_string), GroupData[group_id][gLastTax] + (15 * 86000));
+			   		//mtime_UnixToDate(time_string, sizeof(time_string), GroupData[group_id][gLastTax] + (15 * 86000));
 
 					strmid(time_string, time_string, 0, 10, 64);
 			        ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Uwaga! Firma ta nie wywi¹za³a siê z obowi¹zku sp³aty podatku.\nZaleca siê jak najprêdzej sp³aciæ d³ug, w przeciwnym wypadku firma zostanie usuniêta!\n\nPodatek zap³aciæ mo¿na w Urzêdzie Miasta, udaj siê tam i poproœ urzêdnika o ofertê.\nAktywnoœæ firmy wygasa: %s", time_string);
@@ -15569,7 +15573,7 @@ public OnPlayerExitDoor(playerid, doorid)
 		SetVehicleZAngle(vehid, DoorCache[doorid][dEnterA]);
 		LinkVehicleToInterior(vehid, DoorCache[doorid][dEnterInt]);
 
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 			{
@@ -15610,7 +15614,7 @@ public OnPlayerLeaveDynamicArea(playerid, areaid)
 	if(PlayerCache[playerid][pItemBoombox] != INVALID_ITEM_ID)
 	{
 		new itemid = PlayerCache[playerid][pItemBoombox];
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 			if(i != playerid)
    			{
@@ -15676,7 +15680,7 @@ public ShowPlayerDirectoryForPlayer(playerid, giveplayer_id)
     format(list_directory, sizeof(list_directory), "Dodaj nowy wpis...\n-----");
 		
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>ds[64]s[24]", directory_uid, directory_reason, directory_date);
 	    
@@ -15827,12 +15831,12 @@ public LoadPlayerBans(playerid)
 	    ban_serial[128];
 	    
 	GetPlayerIp(playerid, IP, sizeof(IP));
-	gpci(playerid, ban_serial, sizeof(ban_serial));
+	//gpci(playerid, ban_serial, sizeof(ban_serial));
 	
 	mysql_query_format("SELECT `ban_reason` FROM `"SQL_PREF"bans` WHERE (ban_owner = '%d' OR ban_ip = '%s' OR ban_serial = '%s') AND ban_filter != '%d' LIMIT 1", PlayerCache[playerid][pGID], IP, ban_serial, PlayerCache[playerid][pGID]);
 
    	mysql_store_result();
-   	if(mysql_fetch_row(data, "|"))
+   	if(mysql_fetch_row_format(data, "|"))
    	{
    	    sscanf(data, "p<|>s[128]", ban_reason);
    	   	ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zosta³eœ zbanowany, powód: %s\nMo¿esz z³o¿yæ apelacje na forum: "WEB_URL".", ban_reason);
@@ -15873,10 +15877,10 @@ public CreatePackage(PackageDoorUID, PackageItemName[], PackageItemType, Package
 public LoadPackages()
 {
 	new data[64], package_id;
-	mysql_query("SELECT * FROM `"SQL_PREF"packages`");
+	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"packages`");
 
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    package_id ++;
 
@@ -15935,7 +15939,7 @@ public ProxDetector(Float:radi, playerid, string[], col1, col2, col3, col4, col5
 	    new vehid = GetPlayerVehicleID(playerid);
 	    if(CarInfo[vehid][cGlass])
 	    {
-	   		foreach(Player, i)
+	   		foreach(new i : Player)
 			{
 				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				{
@@ -15958,7 +15962,7 @@ public ProxDetector(Float:radi, playerid, string[], col1, col2, col3, col4, col5
 	{
 	    normal_chat:
 	    
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 			{
@@ -16066,11 +16070,13 @@ public CreatePlayerCorpse(playerid, killer_uid, weapon_uid)
 	return 1;
 }
 
+/*
 public OnMysqlError(error[], errorid, MySQL:handle)
 {
 	printf("[mysql] [error: %d] - %s", errorid, error);
 	return 1;
 }
+*/
 
 /*
 public OnMysqlQuery(resultid, spareid, MySQL:handle)
@@ -16474,7 +16480,7 @@ CMD:g(playerid, params[])
 	if(!strcmp(type, "online", true))
 	{
   		new list_workers[1024];
-    	foreach(Player, i)
+    	foreach(new i : Player)
 	    {
 	        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	        {
@@ -16802,7 +16808,7 @@ CMD:g(playerid, params[])
 	    	return 1;
 		}
 	    new list_vehicles[1024];
-	    foreach(Vehicle, vehid)
+	    foreach(new vehid : Vehicles)
 	    {
      		if(CarInfo[vehid][cOwnerType] == OWNER_GROUP && CarInfo[vehid][cOwner] == PlayerGroup[playerid][group_slot][gpUID])
      		{
@@ -16826,7 +16832,7 @@ CMD:g(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz odpowiednich uprawnieñ, aby u¿yæ tej komendy.");
 	        return 1;
 	    }
-     	foreach(Vehicle, vehid)
+     	foreach(new vehid : Vehicles)
       	{
        		if(CarInfo[vehid][cOwnerType] == OWNER_GROUP && CarInfo[vehid][cOwner] == PlayerGroup[playerid][group_slot][gpUID])
          	{
@@ -16934,7 +16940,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd usun [ID pojazdu]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -16951,7 +16957,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd model [ID pojazdu] [Model]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -16972,7 +16978,7 @@ CMD:apojazd(playerid, params[])
 		SaveVehicle(vehid, SAVE_VEH_THINGS);
 		
 		DestroyVehicle(vehid);
-		Iter_Remove(Vehicle, vehid);
+		Iter_Remove(Vehicles, vehid);
 		
 		vehid = LoadVehicle(veh_uid);
 		
@@ -16990,7 +16996,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd kolor1 [ID pojazdu] [Kolor 1]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17015,7 +17021,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd kolor2 [ID pojazdu] [Kolor 2]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17040,7 +17046,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd paliwo [ID pojazdu] [Iloœæ litrów]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17064,7 +17070,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd hp [ID pojazdu] [HP]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17090,7 +17096,7 @@ CMD:apojazd(playerid, params[])
 		    ShowTipForPlayer(playerid, "/apojazd zaparkuj [ID pojazdu]");
 		    return 1;
 		}
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17106,7 +17112,7 @@ CMD:apojazd(playerid, params[])
 		SaveVehicle(vehid, SAVE_VEH_POS);
 
 		DestroyVehicle(vehid);
-		Iter_Remove(Vehicle, vehid);
+		Iter_Remove(Vehicles, vehid);
 
 		LoadVehicle(veh_uid);
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pojazd zosta³ zaparkowany w miejscu, na którym w³aœnie stoi.");
@@ -17120,7 +17126,7 @@ CMD:apojazd(playerid, params[])
 		    ShowTipForPlayer(playerid, "/apojazd zamknij [ID pojazdu]");
 		    return 1;
 		}
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17150,7 +17156,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd info [ID pojazdu]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17166,7 +17172,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd res [ID pojazdu]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17183,7 +17189,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd przebieg [ID pojazdu] [Przebieg]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17202,7 +17208,7 @@ CMD:apojazd(playerid, params[])
 		    ShowTipForPlayer(playerid, "/apojazd visual [ID pojazdu]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17244,20 +17250,20 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd unspawn [ID pojazdu]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
 		}
 		DestroyVehicle(vehid);
-		Iter_Remove(Vehicle, vehid);
+		Iter_Remove(Vehicles, vehid);
 
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pojazd %s (SampID: %d, UID: %d) zosta³ odspawnowany pomyœlnie.", GetVehicleName(CarInfo[vehid][cModel]), vehid, CarInfo[vehid][cUID]);
 		return 1;
 	}
 	if(!strcmp(type, "resall", true))
 	{
-		foreach(Vehicle, vehid)
+		foreach(new vehid : Vehicles)
 		{
 			if(!IsAnyPlayerInVehicle(vehid))
 		    {
@@ -17276,7 +17282,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd goto [ID pojazdu]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17308,7 +17314,7 @@ CMD:apojazd(playerid, params[])
 	        ShowTipForPlayer(playerid, "/apojazd gethere [ID pojazdu]");
 	        return 1;
 	    }
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17355,7 +17361,7 @@ CMD:apojazd(playerid, params[])
 		    ShowTipForPlayer(playerid, "/apojazd przypisz [ID pojazdu] [Typ (gracz, grupa)]");
 		    return 1;
 		}
-	    if(!Iter_Contains(Vehicle, vehid))
+	    if(!Iter_Contains(Vehicles, vehid))
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne ID pojazdu.\nSkorzystaj z komendy /apojazd id, by sprawdziæ ID pojazdu.");
 			return 1;
@@ -17424,7 +17430,7 @@ CMD:pojazd(playerid, params[])
 			mysql_query_format("SELECT `vehicle_uid`, `vehicle_model` FROM `"SQL_PREF"vehicles` WHERE vehicle_ownertype = '%d' AND vehicle_owner = '%d'", OWNER_PLAYER, PlayerCache[playerid][pUID]);
 
 			mysql_store_result();
-			while(mysql_fetch_row(data, "|"))
+			while(mysql_fetch_row_format(data, "|"))
 			{
 			    list ++;
 
@@ -17499,7 +17505,7 @@ CMD:pojazd(playerid, params[])
 		}
 		
 		new list_vehicles[256];
-		foreach(Vehicle, vehid)
+  		foreach(new vehid : Vehicles)
 		{
 		    if(CarInfo[vehid][cOwnerType] == OWNER_PLAYER && CarInfo[vehid][cOwner] == PlayerCache[playerid][pUID])
 		    {
@@ -17554,7 +17560,7 @@ CMD:pojazd(playerid, params[])
 		SaveVehicle(vehid, SAVE_VEH_COUNT | SAVE_VEH_POS);
 
 		DestroyVehicle(vehid);
-		Iter_Remove(Vehicle, vehid);
+		Iter_Remove(Vehicles, vehid);
 
 		vehid = LoadVehicle(veh_uid);
 		
@@ -17591,7 +17597,7 @@ CMD:pojazd(playerid, params[])
 		mysql_query_format("SELECT `item_uid`, `item_value1`, `item_name` FROM `"SQL_PREF"items` WHERE item_vehuid = '%d'", CarInfo[vehid][cUID]);
 
 		mysql_store_result();
-		while(mysql_fetch_row(data, "|"))
+		while(mysql_fetch_row_format(data, "|"))
 		{
 		    sscanf(data, "p<|>dds[32]", item_uid, item_value1, item_name);
 		    format(list_tuning_items, sizeof(list_tuning_items), "%s\n%d\t%d\t%s", list_tuning_items, item_uid, item_value1, item_name);
@@ -17657,7 +17663,7 @@ CMD:pojazd(playerid, params[])
 
 			// Audio alarmu
 			new audio_handle;
-			foreach(Player, i)
+			foreach(new i : Player)
 		 	{
 				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 				{
@@ -18265,7 +18271,7 @@ CMD:adrzwi(playerid, params[])
 				Float:object_rotx, Float:object_roty, Float:object_rotz,
 				object_world, object_interior;
 
-			while(mysql_fetch_row(data, "|"))
+			while(mysql_fetch_row_format(data, "|"))
 			{
   				sscanf(data, "p<|>ddffffffdd", object_uid, object_model, object_posx, object_posy, object_posz, object_rotx, object_roty, object_rotz, object_world, object_interior);
 				object_id = CreateDynamicObject(object_model, object_posx, object_posy, object_posz, object_rotx, object_roty, object_rotz, object_world, object_interior, -1, MAX_DRAW_DISTANCE);
@@ -18329,7 +18335,7 @@ CMD:drzwi(playerid, params[])
 	}
 	if(!strcmp(type, "zamknij", true))
 	{
-		foreach(Door, d)
+		foreach(new d : Door)
 		{
 		    doorid = d;
   			if((IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dEnterVW]) || (IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dExitVW]))
@@ -18628,7 +18634,7 @@ CMD:p(playerid, params[])
 	    return 1;
 	}
 	
-	foreach(Item, itemid)
+	foreach(new itemid : Item)
 	{
 	    if(ItemCache[itemid][iUID])
 	    {
@@ -18817,7 +18823,7 @@ CMD:tel(playerid, params[])
 	
 	if(!strcmp(params, "zakoncz", true) || !strcmp(params, "z", true))
 	{
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
@@ -18850,7 +18856,7 @@ CMD:tel(playerid, params[])
 		    return 1;
 		}
 		
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
@@ -18916,10 +18922,10 @@ CMD:tel(playerid, params[])
 		new data[48], list_category[512],
 		    category_uid, category_name[32];
 
-		mysql_query("SELECT * FROM `"SQL_PREF"order_category`");
+		mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"order_category`");
 
 		mysql_store_result();
-		while(mysql_fetch_row(data, "|"))
+		while(mysql_fetch_row_format(data, "|"))
 		{
 		    sscanf(data, "p<|>ds[32]", category_uid, category_name);
 		    format(list_category, sizeof(list_category), "%s\n%d\t%s", list_category, category_uid, category_name);
@@ -18941,14 +18947,14 @@ CMD:tel(playerid, params[])
 	if(phone_number == NUMBER_TAXI)
 	{
 		new list_taxi_corp[1024];
-		foreach(Group, group_id)
+		foreach(new group_id : Groups)
 		{
             if(GroupData[group_id][gUID])
             {
                 if(GroupData[group_id][gType] == G_TYPE_TAXI)
                 {
                     new workers;
-					foreach(Player, i)
+					foreach(new i : Player)
 					{
 					    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 					    {
@@ -19004,7 +19010,7 @@ CMD:tel(playerid, params[])
 	    return 1;
 	}
 	
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -19027,7 +19033,7 @@ CMD:tel(playerid, params[])
 				SendClientFormatMessage(i, COLOR_YELLOW, "Po³¹czenie przychodz¹ce od %d, u¿yj (/tel)efon odbierz, by odebraæ rozmowê.", PlayerCache[playerid][pPhoneNumber]);
 
 				new audio_handle;
-				foreach(Player, player)
+				foreach(new player : Player)
 			    {
 					if(PlayerCache[player][pLogged] && PlayerCache[player][pSpawned])
 					{
@@ -19063,7 +19069,7 @@ CMD:sms(playerid, params[])
 	    return 1;
 	}
 	
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -19081,7 +19087,7 @@ CMD:sms(playerid, params[])
 	            ProxDetector(10.0, i, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 
 				new audio_handle;
-  				foreach(Player, player)
+  				foreach(new player : Player)
 			    {
 					if(PlayerCache[player][pLogged] && PlayerCache[player][pSpawned])
 					{
@@ -19300,7 +19306,7 @@ CMD:skuj(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz odpowiedniego przedmiotu w swoim ekwipunku.");
 	    return 1;
 	}
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -19636,7 +19642,7 @@ CMD:oferuj(playerid, params[])
 					   	Float:DoorDistance,
 						Float:LastDistance = 1000.0;
 		            
-				    foreach(Door, d)
+				    foreach(new d : Door)
 				    {
 					    if(DoorCache[d][dEnterVW] == 0)
 					    {
@@ -20774,7 +20780,7 @@ CMD:oferuj(playerid, params[])
 		mysql_query_format("SELECT COUNT(char_uid) FROM `"SQL_PREF"char_groups` WHERE group_belongs = '%d'", GroupData[group_id][gUID]);
 		
 		mysql_store_result();
-		if(mysql_fetch_row(data, "|"))
+		if(mysql_fetch_row_format(data, "|"))
 		{
 		    sscanf(data, "p<|>d", members_count);
 		}
@@ -21109,7 +21115,7 @@ CMD:oferuj(playerid, params[])
 		mysql_query_format("SELECT `salon_price` FROM `"SQL_PREF"salon_vehicles` WHERE salon_model = '%d' LIMIT 1", veh_model);
 		mysql_store_result();
 		
-		new veh_price = mysql_fetch_int();
+		new veh_price = cache_get_row_int(0, 0);
 		mysql_free_result();
 		
 		if(veh_price > 0)
@@ -21810,7 +21816,7 @@ CMD:brama(playerid, params[])
 	{
 	    if(IsValidPlayerObject(playerid, player_object))
 	    {
-			object_id = GetDynamicPlayerObjectId(player_object, playerid);
+			object_id = Streamer_GetItemStreamerID(playerid, STREAMER_TYPE_OBJECT, player_object);
 			if(GetDynamicObjectGatePos(object_id, object_gate[0], object_gate[1], object_gate[2], object_gate[3], object_gate[4], object_gate[5]))
 			{
 			    GetDynamicObjectPos(object_id, object_pos[0], object_pos[1], object_pos[2]);
@@ -21966,7 +21972,7 @@ CMD:esel(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znaleziono ¿adnej etykiety w pobli¿u.");
 	    return 1;
 	}
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -22172,7 +22178,7 @@ CMD:pokoj(playerid, params[])
 		new group_id = GetGroupID(DoorCache[doorid][dOwner]);
 		if(GroupData[group_id][gType] != G_TYPE_HOTEL)
 		{
-		   ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
+			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
 	    if(PlayerCache[playerid][pHouse] != DoorCache[doorid][dUID])
@@ -22208,7 +22214,7 @@ CMD:pokoj(playerid, params[])
 	        ShowTipForPlayer(playerid, "/pokoj wejdz [Numer pokoju]");
 	        return 1;
 	    }
-	    foreach(Player, i)
+	    foreach(new i : Player)
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
@@ -22239,7 +22245,7 @@ CMD:pokoj(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w pokoju hotelowym.");
 	        return 1;
 	    }
-	    foreach(Player, i)
+	    foreach(new i : Player)
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
@@ -22820,7 +22826,7 @@ CMD:m(playerid, params[])
 	    }
 	    
 		new audio_handle;
-		foreach(Player, i)
+		foreach(new i : Player)
  		{
 			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 			{
@@ -22932,7 +22938,7 @@ CMD:d(playerid, params[])
 	format(string, sizeof(string), "** [%s] %s: %s **", GroupData[group_id][gTag], PlayerName(playerid), text);
 
 	new other_group_id;
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -22979,7 +22985,7 @@ CMD:cb(playerid, params[])
 	params[0] = chrtoupper(params[0]);
 	format(string, sizeof(string), "[K:%d] %s: %s", radio_canal, PlayerName(playerid), params);
 
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -23030,7 +23036,7 @@ CMD:report(playerid, params[])
 	format(string, sizeof(string), "[Raport] %s [%d]: %s (%s [%d])", PlayerName(playerid), playerid, text, PlayerName(giveplayer_id), giveplayer_id);
 	SendClientMessage(playerid, COLOR_RED, string);
 
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -23519,7 +23525,7 @@ CMD:hak(playerid, params[])
 	}
 	new Float:vPosX, Float:vPosY, Float:vPosZ;
 
-	foreach(Vehicle, carid)
+	foreach(new carid : Vehicles)
 	{
 	    if(carid != vehid)
 	    {
@@ -23686,7 +23692,7 @@ CMD:kogut(playerid, params[])
 	{
 	    if(IsValidPlayerObject(playerid, player_object))
 	    {
-	        object_id = GetDynamicPlayerObjectId(player_object, playerid);
+	        object_id = Streamer_GetItemStreamerID(playerid, STREAMER_TYPE_OBJECT, player_object);
   			if(Streamer_GetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_ATTACHED_VEHICLE) == vehid)
   			{
   			    DestroyDynamicObject(object_id);
@@ -23788,7 +23794,7 @@ CMD:reklama(playerid, params[])
 	    TextDrawSetString(Text:TextDrawNews, "~y~~h~LSN ~w~~>~ Brak sygnalu nadawania.");
 		return 1;
 	}
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -23856,7 +23862,7 @@ CMD:live(playerid, params[])
 	        return 1;
 	    }
 	    
-	    foreach(Player, i)
+	    foreach(new i : Player)
 	    {
 	        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	        {
@@ -23943,7 +23949,7 @@ CMD:wywiad(playerid, params[])
 	 		return 1;
 		}
 		
-  		foreach(Player, i)
+  		foreach(new i : Player)
 	    {
 	        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	        {
@@ -24253,7 +24259,7 @@ CMD:wyscig(playerid, params[])
 		}
 		
 		new racer_count;
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
@@ -24324,7 +24330,7 @@ CMD:wyscig(playerid, params[])
 	    mysql_query_format("SELECT `race_uid`, `race_title` FROM `crp_races` WHERE race_owner = '%d'", GroupData[group_id][gUID]);
 	    
 	    mysql_store_result();
-	    while(mysql_fetch_row(data, "|"))
+	    while(mysql_fetch_row_format(data, "|"))
 	    {
 	        sscanf(data, "p<|>ds[64]", race_uid, race_title);
 			format(race_list, sizeof(race_list), "%s\n%d\t\t%s", race_list, race_uid, race_title);
@@ -24431,7 +24437,7 @@ CMD:kosz(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znaleziono u¿ywalnego obiektu kosza w pobli¿u.");
 		    return 1;
 		}
-		foreach(Player, i)
+		foreach(new i : Player)
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
@@ -24453,7 +24459,7 @@ CMD:kosz(playerid, params[])
 CMD:admins(playerid, params[])
 {
 	new list_admins[1024];
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -24712,10 +24718,10 @@ CMD:pokaz(playerid, params[])
 			new data[64], cat_list[256],
 			    category_uid, category_name[24];
 			    
-			mysql_query("SELECT * FROM `"SQL_PREF"salon_category`");
+			mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"salon_category`");
 			
 			mysql_store_result();
-			while(mysql_fetch_row(data, "|"))
+			while(mysql_fetch_row_format(data, "|"))
 			{
 			    sscanf(data, "p<|>ds[24]", category_uid, category_name);
 			    format(cat_list, sizeof(cat_list), "%s\n%d. %s", cat_list, category_uid, category_name);
@@ -24973,13 +24979,13 @@ CMD:wyrzuc(playerid, params[])
 CMD:zapukaj(playerid, params[])
 {
 	new string[128];
-	foreach(Door, doorid)
+	foreach(new doorid : Door)
 	{
  		if(DoorCache[doorid][dUID])
    		{
 	    	if(IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]) || IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dExitVW])
 		    {
-				foreach(Player, i)
+				foreach(new i : Player)
 				{
 				    if(i != playerid)
 				    {
@@ -25027,7 +25033,7 @@ CMD:silownia(playerid, params[])
 	        return 1;
 	    }
 	    
-	    foreach(Player, i)
+	    foreach(new i : Player)
 	    {
 	        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	        {
@@ -25068,7 +25074,7 @@ CMD:silownia(playerid, params[])
 	        return 1;
 	    }
 
-	    foreach(Player, i)
+	    foreach(new i : Player)
 	    {
 	        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	        {
@@ -25120,7 +25126,7 @@ CMD:bus(playerid, params[])
 	new player_group,
 	    taxi_workers;
 	    
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -25191,7 +25197,7 @@ CMD:bus(playerid, params[])
 CMD:anim(playerid, params[])
 {
 	new list_anims[2048];
-	foreach(Anim, anim_id)
+	foreach(new anim_id : Anim)
 	{
 	    format(list_anims, sizeof(list_anims), "%s\n%s", list_anims, AnimCache[anim_id][aCommand]);
 	}
@@ -25238,7 +25244,7 @@ CMD:id(playerid, params[])
 	new nick[24], list_players[256];
     if(sscanf(params, "s[24]", nick))
 	{
-        foreach(Player, i)
+        foreach(new i : Player)
         {
             if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
             {
@@ -25264,7 +25270,7 @@ CMD:id(playerid, params[])
 		return 1;
 	}
 	new name[24];
-	foreach(Player, i)
+	foreach(new i : Player)
    	{
    	    GetPlayerName(i, name, sizeof(name));
         if(strfind(name, nick, true) >= 0)
@@ -25353,7 +25359,7 @@ CMD:paczka(playerid, params[])
 	}
 
 	new list_packages[1024], doorid;
-	foreach(Package, package_id)
+	foreach(new package_id : Package)
 	{
 	    if(PackageCache[package_id][pUID])
 	    {
@@ -25388,7 +25394,7 @@ CMD:przejazd(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w pojeŸdzie.");
 	    return 1;
 	}
-	foreach(Door, doorid)
+	foreach(new doorid : Door)
 	{
 	    if(DoorCache[doorid][dGarage])
 	    {
@@ -25427,7 +25433,7 @@ CMD:craft(playerid, params[])
 	mysql_query_format("SELECT `item_uid`, `item_name`, `item_value1` FROM `"SQL_PREF"items` WHERE item_place = '%d' AND item_owner = '%d'", PLACE_CRAFT, object_uid);
 	
 	mysql_store_result();
-	while(mysql_fetch_row(data, "|"))
+	while(mysql_fetch_row_format(data, "|"))
 	{
 	    sscanf(data, "p<|>ds[32]d", item_uid, item_name, item_value1);
 	    format(list_craft, sizeof(list_craft), "%s\n%d\t\t%s", list_craft, item_uid, item_name);
@@ -26306,7 +26312,7 @@ CMD:ac(playerid, params[])
 	    format(string, sizeof(string), "(( [AC] {800080}%s{EEE8AA}: %s ))", PlayerName(playerid), params);
 	}
 
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -26421,7 +26427,7 @@ CMD:limits(playerid, params[])
 	}
 	new string[256];
 	
-	format(string, sizeof(string), "Gracze:\t\t\t%d/%d\nPojazdy:\t\t%d/%d\nDrzwi:\t\t\t%d/%d\nStrefy:\t\t\t%d/%d\nPrzedmioty:\t\t%d/%d\nProdukty:\t\t%d/%d\nGrupy:\t\t\t%d/%d", Iter_Count(Player), MAX_PLAYERS, Iter_Count(Vehicle), MAX_VEHICLES, Iter_Count(Door), MAX_DOORS, Iter_Count(Area), MAX_AREAS, Iter_Count(Item), MAX_ITEM_CACHE, Iter_Count(Product), MAX_PRODUCTS, Iter_Count(Group), MAX_GROUPS);
+	format(string, sizeof(string), "Gracze:\t\t\t%d/%d\nPojazdy:\t\t%d/%d\nDrzwi:\t\t\t%d/%d\nStrefy:\t\t\t%d/%d\nPrzedmioty:\t\t%d/%d\nProdukty:\t\t%d/%d\nGrupy:\t\t\t%d/%d", Iter_Count(Player), MAX_PLAYERS, Iter_Count(Vehicles), MAX_VEHICLES, Iter_Count(Door), MAX_DOORS, Iter_Count(Area), MAX_AREAS, Iter_Count(Item), MAX_ITEM_CACHE, Iter_Count(Product), MAX_PRODUCTS, Iter_Count(Groups), MAX_GROUPS);
 	ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_LIST, "Limity serwerowe", string, "OK", "");
 	return 1;
 }
@@ -26597,7 +26603,7 @@ stock crp_SetPlayerPos(playerid, Float:PosX, Float:PosY, Float:PosZ)
 
 stock IsGlobalLogged(player_gid)
 {
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -26640,7 +26646,7 @@ stock GetClosestPlayer(playerid)
 	new Float:dist, Float:prevdist = 5.000,
 		prevplayer = INVALID_PLAYER_ID;
 
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(i != playerid)
 	    {
@@ -26670,7 +26676,7 @@ stock GetDistanceToPlayer(playerid, giveplayer_id)
 stock GetPlayerID(player_uid)
 {
 	new playerid = INVALID_PLAYER_ID;
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -26687,7 +26693,7 @@ stock GetPlayerID(player_uid)
 stock GetOffererID(playerid)
 {
 	new customerid = INVALID_PLAYER_ID;
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(OfferData[i][oCustomerID] == playerid)
 	    {
@@ -26774,7 +26780,7 @@ stock mysql_query_format(format_query[], va_args<>)
 	new query[512];
 
 	va_format(query, sizeof(query), format_query, va_start<1>);
-	mysql_query(query);
+	mysql_query(connHandle, query);
 	return 1;
 }
 
@@ -27105,7 +27111,7 @@ stock HidePlayerGroups(playerid)
 stock GetGroupID(group_uid)
 {
 	new group_id = INVALID_GROUP_ID;
-	foreach(Group, i)
+	foreach(new i : Groups)
 	{
 	    if(GroupData[i][gUID] == group_uid)
 	    {
@@ -27229,7 +27235,7 @@ stock HavePlayerGroupPerm(playerid, group_uid, permission)
 stock GetVehicleID(veh_uid)
 {
 	new vehid = INVALID_VEHICLE_ID;
-	foreach(Vehicle, car)
+	foreach(new car : Vehicles)
 	{
 		if(CarInfo[car][cUID] == veh_uid)
 		{
@@ -27245,7 +27251,7 @@ stock GetClosestVehicle(playerid)
 	new Float:dist, Float:prevdist = 5.000,
 		prevcar = INVALID_VEHICLE_ID;
 		
-	foreach(Vehicle, carid)
+	foreach(new carid : Vehicles)
 	{
 		dist = GetDistanceToVehicle(playerid, carid);
 		if ((dist < prevdist))
@@ -27272,7 +27278,7 @@ stock GetDistanceToVehicle(playerid, carid)
 
 stock IsAnyPlayerInVehicle(vehicleid)
 {
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -27288,7 +27294,7 @@ stock IsAnyPlayerInVehicle(vehicleid)
 stock GetFreeVehicleSeat(vehicleid)
 {
     new bool: vehicleSeatStatus[4];
-    foreach(Player, i)
+    foreach(new i : Player)
     {
         if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
         {
@@ -27313,7 +27319,7 @@ stock GetFreeVehicleSeat(vehicleid)
 stock GetPlayerSpawnedVehicles(playerid)
 {
 	new vehicles;
-	foreach(Vehicle, i)
+	foreach(new i : Vehicles)
 	{
 	    if(CarInfo[i][cOwnerType] == OWNER_PLAYER && CarInfo[i][cOwner] == PlayerCache[playerid][pUID])
 	    {
@@ -27504,7 +27510,7 @@ stock IsVehiclePlaceFree(vehid)
 
 stock GetVehicleDriver(vehicleid)
 {
-	foreach(Player, i)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -27584,7 +27590,7 @@ stock IsVehicleBike(vehid)
 stock GetDoorID(door_uid)
 {
 	new doorid = INVALID_DOOR_ID;
-	foreach(Door, d)
+	foreach(new d : Door)
 	{
 	    if(DoorCache[d][dUID] == door_uid)
 	    {
@@ -27598,7 +27604,7 @@ stock GetDoorID(door_uid)
 stock GetClosestDoor(playerid)
 {
 	new Float:prevdist = 5.000, prevdoor = INVALID_DOOR_ID;
-	foreach(Door, doorid)
+	foreach(new doorid : Door)
 	{
 		new Float:dist = GetDistanceToDoor(playerid, doorid);
 		if ((dist < prevdist))
@@ -27628,7 +27634,7 @@ stock GetDistanceToDoor(playerid, doorid)
 stock GetPlayerDoorID(playerid)
 {
 	new doorid = INVALID_DOOR_ID;
-	foreach(Door, d)
+	foreach(new d : Door)
 	{
 		if(GetPlayerVirtualWorld(playerid) != 0 && GetPlayerVirtualWorld(playerid) == DoorCache[d][dExitVW])
 		{
@@ -27813,7 +27819,7 @@ stock EscapePL(name[])
 stock GetItemID(item_uid)
 {
 	new itemid = INVALID_ITEM_ID;
-  	foreach(Item, i)
+  	foreach(new i : Item)
 	{
 	    if(ItemCache[i][iUID] == item_uid)
 	    {
@@ -27827,7 +27833,7 @@ stock GetItemID(item_uid)
 stock GetPhoneItemID(phone_number)
 {
 	new itemid = INVALID_ITEM_ID;
-	foreach(Item, i)
+	foreach(new i : Item)
 	{
 	    if(ItemCache[i][iType] == ITEM_PHONE)
 	    {
@@ -27890,7 +27896,7 @@ stock GetItemWeight(itemid)
 
 stock HavePlayerItemType(playerid, item_type)
 {
-	foreach(Item, itemid)
+	foreach(new itemid : Item)
 	{
 	    if(ItemCache[itemid][iUID])
 	    {
@@ -27908,7 +27914,7 @@ stock HavePlayerItemType(playerid, item_type)
 
 stock HavePlayerVehicleKeys(playerid, vehid)
 {
-	foreach(Item, itemid)
+	foreach(new itemid : Item)
 	{
 	    if(ItemCache[itemid][iUID])
 	    {
@@ -27930,7 +27936,7 @@ stock HavePlayerVehicleKeys(playerid, vehid)
 stock GetPlayerCapacity(playerid)
 {
 	new capacity = PlayerCache[playerid][pStrength] * 2;
-	foreach(Item, itemid)
+	foreach(new itemid : Item)
 	{
 	    if(ItemCache[itemid][iUID])
 	    {
@@ -28051,7 +28057,7 @@ stock IsPlayerAiming(playerid)
 stock GetAreaID(area_uid)
 {
 	new areaid = INVALID_AREA_ID;
-	foreach(Area, i)
+	foreach(new i : Area)
 	{
 	    if(AreaCache[i][aUID] == area_uid)
 	    {
@@ -28065,7 +28071,7 @@ stock GetAreaID(area_uid)
 stock GetPlayerAreaID(playerid)
 {
 	new areaid = INVALID_AREA_ID;
-	foreach(Area, i)
+	foreach(new i : Area)
 	{
 	    if(AreaCache[i][aUID])
 	    {
@@ -28082,7 +28088,7 @@ stock GetPlayerAreaID(playerid)
 stock GetProductID(product_uid)
 {
 	new product_id = INVALID_PRODUCT_ID;
-	foreach(Product, i)
+	foreach(new i : Product)
 	{
 	    if(ProductData[i][pUID] == product_uid)
 	    {
@@ -28131,7 +28137,7 @@ stock GetClosestObjectType(playerid, object_model)
 	{
 	    if(IsValidPlayerObject(playerid, player_object))
 	    {
-	        object_id = GetDynamicPlayerObjectId(player_object, playerid);
+	        object_id = Streamer_GetItemStreamerID(playerid, STREAMER_TYPE_OBJECT, player_object);
          	if(GetObjectModel(object_id) == object_model)
           	{
 				Streamer_GetDistanceToItem(PosX, PosY, PosZ, STREAMER_TYPE_OBJECT, object_id, dist);
@@ -28669,7 +28675,7 @@ stock StopStreamedAudioForPlayer(playerid)
 stock GetAccessID(access_uid)
 {
 	new access_id = INVALID_ACCESS_ID;
-	foreach(Access, i)
+	foreach(new i : Access)
 	{
 	    if(AccessData[i][aUID] == access_uid)
 	    {
@@ -28701,7 +28707,7 @@ stock GetPlayerFreeSlotAccess(playerid)
 stock GetPackageID(package_uid)
 {
 	new package_id = INVALID_PACKAGE_ID;
-	foreach(Package, i)
+	foreach(new i : Package)
 	{
 	    if(PackageCache[i][pUID] == package_uid)
 	    {
@@ -28715,7 +28721,7 @@ stock GetPackageID(package_uid)
 stock GetAnimID(anim_uid)
 {
 	new anim_id = INVALID_ANIM_ID;
-	foreach(Anim, i)
+	foreach(new i : Anim)
 	{
 	    if(AnimCache[i][aUID] == anim_uid)
 		{
@@ -28729,7 +28735,7 @@ stock GetAnimID(anim_uid)
 stock GetAnimUID(anim_id)
 {
 	new anim_uid = 0;
-	foreach(Anim, i)
+	foreach(new i : Anim)
 	{
 	    if(i == anim_id)
 	    {
