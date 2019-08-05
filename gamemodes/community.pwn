@@ -14,6 +14,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 //#include <foreach>
 #include <streamer>
 #include <audio>
+#include <bcrypt>
 //#include <mtime>
 
 #include <YSI\y_va>
@@ -28,8 +29,8 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 // Database config
 #define SQL_HOST        "127.0.0.1"
-#define SQL_USER        "samp"
-#define SQL_PASS        "H#Y%K2&5n3AIy9E"
+#define SQL_USER        "mysqladmin"
+#define SQL_PASS        "aE#4^h%k9nrg"
 #define SQL_DTBS        "samp"
 #define SQL_PREF     	"mrp_"
 
@@ -210,10 +211,11 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 // Typy sesji
 #define SESSION_NONE    		0
-#define SESSION_GAME    		1
-#define SESSION_GROUP   		2
-#define SESSION_ADMIN   		3
-#define SESSION_AFK             4
+#define SESSION_LOGIN           1
+#define SESSION_GAME            2
+#define SESSION_GROUP           3
+#define SESSION_ADMIN           4
+#define SESSION_AFK             5
 
 // Zapis gracza
 #define SAVE_PLAYER_BASIC   	1
@@ -750,6 +752,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 // Forward's
 forward OnPlayerLogin(playerid);
 forward SetPlayerSpawn(playerid);
+forward OnPlayerPasswordChecked(playerid);
 
 forward OnPlayerSave(playerid, what);
 forward UpdatePlayerSession(playerid, session_type, session_extraid);
@@ -908,6 +911,8 @@ enum sPlayer
 	
 	pCharName[32],
 	pGlobName[64],
+	
+	pPassword[128],
 	
 	pHours,
 	pMinutes,
@@ -1087,7 +1092,7 @@ enum sPlayer
 	bool: pBanned,
 
 	pCheckpoint,
-	pSession[5],
+	pSession[6],
 	
 	bool: pTogW,
 	bool: pPlayAnim,
@@ -1096,7 +1101,9 @@ enum sPlayer
 	Text3D:pDescTag,
 	
 	pFirstPersonObject,
-	pIgnored[MAX_PLAYERS]
+	pIgnored[MAX_PLAYERS],
+	
+	ORM: pOrm
 }
 new PlayerCache[MAX_PLAYERS][sPlayer];
 
@@ -3786,202 +3793,221 @@ public OnPlayerConnect(playerid)
 	// Ignorowanie
 	for (new i = 0; i < MAX_PLAYERS; i++)	PlayerCache[playerid][pIgnored][i] = false;
 	
-	new data[32];
-	mysql_query_format("SELECT `char_uid`, `char_gid` FROM `"SQL_PREF"characters` WHERE BINARY char_name LIKE '%s' LIMIT 1", PlayerOriginalName(playerid));
+	strmid(PlayerCache[playerid][pCharName], PlayerOriginalName(playerid), 0, MAX_PLAYER_NAME);
+	new ORM:orm_id = PlayerCache[playerid][pOrm] = orm_create(""SQL_PREF"characters");
+	
+	orm_addvar_int(orm_id, PlayerCache[playerid][pUID], "char_uid");
+	orm_addvar_int(orm_id, PlayerCache[playerid][pGID], "char_gid");
 
-	mysql_store_result();
-	if(mysql_fetch_row_format(data, "|"))
-	{
- 		sscanf(data, "p<|>dd", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID]);
+	orm_addvar_string(orm_id, PlayerCache[playerid][pCharName], 32, "char_name");
 
-		if(!IsGlobalLogged(PlayerCache[playerid][pGID]))
-  		{
-    		TogglePlayerSpectating(playerid, true);
-      		ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nPostaæ zosta³a pomyœlnie znaleziona w naszej bazie danych,\nwprowadŸ poni¿ej swoje has³o dla konta globalnego tej postaci.", "Zaloguj", "WyjdŸ");
-		}
-  		else
-    	{
-     		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Obecnie na serwerze jest zalogowana ju¿ jedna z postaci przypisanych pod to konto globalne.\nZostaniesz teraz wyrzucony z serwera, spróbuj wejœæ ponownie póŸniej.");
-			defer OnKickPlayer(playerid);
-		}
-	}
-	else
-	{
- 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Taka postaæ nie istnieje w naszej bazie danych. Nie posiadasz jeszcze konta?\nOdwiedŸ stronê "WEB_URL" a nastêpnie zarejestruj siê, a otrzymasz dalsze wskazówki dotycz¹ce gry.\n\nZostajesz wyrzucony z serwera, zapraszamy ponownie!");
-		defer OnKickPlayer(playerid);
-	}
- 	mysql_free_result();
+    orm_addvar_int(orm_id, PlayerCache[playerid][pHours], "char_hours");
+	orm_addvar_int(orm_id, PlayerCache[playerid][pMinutes], "char_minutes");
+
+	orm_addvar_int(orm_id, PlayerCache[playerid][pCash], "char_cash");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pBankCash], "char_bankcash");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pBankNumber], "char_banknumber");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pSkin], "char_skin");
+    orm_addvar_float(orm_id, PlayerCache[playerid][pHealth], "char_health");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pSex], "char_sex");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pBirth], "char_birth");
+
+    orm_addvar_float(orm_id, PlayerCache[playerid][pPosX], "char_posx");
+    orm_addvar_float(orm_id, PlayerCache[playerid][pPosY], "char_posy");
+    orm_addvar_float(orm_id, PlayerCache[playerid][pPosZ], "char_posz");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pVirtualWorld], "char_world");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pInteriorID], "char_interior");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pBlock], "char_block");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pCrash], "char_crash");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pArrest], "char_arrest");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pStrength], "char_strength");
+    orm_addvar_float(orm_id, PlayerCache[playerid][pDepend], "char_depend");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pBW], "char_bw");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pAJ], "char_aj");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pHouse], "char_house");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pJob], "char_job");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pDocuments], "char_documents");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pAchievements], "char_achieve");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pTalkStyle], "char_talkstyle");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pWalkStyle], "char_walkstyle");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pFightStyle], "char_fightstyle");
+
+    orm_addvar_int(orm_id, PlayerCache[playerid][pOOC], "char_ooc");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pLastSkin], "char_lastskin");
+
+    orm_addvar_float(orm_id, PlayerCache[playerid][pMileage], "char_mileage");
+    orm_setkey(orm_id, "char_name");
+    
+    orm_select(orm_id, "OnPlayerLogin", "d", playerid);
 	return 1;
 }
 
 public OnPlayerLogin(playerid)
 {
-	new string[256], data[256];
-	mysql_query_format("SELECT * FROM `"SQL_PREF"characters` WHERE char_uid = '%d' LIMIT 1", PlayerCache[playerid][pUID]);
-	
- 	mysql_store_result();
-  	if(mysql_fetch_row_format(data, "|"))
-   	{
-    	sscanf(data, "p<|>dds[24]ddddddfddfffddddddfdddddddddddfd",
-
-		PlayerCache[playerid][pUID],
-		PlayerCache[playerid][pGID],
-
-		PlayerCache[playerid][pCharName],
-		
-		PlayerCache[playerid][pHours],
-		PlayerCache[playerid][pMinutes],
-		
-		PlayerCache[playerid][pCash],
-		PlayerCache[playerid][pBankCash],
-		
-		PlayerCache[playerid][pBankNumber],
-
-		PlayerCache[playerid][pSkin],
-		PlayerCache[playerid][pHealth],
-
-		PlayerCache[playerid][pSex],
-		PlayerCache[playerid][pBirth],
-		
-		PlayerCache[playerid][pPosX],
-		PlayerCache[playerid][pPosY],
-		PlayerCache[playerid][pPosZ],
-		
-		PlayerCache[playerid][pVirtualWorld],
-		PlayerCache[playerid][pInteriorID],
-
-		PlayerCache[playerid][pBlock],
-		PlayerCache[playerid][pCrash],
-		PlayerCache[playerid][pArrest],
-
-		PlayerCache[playerid][pStrength],
-		PlayerCache[playerid][pDepend],
-		
-		PlayerCache[playerid][pBW],
-		PlayerCache[playerid][pAJ],
-
-		PlayerCache[playerid][pHouse],
-		PlayerCache[playerid][pJob],
-
-		PlayerCache[playerid][pDocuments],
-		PlayerCache[playerid][pAchievements],
-		
-		PlayerCache[playerid][pTalkStyle],
-		PlayerCache[playerid][pWalkStyle],
-		PlayerCache[playerid][pFightStyle],
-		
-		PlayerCache[playerid][pOOC],
-		PlayerCache[playerid][pLastSkin],
-
-		PlayerCache[playerid][pMileage]);
-		PlayerCache[playerid][pWalkStyle] = GetAnimID(PlayerCache[playerid][pWalkStyle]);
-  	}
-   	mysql_free_result();
-	LoadPlayerBans(playerid);
-	
-	// Jeœli zbanowany
-	if(PlayerCache[playerid][pBanned])
+	new ORM:orm_id = PlayerCache[playerid][pOrm];
+	switch(orm_errno(orm_id))
 	{
-	    return 1;
+ 		case ERROR_OK:
+ 		{
+ 		    new Cache:login_password, query[256];
+ 		    
+ 		    orm_apply_cache(orm_id, 0);
+ 		    orm_setkey(orm_id, "char_uid");
+ 		    
+ 		    format(query, sizeof(query), "SELECT `members_pass_hash` FROM `core_members` WHERE member_id = '%d' LIMIT 1", PlayerCache[playerid][pGID]);
+ 			login_password = mysql_query(connHandle, query);
+ 			
+			cache_get_row(0, 0, PlayerCache[playerid][pPassword], connHandle, 128);
+			cache_delete(login_password);
+			
+            PlayerCache[playerid][pSession][SESSION_LOGIN] = gettime();
+			
+			ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nWprowadŸ poni¿ej has³o do postaci, by rozpocz¹æ grê na naszym serwerze.\nUpewnij siê, ¿e postaæ zosta³a za³o¿ona na naszej stronie "WEB_URL".", "Zaloguj", "Zmieñ nick");
+
+		}
+ 	 	case ERROR_NO_DATA:
+  		{
+            ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nWprowadŸ poni¿ej has³o do postaci, by rozpocz¹æ grê na naszym serwerze.\nUpewnij siê, ¿e postaæ zosta³a za³o¿ona na naszej stronie "WEB_URL".", "Zaloguj", "Zmieñ nick");
+            TD_ShowSmallInfo(playerid, 5, "Postac ~r~nie istnieje ~w~w bazie danych lub wprowadzone haslo jest nieprawidlowe.");
+		}
 	}
+	return 1;
+}
+
+public OnPlayerPasswordChecked(playerid)
+{
+	new bool:match = bcrypt_is_equal();
 	
-	// Jeœli zablokowane konto
-	if(PlayerCache[playerid][pBlock] & BLOCK_CHAR)
+	if(match == true)
 	{
- 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Ta postaæ zosta³a zablokowana, powód znajdziesz w panelu na stronie.\nZa³ó¿ now¹ lub ubiegaj siê o odblokowanie poprzedniej.");
-	    defer OnKickPlayer(playerid);
-	    return 1;
-	}
-	
-	if(PlayerCache[playerid][pPremium] > gettime())
- 	{
-		SetPlayerColor(playerid, COLOR_WHITE);
-		TextDrawShowForPlayer(playerid, TextDrawPremium);
+	    new string[256];
+		LoadPlayerBans(playerid);
+
+		// Jeœli zbanowany
+		if(PlayerCache[playerid][pBanned])
+		{
+		    return 1;
+		}
+
+		// Jeœli zablokowane konto
+		if(PlayerCache[playerid][pBlock] & BLOCK_CHAR)
+		{
+	 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Ta postaæ zosta³a zablokowana, powód znajdziesz w panelu na stronie.\nZa³ó¿ now¹ lub ubiegaj siê o odblokowanie poprzedniej.");
+		    defer OnKickPlayer(playerid);
+		    return 1;
+		}
+
+		if(PlayerCache[playerid][pPremium] > gettime())
+	 	{
+			SetPlayerColor(playerid, COLOR_WHITE);
+			TextDrawShowForPlayer(playerid, TextDrawPremium);
+		}
+		else
+		{
+			SetPlayerColor(playerid, COLOR_NICK);
+		}
+
+		SetPlayerScore(playerid, PlayerCache[playerid][pPoints]);
+	    PlayerCache[playerid][pNickColor] = COLOR_NICK;
+
+		format(string, sizeof(string), "%s (%d)", PlayerName(playerid), playerid);
+		UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][pNameTag], PlayerCache[playerid][pNickColor], string);
+
+		Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_ATTACHED_PLAYER, playerid);
+
+		Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_Z, 0.15);
+		Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_DRAW_DISTANCE, 15.0);
+
+		UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][pDescTag], COLOR_PURPLE, " ");
+
+		Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_ATTACHED_PLAYER, playerid);
+		Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_DRAW_DISTANCE, 10.0);
+
+	    ResetPlayerWeaponsEx(playerid);
+
+		SetPlayerFightingStyle(playerid, PlayerCache[playerid][pFightStyle]);
+		for(new w = 0; (w < 10) && (w != 7 && w != 8 && w != 9); w++)	SetPlayerSkillLevel(playerid, w, 1);
+
+	    LoadPlayerGroups(playerid);
+		LoadPlayerItems(playerid);
+
+		TextDrawShowForPlayer(playerid, Text:TextDrawServerLogo);
+		TextDrawShowForPlayer(playerid, Text:TextDrawNews);
+
+	    ClearPlayerChat(playerid);
+		SendClientFormatMessage(playerid, COLOR_WHITE, "Witaj, {AFAFAF}%s (GID: %d){FFFFFF}. Zosta³eœ zalogowany na postaæ {AFAFAF}%s (UID: %d){FFFFFF}. ¯yczymy mi³ej gry!", PlayerCache[playerid][pGlobName], PlayerCache[playerid][pGID], PlayerName(playerid), PlayerCache[playerid][pUID]);
+
+		TogglePlayerSpectating(playerid, false);
+		SetSpawnInfo(playerid, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0);
+
+		SpawnPlayer(playerid);
+		
+	    PlayerCache[playerid][pLogged] = true;
+
+		PlayerCache[playerid][pSession][SESSION_LOGIN] 	= 0;
+		PlayerCache[playerid][pSession][SESSION_GAME] 	= gettime();
+
+		PlayerCache[playerid][pAFK] = -3;
+
+		//gpci(playerid, string, sizeof(string));
+	 	printf("[part] %s (UID: %d, GID: %d, SERIAL: %s) zalogowa³ siê pomyœlnie (%d/3).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], string, PlayerCache[pLogTries]);
+
+		PlayerCache[playerid][pSession][SESSION_GAME] = gettime();
+	   	mysql_query_format("INSERT INTO `"SQL_PREF"logged_players` VALUES ('%d', '%d', '%d')", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pSession][SESSION_GAME]);
+
+		// 24/7 Pershing Square
+		RemoveBuildingForPlayer(playerid, 4051, 1371.8203, -1754.8203, 19.0469, 0.25);
+		RemoveBuildingForPlayer(playerid, 4191, 1353.2578, -1764.5313, 15.5938, 0.25);
+		RemoveBuildingForPlayer(playerid, 4022, 1353.2578, -1764.5313, 15.5938, 0.25);
+		RemoveBuildingForPlayer(playerid, 1532, 1353.1328, -1759.6563, 12.5000, 0.25);
+		RemoveBuildingForPlayer(playerid, 4021, 1371.8203, -1754.8203, 19.0469, 0.25);
+
+		// Bloki SC
+		RemoveBuildingForPlayer(playerid, 3562, 2326.6094, -1712.1641, 15.3047, 0.25);
+		RemoveBuildingForPlayer(playerid, 3559, 2384.9453, -1708.7656, 15.5078, 0.25);
+		RemoveBuildingForPlayer(playerid, 17935, 2401.2656, -1708.3828, 14.9766, 0.25);
+		RemoveBuildingForPlayer(playerid, 3582, 2326.6094, -1712.1641, 15.3047, 0.25);
+		RemoveBuildingForPlayer(playerid, 3558, 2384.9453, -1708.7656, 15.5078, 0.25);
+		RemoveBuildingForPlayer(playerid, 17934, 2401.2656, -1708.3828, 14.9766, 0.25);
+
+		// Idlewood
+		RemoveBuildingForPlayer(playerid, 1412, 1917.3203, -1797.4219, 13.8125, 0.25);
+		RemoveBuildingForPlayer(playerid, 1412, 1912.0547, -1797.4219, 13.8125, 0.25);
+		RemoveBuildingForPlayer(playerid, 1412, 1906.7734, -1797.4219, 13.8125, 0.25);
+		RemoveBuildingForPlayer(playerid, 1412, 1927.8516, -1797.4219, 13.8125, 0.25);
+		RemoveBuildingForPlayer(playerid, 1412, 1922.5859, -1797.4219, 13.8125, 0.25);
+		RemoveBuildingForPlayer(playerid, 1412, 1938.3906, -1797.4219, 13.8125, 0.25);
+
+		// Bloki
+		RemoveBuildingForPlayer(playerid, 4226, 1359.2813, -1796.4688, 24.3438, 0.25);
+		RemoveBuildingForPlayer(playerid, 4023, 1359.2813, -1796.4688, 24.3438, 0.25);
+
+		// Dystrybutory Idlewood
+		RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1778.4531, 14.1406, 0.25);
+	 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1774.3125, 14.1406, 0.25);
+	 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1771.3438, 14.1406, 0.25);
+	 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1767.2891, 14.1406, 0.25);
+
+		// Unity Station
+		RemoveBuildingForPlayer(playerid, 4025, 1777.8359, -1773.9063, 12.5234, 0.25);
+		RemoveBuildingForPlayer(playerid, 4215, 1777.5547, -1775.0391, 36.7500, 0.25);
+		RemoveBuildingForPlayer(playerid, 4019, 1777.8359, -1773.9063, 12.5234, 0.25);
 	}
 	else
 	{
-		SetPlayerColor(playerid, COLOR_NICK);
+ 		ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nWprowadŸ poni¿ej has³o do postaci, by rozpocz¹æ grê na naszym serwerze.\nUpewnij siê, ¿e postaæ zosta³a za³o¿ona na naszej stronie "WEB_URL".", "Zaloguj", "Zmieñ nick");
+ 		TD_ShowSmallInfo(playerid, 5, "Postac ~r~nie istnieje ~w~w bazie danych lub wprowadzone haslo jest nieprawidlowe.");
 	}
-	
-	SetPlayerScore(playerid, PlayerCache[playerid][pPoints]);
-    PlayerCache[playerid][pNickColor] = COLOR_NICK;
-    
-	format(string, sizeof(string), "%s (%d)", PlayerName(playerid), playerid);
-	UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][pNameTag], PlayerCache[playerid][pNickColor], string);
-	
-	Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_ATTACHED_PLAYER, playerid);
-	
-	Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_Z, 0.15);
-	Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_DRAW_DISTANCE, 15.0);
-
-	UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][pDescTag], COLOR_PURPLE, " ");
-	
-	Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_ATTACHED_PLAYER, playerid);
-	Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_DRAW_DISTANCE, 10.0);
-
-    ResetPlayerWeaponsEx(playerid);
-    
-	SetPlayerFightingStyle(playerid, PlayerCache[playerid][pFightStyle]);
-	for(new w = 0; (w < 10) && (w != 7 && w != 8 && w != 9); w++)	SetPlayerSkillLevel(playerid, w, 1);
-
-    LoadPlayerGroups(playerid);
-	LoadPlayerItems(playerid);
-
-	TextDrawShowForPlayer(playerid, Text:TextDrawServerLogo);
-	TextDrawShowForPlayer(playerid, Text:TextDrawNews);
-
-    ClearPlayerChat(playerid);
-	SendClientFormatMessage(playerid, COLOR_WHITE, "Witaj, {AFAFAF}%s (GID: %d){FFFFFF}. Zosta³eœ zalogowany na postaæ {AFAFAF}%s (UID: %d){FFFFFF}. ¯yczymy mi³ej gry!", PlayerCache[playerid][pGlobName], PlayerCache[playerid][pGID], PlayerName(playerid), PlayerCache[playerid][pUID]);
- 	
-	TogglePlayerSpectating(playerid, false);
-	SetSpawnInfo(playerid, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0, 0, 0, 0, 0);
-	
-	SpawnPlayer(playerid);
-    PlayerCache[playerid][pLogged] = true;
-    
-	//gpci(playerid, string, sizeof(string));
- 	printf("[part] %s (UID: %d, GID: %d, SERIAL: %s) zalogowa³ siê pomyœlnie (%d/3).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], string, PlayerCache[pLogTries]);
-
-	PlayerCache[playerid][pSession][SESSION_GAME] = gettime();
-   	mysql_query_format("INSERT INTO `"SQL_PREF"logged_players` VALUES ('%d', '%d', '%d')", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pSession][SESSION_GAME]);
-	
-	// 24/7 Pershing Square
-	RemoveBuildingForPlayer(playerid, 4051, 1371.8203, -1754.8203, 19.0469, 0.25);
-	RemoveBuildingForPlayer(playerid, 4191, 1353.2578, -1764.5313, 15.5938, 0.25);
-	RemoveBuildingForPlayer(playerid, 4022, 1353.2578, -1764.5313, 15.5938, 0.25);
-	RemoveBuildingForPlayer(playerid, 1532, 1353.1328, -1759.6563, 12.5000, 0.25);
-	RemoveBuildingForPlayer(playerid, 4021, 1371.8203, -1754.8203, 19.0469, 0.25);
-	
-	// Bloki SC
-	RemoveBuildingForPlayer(playerid, 3562, 2326.6094, -1712.1641, 15.3047, 0.25);
-	RemoveBuildingForPlayer(playerid, 3559, 2384.9453, -1708.7656, 15.5078, 0.25);
-	RemoveBuildingForPlayer(playerid, 17935, 2401.2656, -1708.3828, 14.9766, 0.25);
-	RemoveBuildingForPlayer(playerid, 3582, 2326.6094, -1712.1641, 15.3047, 0.25);
-	RemoveBuildingForPlayer(playerid, 3558, 2384.9453, -1708.7656, 15.5078, 0.25);
-	RemoveBuildingForPlayer(playerid, 17934, 2401.2656, -1708.3828, 14.9766, 0.25);
-	
-	// Idlewood
-	RemoveBuildingForPlayer(playerid, 1412, 1917.3203, -1797.4219, 13.8125, 0.25);
-	RemoveBuildingForPlayer(playerid, 1412, 1912.0547, -1797.4219, 13.8125, 0.25);
-	RemoveBuildingForPlayer(playerid, 1412, 1906.7734, -1797.4219, 13.8125, 0.25);
-	RemoveBuildingForPlayer(playerid, 1412, 1927.8516, -1797.4219, 13.8125, 0.25);
-	RemoveBuildingForPlayer(playerid, 1412, 1922.5859, -1797.4219, 13.8125, 0.25);
-	RemoveBuildingForPlayer(playerid, 1412, 1938.3906, -1797.4219, 13.8125, 0.25);
-	
-	// Bloki
-	RemoveBuildingForPlayer(playerid, 4226, 1359.2813, -1796.4688, 24.3438, 0.25);
-	RemoveBuildingForPlayer(playerid, 4023, 1359.2813, -1796.4688, 24.3438, 0.25);
-	
-	// Dystrybutory Idlewood
-	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1778.4531, 14.1406, 0.25);
- 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1774.3125, 14.1406, 0.25);
- 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1771.3438, 14.1406, 0.25);
- 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1767.2891, 14.1406, 0.25);
-
-	// Unity Station
-	RemoveBuildingForPlayer(playerid, 4025, 1777.8359, -1773.9063, 12.5234, 0.25);
-	RemoveBuildingForPlayer(playerid, 4215, 1777.5547, -1775.0391, 36.7500, 0.25);
-	RemoveBuildingForPlayer(playerid, 4019, 1777.8359, -1773.9063, 12.5234, 0.25);
 	return 1;
 }
 
@@ -6830,54 +6856,28 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new password[64], data[128], done = false;
+	        new password[64];
 	        if(strlen(inputtext) >= 32 || strlen(inputtext) <= 0)
 	        {
 				PlayerCache[playerid][pLogTries] --;
-				ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nPostaæ zosta³a pomyœlnie znaleziona w naszej bazie danych,\nwprowadŸ poni¿ej swoje has³o dla konta globalnego tej postaci.", "Zaloguj", "WyjdŸ");
+				ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nWprowadŸ poni¿ej has³o do postaci, by rozpocz¹æ grê na naszym serwerze.\nUpewnij siê, ¿e postaæ zosta³a za³o¿ona na naszej stronie "WEB_URL".", "Zaloguj", "Zmieñ nick");
 
-				GameTextForPlayer(playerid, "~n~~n~~n~~n~~n~~n~~w~Haslo ~r~nieprawidlowe", 3000, 3);
+				TD_ShowSmallInfo(playerid, 5, "Postac ~r~nie istnieje ~w~w bazie danych lub wprowadzone haslo jest nieprawidlowe.");
 				return 1;
 			}
-	        
-			mysql_real_escape_string(inputtext, password);
-			mysql_query_format("SELECT `name`, `member_premium_time`, `member_game_points`, `member_game_admin_perm`, `member_game_warns` FROM `ipb_members` WHERE member_id = '%d' AND members_pass_hash = md5(CONCAT(md5(members_pass_salt), md5('%s'))) LIMIT 1", PlayerCache[playerid][pGID], password);
-
-	    	mysql_store_result();
-	    	if(mysql_fetch_row_format(data, "|"))
-	    	{
-	    	    sscanf(data, "p<|>s[64]ddd", PlayerCache[playerid][pGlobName], PlayerCache[playerid][pPremium], PlayerCache[playerid][pPoints], PlayerCache[playerid][pAdmin], PlayerCache[playerid][pWarns]);
-
-				done = true;
-	    	}
-	   		else
-	    	{
-	        	if(PlayerCache[playerid][pLogTries])
-	        	{
-					PlayerCache[playerid][pLogTries] --;
-					ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nPostaæ zosta³a pomyœlnie znaleziona w naszej bazie danych,\nwprowadŸ poni¿ej swoje has³o dla konta globalnego tej postaci.", "Zaloguj", "WyjdŸ");
-
-					GameTextForPlayer(playerid, "~n~~n~~n~~n~~n~~n~~w~Haslo ~r~nieprawidlowe", 3000, 3);
-				}
-				else
-				{
-			    	ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Wyst¹pi³ b³¹d", "Przekroczy³eœ limit wykonywania prób logowania.\nZostajesz wyrzucony z serwera.", "Zamknij", "");
-			    	defer OnKickPlayer(playerid);
-				}
-				done = false;
-	    	}
-	    	mysql_free_result();
-
-	    	if(done)
-	    	{
-	    		OnPlayerLogin(playerid);
-			}
+			
+			mysql_escape_string(inputtext, password, 64);
+			bcrypt_check(password, PlayerCache[playerid][pPassword], "OnPlayerPasswordChecked", "d", playerid);
 			return 1;
 		}
 	    else
 	    {
+	        /*
 	        ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Informacja", "Opuszczasz grê - zapraszamy ponownie.\n\n\t\t\tEkipa "SERVER_NAME".", "Zamknij", "");
 			defer OnKickPlayer(playerid);
+			*/
+			
+			// Tutaj zmiana nicku...
 			return 1;
 		}
 	}
