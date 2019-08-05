@@ -21,16 +21,16 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #include <YSI\y_iterate>
 
 // Main config
-#define GAMEMODE		"CRP ©"
-#define VERSION			"0.7"
-#define SERVER_NAME 	"Community RolePlay"
-#define WEB_URL         "www.c-rp.pl"
+#define GAMEMODE		"MRP ©"
+#define VERSION			"0.1"
+#define SERVER_NAME 	"Mighty RolePlay"
+#define WEB_URL         "www.mighty-rp.pl"
 
 // Database config
 #define SQL_HOST        "127.0.0.1"
-#define SQL_USER        "game"
-#define SQL_PASS        "X6fmyNFXEdbHGJcY"
-#define SQL_DTBS        "community_db"
+#define SQL_USER        "samp"
+#define SQL_PASS        "H#Y%K2&5n3AIy9E"
+#define SQL_DTBS        "samp"
 #define SQL_PREF     	"mrp_"
 
 //#pragma tabsize 0

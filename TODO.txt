@@ -1,0 +1,28 @@
+Mighty RolePlay 2019 --- LISTA TO-DO
+
+-PRZYGOTOWANIE KODU
+-- wdro¿yæ najnowszy plugin MYSQL (R-41)
+-- zapis i wczytywanie danych na bazie ORM'ów
+-- asnychroniczne zapytania (threaded-queries)
+-- zaimplementowaæ DynamicGUI
+-- zabezpieczenia przed fa³szywymi pakietami (Pawn.RakNet)
+-- zmieniæ rozwi¹zania zwi¹zane z obiektami streamera (poprawiæ /mgate, zapis danych bram, wyszukiwanie obiektów w pobli¿u)
+-- zamiast zcmd przejœæ na Pawn.CMD
+-- zamiennik dla niaktualnego i zbugowanego mtime
+-- samp-precise-timers do wdro¿enia
+
+-NOWSZE I LEPSZE ROZWI¥ZANIA
+-- itemy gracza (aktualnie globalnie) przerobiæ na iterator per-player,
+-- grupy per-player,
+-- nowy interfejs listy grup pod /g
+-- dodaæ samouczek
+-- odœwie¿yæ antycheat
+-- zmieniæ dzia³anie drzwi (przepisaæ najlepiej ca³y skrypt)
+-- aktorzy (dynamiczne stawianie ich przez liderów grup)
+-- odœwie¿yæ animacje
+
+-NOWINKI (KTÓRE MA SKRYPT RAYDEXA)
+-- napady
+-- kasyna
+-- cornery
+-- 
