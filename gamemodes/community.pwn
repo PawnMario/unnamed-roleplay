@@ -7,19 +7,21 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 // Includes
 #include <a_samp>
+
+
+#include <YSI\y_va>
+#include <YSI\y_timers>
+#include <YSI\y_iterate>
+
 #include <mysql>
 #include <zcmd>
 #include <md5>
 #include <sscanf2>
 //#include <foreach>
 #include <streamer>
-#include <audio>
+
 #include <bcrypt>
 //#include <mtime>
-
-#include <YSI\y_va>
-#include <YSI\y_timers>
-#include <YSI\y_iterate>
 
 // Main config
 #define GAMEMODE		"MRP ©"
@@ -29,10 +31,10 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 // Database config
 #define SQL_HOST        "127.0.0.1"
-#define SQL_USER        "mysqladmin"
-#define SQL_PASS        "aE#4^h%k9nrg"
+#define SQL_USER        "samp"
+#define SQL_PASS        "H#Y%K2&5n3AIy9E"
 #define SQL_DTBS        "samp"
-#define SQL_PREF     	"mrp_"
+#define SQL_PREF     	"ipb_"
 
 //#pragma tabsize 0
 //#pragma dynamic 8196
@@ -66,7 +68,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define	MAX_DRAW_DISTANCE   100.0
 
 #define MAX_GROUPS          350
-#define MAX_GROUP_SLOTS     5
+#define MAX_GROUP_SLOTS     4
 
 #define ACTIVITY_LIMIT      1000
 
@@ -252,48 +254,77 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define ITEM_OPTION_USE         0
 #define ITEM_OPTION_DROP        1
 
+//Typy grup
+#define GROUP_TYPE_NONE	0
+#define GROUP_TYPE_LSPD 1
+#define GROUP_TYPE_MEDIC 2
+#define GROUP_TYPE_SN 3
+#define GROUP_TYPE_SECURITY 4
+#define GROUP_TYPE_GANG 5
+#define GROUP_TYPE_PETROL 6
+#define GROUP_TYPE_GASTRO 7
+#define GROUP_TYPE_TAXI 8
+#define GROUP_TYPE_WORKSHOP 9
+#define GROUP_TYPE_GYM	10
+#define GROUP_TYPE_GOV	11
+#define GROUP_TYPE_FARM	12
+#define GROUP_TYPE_CASINO 13
+
 // Typy grup
 #define G_TYPE_NONE     		0
-#define G_TYPE_24/7     		1
-#define G_TYPE_BAR		   		2
-#define G_TYPE_GASSTATION   	3
-#define G_TYPE_GYM          	4
-#define G_TYPE_CARDEALER    	5
-#define G_TYPE_TAXI         	6
-#define G_TYPE_CLOTHES      	7
-#define G_TYPE_WORKSHOP     	8
-#define G_TYPE_HOTEL        	9
-#define G_TYPE_BANK         	10
-#define G_TYPE_SECURITY     	11
+#define G_TYPE_POLICE     		1
+#define G_TYPE_MEDICAL		   	2
+#define G_TYPE_NEWS   			3
+#define G_TYPE_SECURITY         4
+#define G_TYPE_GANG    			5
+#define G_TYPE_GASSTATION       6
+#define G_TYPE_BAR		      	7
+#define G_TYPE_TAXI     		8
+#define G_TYPE_WORKSHOP        	9
+#define G_TYPE_GYM         		10
+#define G_TYPE_GOV     			11
 
-#define G_TYPE_POLICE       	12
-#define G_TYPE_GOV          	13
-#define G_TYPE_MEDICAL      	14
-#define G_TYPE_NEWS         	15
-#define G_TYPE_ARMY         	16
-#define G_TYPE_FIREDEPT     	17
-#define G_TYPE_FBI          	18
+#define G_TYPE_ARMY         	12
+#define G_TYPE_FIREDEPT     	13
+#define G_TYPE_FBI          	14
 
-#define G_TYPE_MAFIA        	19
-#define G_TYPE_GANG         	20
+#define G_TYPE_MAFIA        	15
 
-#define G_TYPE_FAMILY           21
-#define G_TYPE_MOTORS      		22
+#define G_TYPE_FAMILY           16
+#define G_TYPE_MOTORS      		17
 
-#define G_TYPE_DRIVING          23
-#define G_TYPE_RENTAL           24
+#define G_TYPE_DRIVING          18
+#define G_TYPE_RENTAL           19
+
+#define G_TYPE_24/7             20
+
+#define G_TYPE_CARDEALER        21
+#define G_TYPE_CLOTHES          22
+
+#define G_TYPE_HOTEL            23
+#define G_TYPE_BANK             24
 
 // Typy w³aœcicieli
 #define OWNER_NONE      		0
 #define OWNER_PLAYER    		1
 #define OWNER_GROUP     		2
 
+//Flagi pracownikow
+#define WORKER_FLAG_CHAT 1
+#define WORKER_FLAG_DOORS 2
+#define WORKER_FLAG_VEHICLES 4
+#define WORKER_FLAG_OFFER 8
+#define WORKER_FLAG_ORDER 16
+#define WORKER_FLAG_LEADER 32
+#define WORKER_FLAG_MANAGER 64
+
+
 // Uprawnienia (groups)
-#define G_PERM_CARS       		1
+#define G_PERM_CHAT       		1
 #define G_PERM_DOORS      		2
-#define G_PERM_OFFER      		4
-#define G_PERM_ORDER      		8
-#define G_PERM_CHAT       		16
+#define G_PERM_CARS      		4
+#define G_PERM_OFFER      		8
+#define G_PERM_ORDER       		16
 #define G_PERM_GATE       		32
 #define G_PERM_LEADER     		64
 #define G_PERM_MAX          	127
@@ -754,7 +785,6 @@ forward OnPlayerLogin(playerid);
 forward SetPlayerSpawn(playerid);
 forward OnPlayerPasswordChecked(playerid);
 
-forward OnPlayerSave(playerid, what);
 forward UpdatePlayerSession(playerid, session_type, session_extraid);
 
 forward ShowPlayerStatsForPlayer(playerid, giveplayer_id);
@@ -762,8 +792,10 @@ forward ShowPlayerStatsForPlayer(playerid, giveplayer_id);
 forward CreateGroup(GroupName[]);
 forward SaveGroup(group_id);
 forward DeleteGroup(group_id);
-forward LoadGroups();
+forward query_OnLoadGroups();
 forward ShowPlayerGroupInfo(playerid, group_id);
+forward ShowPlayerGroupOptions(playerid);
+forward HidePlayerGroupOptions(playerid);
 
 forward CreateStaticVehicle(modelid, Float:PosX, Float:PosY, Float:PosZ, Float:PosA, color1, color2, respawn_delay);
 forward LoadVehicle(veh_uid);
@@ -836,6 +868,7 @@ forward LoadAllCorpses();
 
 forward LoadPlayerAccess(playerid);
 forward LoadPlayerGroups(playerid);
+forward query_OnLoadPlayerGroups(playerid);
 
 forward ShowPlayerDirectoryForPlayer(playerid, giveplayer_id);
 forward GivePlayerPunish(playerid, giverid, punish_type, punish_reason[], punish_time, punish_extraid);
@@ -859,15 +892,15 @@ new connHandle;
 
 new Text:TextDrawServerLogo;
 new Text:TextDrawNews;
-new Text:TextDrawGroupOption[MAX_GROUP_SLOTS][5];
+new Text:TD_GroupOption[6][MAX_GROUP_SLOTS];
 
 new Text:TextDrawPremium;
 
-new PlayerText:TextDrawSmallInfo[MAX_PLAYERS];
+new PlayerText:TD_SmallInfo[MAX_PLAYERS];
 new PlayerText:TextDrawLargeInfo[MAX_PLAYERS][2];
 
-new Text:TextDrawGroupsTitle;
-new PlayerText:TextDrawGroups[MAX_PLAYERS][MAX_GROUP_SLOTS];
+new PlayerText:TD_MainGroupTag[MAX_PLAYERS][MAX_GROUP_SLOTS];
+new PlayerText:TD_MainGroupName[MAX_PLAYERS][MAX_GROUP_SLOTS];
 
 new Text:TextDrawOfferAccept;
 new Text:TextDrawOfferReject;
@@ -910,9 +943,9 @@ enum sPlayer
 	pGID,
 	
 	pCharName[32],
-	pGlobName[64],
+	pGlobName[256],
 	
-	pPassword[128],
+	pPassword[256],
 	
 	pHours,
 	pMinutes,
@@ -938,6 +971,7 @@ enum sPlayer
 	Float:pPosX,
 	Float:pPosY,
 	Float:pPosZ,
+	Float:pPosA,
 	
 	pVirtualWorld,
 	pInteriorID,
@@ -973,6 +1007,8 @@ enum sPlayer
 	
 	pDutyGroup,
 	pDutyAdmin,
+	
+	bool: pListPlayerGroups,
 	
 	pMainTable,
 	pManageItem,
@@ -1130,7 +1166,8 @@ enum sGroupInfo
 	gFlags,
 	gExtraArray[20],
 	
-	bool: gToggleChat
+	bool: gToggleChat,
+	ORM:gOrm
 }
 new GroupData[MAX_GROUPS][sGroupInfo];
 
@@ -1149,6 +1186,12 @@ enum sPlayerGroup
 }
 new PlayerGroup[MAX_PLAYERS][MAX_GROUP_SLOTS][sPlayerGroup];
 
+
+
+#define G_TYPE_DRIVING          18
+#define G_TYPE_RENTAL           19
+
+
 enum sGroupTypeInfo
 {
 	gTypeName[24],
@@ -1160,34 +1203,38 @@ enum sGroupTypeInfo
 new GroupTypeInfo[][sGroupTypeInfo] =
 {
 	{"Nieokreœlony",			0,		2000,		G_FLAG_OOC | G_FLAG_TAX},
-	{"24/7",					100,	5000,		G_FLAG_OOC | G_FLAG_TAX},
-	{"Gastronomia",				300,	9000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Stacja benzynowa",		300,	12000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Si³ownia",				300,	7000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Salon samochodowy",		300,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Firma taksówkarska",		300,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Ciucholand",				0,		8000,		G_FLAG_OOC | G_FLAG_TAX},
-	{"Warsztat",				300,	10000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Hotel",					150,	5500,		G_FLAG_OOC | G_FLAG_TAX},
-	{"Bank",					0,		6000,		G_FLAG_OOC | G_FLAG_TAX},
-	{"Ochrona",					300,	11000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-
 	{"Police",					900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_911 | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
-	{"Government",				700,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
 	{"Medical",					1100,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
 	{"San News",				500,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR},
+	{"Ochrona",					300,	11000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Gang",					200,	0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_TAG | G_FLAG_SEARCHING},
+	{"Stacja benzynowa",		300,	12000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Gastronomia",				300,	9000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Firma taksówkarska",		300,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Warsztat",				300,	10000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Si³ownia",				300,	7000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Government",				700,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
+	
 	{"Armia",					600,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
 	{"Fire Department",			900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_BLOCADE},
 	{"FBI",						1250,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
 
-	{"Mafia",					0,		0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_SEARCHING}, 
-	{"Gang",					200,	0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_TAG | G_FLAG_SEARCHING},
-	
+	{"Mafia",					0,		0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_SEARCHING},
+
 	{"Rodzina",                 0,      0,          G_FLAG_OOC | G_FLAG_SPAWN},
 	{"Zmotoryzowana",           0,      0,          G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_RACE},
 	
 	{"Szko³a jazdy",            300,    9000,       G_FLAG_OOC | G_FLAG_TAX},
-	{"Wypo¿yczalnia",           300,    9800,      	G_FLAG_OOC | G_FLAG_TAX}
+	
+	{"Wypo¿yczalnia",           300,    9800,      	G_FLAG_OOC | G_FLAG_TAX},
+	{"24/7",					100,	5000,		G_FLAG_OOC | G_FLAG_TAX},
+
+	{"Salon samochodowy",		300,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Ciucholand",				0,		8000,		G_FLAG_OOC | G_FLAG_TAX},
+
+	{"Hotel",					150,	5500,		G_FLAG_OOC | G_FLAG_TAX},
+	{"Bank",					0,		6000,		G_FLAG_OOC | G_FLAG_TAX}
+
 };
 
 enum sCarInfo
@@ -2059,16 +2106,18 @@ public OnGameModeInit()
 	getdate(year, month, day);
 	
 	PickupWork = CreatePickup(1210, 2, 1464.1624, -1749.0228, 15.4453);
-
+	
 	// Connect to database
 	//mysql_init(LOG_ALL);
- 	connHandle = mysql_connect(SQL_HOST, SQL_USER, SQL_PASS, SQL_DTBS);
+ 	connHandle = mysql_connect(SQL_HOST, SQL_USER, SQL_DTBS, SQL_PASS);
 	if(connHandle)
 	{
 	    print("Pomyœlnie po³¹czono z baz¹ danych.\n\n----------\nHost: "SQL_HOST"\nUser: "SQL_USER"\nDatabase: "SQL_DTBS"\n----------\n\nRozpoczynam wczytywanie danych...");
 
+
+		mysql_tquery(connHandle, "SELECT * FROM `"SQL_PREF"game_groups`", "query_OnLoadGroups", "");
 		// Wczytywanie
-		LoadGroups();
+		/*LoadGroups();
 		LoadVehicles();
 		
 		LoadDoors();
@@ -2083,7 +2132,7 @@ public OnGameModeInit()
 		LoadAllCorpses();
 		
 		LoadPackages();
-		Load3DTextLabels();
+		Load3DTextLabels();*/
 		
 		print("Wczytywanie danych zosta³o zakoñczone pomyœlnie.");
 	    SetGameModeText(""GAMEMODE" v"VERSION"");
@@ -2135,14 +2184,6 @@ public OnGameModeInit()
 	TextDrawColor(TextDrawPremium, -1);
 	TextDrawSetOutline(TextDrawPremium, 1);
 	TextDrawSetProportional(TextDrawPremium, 1);
-	
-	TextDrawGroupsTitle = TextDrawCreate(99.000000, 169.000000, "~y~Slot                  Nazwa Grupy                                                        Opcje");
-	TextDrawBackgroundColor(TextDrawGroupsTitle, 255);
-	TextDrawFont(TextDrawGroupsTitle, 2);
-	TextDrawLetterSize(TextDrawGroupsTitle, 0.210000, 1.199999);
-	TextDrawColor(TextDrawGroupsTitle, -1);
-	TextDrawSetOutline(TextDrawGroupsTitle, 1);
-	TextDrawSetProportional(TextDrawGroupsTitle, 1);
 
 	TextDrawOfferBack = TextDrawCreate(205.000000, 287.000000, "_");
 	TextDrawLetterSize(TextDrawOfferBack, 0.500000, 6.299985);
@@ -2192,24 +2233,36 @@ public OnGameModeInit()
 	TextDrawTextSize(TextDrawPunishDesc, 181.000000, 20.000000);
 
 	// Pêtla na sloty grup
+	new Float:posX, Float:posY;
 	for(new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
 	{
-		TextDrawGroupOption[group_slot][0] = TextDrawCreate(321.000000, 182.000000 + group_slot * 15 + 1.8, "Info");
-		TextDrawGroupOption[group_slot][1] = TextDrawCreate(360.000000, 182.000000 + group_slot * 15 + 1.8, "Pojazdy");
-		TextDrawGroupOption[group_slot][2] = TextDrawCreate(399.000000, 182.000000 + group_slot * 15 + 1.8, "Sluzba");
-		TextDrawGroupOption[group_slot][3] = TextDrawCreate(438.000000, 182.000000 + group_slot * 15 + 1.8, "Magazyn");
-		TextDrawGroupOption[group_slot][4] = TextDrawCreate(477.000000, 182.000000 + group_slot * 15 + 1.8, "Online");
+	    posX = 225.0;
+	    posY = 167.0;
 
-		for(new option_id = 0; option_id < 5; option_id++)
+	    if(group_slot == 2 || group_slot == 3)	posY += 110.0;
+	    if(group_slot == 1 || group_slot == 3)	posX = 355.0;
+
+		TD_GroupOption[0][group_slot] = TextDrawCreate(posX, posY, "INFO");
+		TD_GroupOption[1][group_slot] = TextDrawCreate(posX, posY + 20.0, "Magazyn");
+		TD_GroupOption[2][group_slot] = TextDrawCreate(posX, posY + 40.0, "Sluzba");
+
+		TD_GroupOption[3][group_slot] = TextDrawCreate(posX + 50.0, posY, "Pojazdy");
+		TD_GroupOption[4][group_slot] = TextDrawCreate(posX + 50.0, posY + 20.0, "Online");
+		TD_GroupOption[5][group_slot] = TextDrawCreate(posX + 50.0, posY + 40.0, "Zadania");
+
+		for(new group_option = 0; group_option < 6; group_option++)
 		{
-  			TextDrawSetSelectable(TextDrawGroupOption[group_slot][option_id], true);
-			TextDrawAlignment(TextDrawGroupOption[group_slot][option_id], 2);
-			TextDrawLetterSize(TextDrawGroupOption[group_slot][option_id], 0.200000, 0.899999);
-			TextDrawSetOutline(TextDrawGroupOption[group_slot][option_id], 1);
-			TextDrawBackgroundColor(TextDrawGroupOption[group_slot][option_id], 255);
-			TextDrawUseBox(TextDrawGroupOption[group_slot][option_id], 1);
-			TextDrawBoxColor(TextDrawGroupOption[group_slot][option_id], 136);
-			TextDrawTextSize(TextDrawGroupOption[group_slot][option_id], 10.000000, 35.000000);
+			TextDrawAlignment(TD_GroupOption[group_option][group_slot], 2);
+			TextDrawBackgroundColor(TD_GroupOption[group_option][group_slot], 255);
+			TextDrawFont(TD_GroupOption[group_option][group_slot], 1);
+			TextDrawLetterSize(TD_GroupOption[group_option][group_slot], 0.250000, 1.199999);
+			TextDrawColor(TD_GroupOption[group_option][group_slot], -1);
+			TextDrawSetOutline(TD_GroupOption[group_option][group_slot], 1);
+			TextDrawSetProportional(TD_GroupOption[group_option][group_slot], 1);
+			TextDrawUseBox(TD_GroupOption[group_option][group_slot], 1);
+			TextDrawBoxColor(TD_GroupOption[group_option][group_slot], 136);
+			TextDrawTextSize(TD_GroupOption[group_option][group_slot], 10.000000, 40.000000);
+			TextDrawSetSelectable(TD_GroupOption[group_option][group_slot], true);
 		}
 	}
 
@@ -2233,14 +2286,14 @@ public OnGameModeInit()
 	    }
 	}
 	
-	Audio_SetPack("community_pack");
+	//Audio_SetPack("community_pack");
 	AddPlayerClass(0, 1958.3783, 1343.1572, 15.3746, 269.1425, 0, 0, 0, 0, 0, 0);
 	return 1;
 }
 
 public OnGameModeExit()
 {
-	Audio_DestroyTCPServer();
+	//Audio_DestroyTCPServer();
 	mysql_close();
 	return 1;
 }
@@ -2545,9 +2598,9 @@ task OnMinuteTask[60000]()
 
 task OnSecondTask[1000]()
 {
-	new hour, minute, second, string[256];
+	new hour, minute, second, time, string[256];
 	
-	gettime(hour, minute, second);
+	time = gettime(hour, minute, second);
 	SetWorldTime(hour + 1);
 	
 	if(PunishTime > 0)
@@ -2569,6 +2622,12 @@ task OnSecondTask[1000]()
             GivePlayerPunish(INVALID_PLAYER_ID, INVALID_PLAYER_ID, PUNISH_KICK, "Spawn bez zalogowania.", 0, 0);
 		 	continue;
 	    }
+	    
+     	// TextDraw informacyjny
+   		if(PlayerCache[i][pSmallTextTime] && time > PlayerCache[i][pSmallTextTime])
+	    {
+     		TD_HideSmallInfo(i);
+	    }
 	
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -2581,16 +2640,6 @@ task OnSecondTask[1000]()
 	        
 	        new keysa, uda, lra;
 	        GetPlayerKeys(i, keysa, uda, lra);
-	    
-	        // TextDraw informacyjny
-			if(PlayerCache[i][pSmallTextTime])
-			{
-	        	PlayerCache[i][pSmallTextTime] --;
-				if(PlayerCache[i][pSmallTextTime] <= 0)
-				{
-				    TD_HideSmallInfo(i);
-				}
-			}
 			
 			if(PlayerCache[i][pLargeTextTime])
 			{
@@ -3391,7 +3440,7 @@ task OnSecondTask[1000]()
 	   					{
 							if(PlayerCache[playerid][pCurrentArea] == PlayerCache[i][pCurrentArea])
 							{
-								Audio_Set3DPosition(playerid, PlayerCache[playerid][pAudioHandle], PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 15.0);
+								//Audio_Set3DPosition(playerid, PlayerCache[playerid][pAudioHandle], PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 15.0);
 							}
 						}
 					}
@@ -3793,13 +3842,13 @@ public OnPlayerConnect(playerid)
 	// Ignorowanie
 	for (new i = 0; i < MAX_PLAYERS; i++)	PlayerCache[playerid][pIgnored][i] = false;
 	
-	strmid(PlayerCache[playerid][pCharName], PlayerOriginalName(playerid), 0, MAX_PLAYER_NAME);
-	new ORM:orm_id = PlayerCache[playerid][pOrm] = orm_create(""SQL_PREF"characters");
+	GetPlayerName(playerid, PlayerCache[playerid][pCharName], MAX_PLAYER_NAME);
+	new ORM:orm_id = PlayerCache[playerid][pOrm] = orm_create(""SQL_PREF"characters", connHandle);
 	
 	orm_addvar_int(orm_id, PlayerCache[playerid][pUID], "char_uid");
 	orm_addvar_int(orm_id, PlayerCache[playerid][pGID], "char_gid");
 
-	orm_addvar_string(orm_id, PlayerCache[playerid][pCharName], 32, "char_name");
+	orm_addvar_string(orm_id, PlayerCache[playerid][pCharName], 24, "char_name");
 
     orm_addvar_int(orm_id, PlayerCache[playerid][pHours], "char_hours");
 	orm_addvar_int(orm_id, PlayerCache[playerid][pMinutes], "char_minutes");
@@ -3807,7 +3856,7 @@ public OnPlayerConnect(playerid)
 	orm_addvar_int(orm_id, PlayerCache[playerid][pCash], "char_cash");
     orm_addvar_int(orm_id, PlayerCache[playerid][pBankCash], "char_bankcash");
 
-    orm_addvar_int(orm_id, PlayerCache[playerid][pBankNumber], "char_banknumber");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pBankNumber], "char_banknumb");
 
     orm_addvar_int(orm_id, PlayerCache[playerid][pSkin], "char_skin");
     orm_addvar_float(orm_id, PlayerCache[playerid][pHealth], "char_health");
@@ -3818,36 +3867,38 @@ public OnPlayerConnect(playerid)
     orm_addvar_float(orm_id, PlayerCache[playerid][pPosX], "char_posx");
     orm_addvar_float(orm_id, PlayerCache[playerid][pPosY], "char_posy");
     orm_addvar_float(orm_id, PlayerCache[playerid][pPosZ], "char_posz");
+    orm_addvar_float(orm_id, PlayerCache[playerid][pPosA], "char_posa");
 
     orm_addvar_int(orm_id, PlayerCache[playerid][pVirtualWorld], "char_world");
     orm_addvar_int(orm_id, PlayerCache[playerid][pInteriorID], "char_interior");
 
-    orm_addvar_int(orm_id, PlayerCache[playerid][pBlock], "char_block");
-    orm_addvar_int(orm_id, PlayerCache[playerid][pCrash], "char_crash");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pBlock], "block");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pCrash], "char_quittime");
     orm_addvar_int(orm_id, PlayerCache[playerid][pArrest], "char_arrest");
 
     orm_addvar_int(orm_id, PlayerCache[playerid][pStrength], "char_strength");
-    orm_addvar_float(orm_id, PlayerCache[playerid][pDepend], "char_depend");
+    //orm_addvar_float(orm_id, PlayerCache[playerid][pDepend], "char_depend");
 
     orm_addvar_int(orm_id, PlayerCache[playerid][pBW], "char_bw");
     orm_addvar_int(orm_id, PlayerCache[playerid][pAJ], "char_aj");
 
-    orm_addvar_int(orm_id, PlayerCache[playerid][pHouse], "char_house");
+    //orm_addvar_int(orm_id, PlayerCache[playerid][pHouse], "char_house");
     orm_addvar_int(orm_id, PlayerCache[playerid][pJob], "char_job");
 
     orm_addvar_int(orm_id, PlayerCache[playerid][pDocuments], "char_documents");
-    orm_addvar_int(orm_id, PlayerCache[playerid][pAchievements], "char_achieve");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pAchievements], "char_achievements");
 
-    orm_addvar_int(orm_id, PlayerCache[playerid][pTalkStyle], "char_talkstyle");
-    orm_addvar_int(orm_id, PlayerCache[playerid][pWalkStyle], "char_walkstyle");
+    //orm_addvar_int(orm_id, PlayerCache[playerid][pTalkStyle], "char_talkstyle");
+    //orm_addvar_int(orm_id, PlayerCache[playerid][pWalkStyle], "char_walkstyle");
     orm_addvar_int(orm_id, PlayerCache[playerid][pFightStyle], "char_fightstyle");
 
-    orm_addvar_int(orm_id, PlayerCache[playerid][pOOC], "char_ooc");
-    orm_addvar_int(orm_id, PlayerCache[playerid][pLastSkin], "char_lastskin");
+    //orm_addvar_int(orm_id, PlayerCache[playerid][pOOC], "char_ooc");
+    //orm_addvar_int(orm_id, PlayerCache[playerid][pLastSkin], "char_lastskin");
 
-    orm_addvar_float(orm_id, PlayerCache[playerid][pMileage], "char_mileage");
+    //orm_addvar_float(orm_id, PlayerCache[playerid][pMileage], "char_mileage");
     orm_setkey(orm_id, "char_name");
     
+    printf("OnPlayerConnect - %d, %d, %s", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pCharName]);
     orm_select(orm_id, "OnPlayerLogin", "d", playerid);
 	return 1;
 }
@@ -3860,16 +3911,19 @@ public OnPlayerLogin(playerid)
  		case ERROR_OK:
  		{
  		    new Cache:login_password, query[256];
+ 		    printf("OnPlayerLogin(errno_ok) - %d, %d, %s", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pCharName]);
  		    
  		    orm_apply_cache(orm_id, 0);
  		    orm_setkey(orm_id, "char_uid");
  		    
- 		    format(query, sizeof(query), "SELECT `members_pass_hash` FROM `core_members` WHERE member_id = '%d' LIMIT 1", PlayerCache[playerid][pGID]);
+ 		    format(query, sizeof(query), "SELECT `name`, `members_pass_hash` FROM `core_members` WHERE member_id = '%d' LIMIT 1", PlayerCache[playerid][pGID]);
  			login_password = mysql_query(connHandle, query);
  			
-			cache_get_row(0, 0, PlayerCache[playerid][pPassword], connHandle, 128);
-			cache_delete(login_password);
+ 			cache_get_row(0, 0, PlayerCache[playerid][pGlobName], connHandle, 256);
+			cache_get_row(0, 1, PlayerCache[playerid][pPassword], connHandle, 256);
+			//PlayerCache[playerid][pPremium] = cache_get_row_int(0, 2, connHandle);
 			
+			cache_delete(login_password);
             PlayerCache[playerid][pSession][SESSION_LOGIN] = gettime();
 			
 			ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nWprowadŸ poni¿ej has³o do postaci, by rozpocz¹æ grê na naszym serwerze.\nUpewnij siê, ¿e postaæ zosta³a za³o¿ona na naszej stronie "WEB_URL".", "Zaloguj", "Zmieñ nick");
@@ -3877,6 +3931,8 @@ public OnPlayerLogin(playerid)
 		}
  	 	case ERROR_NO_DATA:
   		{
+  		    printf("OnPlayerLogin(errno_no) - %d, %d, %s", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pCharName]);
+  		    
             ShowPlayerDialog(playerid, D_LOGIN, DIALOG_STYLE_PASSWORD, "Panel logowania", "Witaj na "SERVER_NAME"!\n\nWprowadŸ poni¿ej has³o do postaci, by rozpocz¹æ grê na naszym serwerze.\nUpewnij siê, ¿e postaæ zosta³a za³o¿ona na naszej stronie "WEB_URL".", "Zaloguj", "Zmieñ nick");
             TD_ShowSmallInfo(playerid, 5, "Postac ~r~nie istnieje ~w~w bazie danych lub wprowadzone haslo jest nieprawidlowe.");
 		}
@@ -3887,6 +3943,7 @@ public OnPlayerLogin(playerid)
 public OnPlayerPasswordChecked(playerid)
 {
 	new bool:match = bcrypt_is_equal();
+	printf("OnPlayerPasswordChecked - %d, %d, %s", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pCharName]);
 	
 	if(match == true)
 	{
@@ -3907,7 +3964,7 @@ public OnPlayerPasswordChecked(playerid)
 		    return 1;
 		}
 
-		if(PlayerCache[playerid][pPremium] > gettime())
+		if(IsPlayerPremium(playerid))
 	 	{
 			SetPlayerColor(playerid, COLOR_WHITE);
 			TextDrawShowForPlayer(playerid, TextDrawPremium);
@@ -3960,7 +4017,7 @@ public OnPlayerPasswordChecked(playerid)
 		PlayerCache[playerid][pAFK] = -3;
 
 		//gpci(playerid, string, sizeof(string));
-	 	printf("[part] %s (UID: %d, GID: %d, SERIAL: %s) zalogowa³ siê pomyœlnie (%d/3).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], string, PlayerCache[pLogTries]);
+	 	printf("[part] %s (UID: %d, GID: %d, SERIAL: %s) zalogowa³ siê pomyœlnie (%d/3).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], string, PlayerCache[playerid][pLogTries]);
 
 		PlayerCache[playerid][pSession][SESSION_GAME] = gettime();
 	   	mysql_query_format("INSERT INTO `"SQL_PREF"logged_players` VALUES ('%d', '%d', '%d')", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pSession][SESSION_GAME]);
@@ -4038,7 +4095,7 @@ public OnPlayerDisconnect(playerid, reason)
 			PlayerCache[playerid][pInteriorID] = GetPlayerInterior(playerid);
 
 			PlayerCache[playerid][pCrash] = gettime();
-			OnPlayerSave(playerid, SAVE_PLAYER_POS);
+			orm_update(PlayerCache[playerid][pOrm]);
 	    }
 	    case 1: format(string, sizeof(string), "(( %s - /q ))", PlayerRealName(playerid));
 	}
@@ -4259,7 +4316,7 @@ public OnPlayerDisconnect(playerid, reason)
    			{
 				if(PlayerCache[i][pCurrentArea] == areaid)
 				{
-	   				Audio_Stop(i, PlayerCache[playerid][pAudioHandle]);
+	   				//Audio_Stop(i, PlayerCache[playerid][pAudioHandle]);
 				    PlayerCache[i][pAudioHandle] = 0;
 				}
 			}
@@ -4295,7 +4352,9 @@ public OnPlayerDisconnect(playerid, reason)
 	}
 	
 	UpdatePlayerSession(playerid, SESSION_GAME, PlayerCache[playerid][pSession][SESSION_AFK]);
-	OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+	
+	orm_update(PlayerCache[playerid][pOrm]);
+	orm_destroy(PlayerCache[playerid][pOrm]);
 	return 1;
 }
 
@@ -4474,95 +4533,6 @@ public SetPlayerSpawn(playerid)
 	return 1;
 }
 
-public OnPlayerSave(playerid, what)
-{
-	if(PlayerCache[playerid][pLogged])
-	{
-	    new query[512], main_query[1024];
-	    format(main_query, sizeof(main_query), "UPDATE `"SQL_PREF"characters` SET");
-	    
-	    if(what & SAVE_PLAYER_BASIC)
-	    {
-	        // Podstawy (czas gry, skin, pieni¹dze, ¿ycie, block, crash, areszt, si³a, uzale¿nienie, bw, aj, praca, dokumenty)
-	        format(query, sizeof(query), " char_hours = '%d', char_minutes = '%d', char_cash = '%d', char_bankcash = '%d', char_banknumb = '%d', char_skin = '%d', char_health = '%f', char_crash = '%d', char_arrest = '%d', char_strength = '%d', char_dependence = '%f', char_bw = '%d', char_aj = '%d', char_house = '%d', char_job = '%d', char_documents = '%d', char_lastskin = '%d', char_mileage = '%f'",
-	        PlayerCache[playerid][pHours],
-	        PlayerCache[playerid][pMinutes],
-	        
-	        PlayerCache[playerid][pCash],
-	        
-	        PlayerCache[playerid][pBankCash],
-	        PlayerCache[playerid][pBankNumber],
-	        
-	        PlayerCache[playerid][pSkin],
-	        PlayerCache[playerid][pHealth],
-	        
-			PlayerCache[playerid][pCrash],
-			PlayerCache[playerid][pArrest],
-			
-			PlayerCache[playerid][pStrength],
-			PlayerCache[playerid][pDepend],
-
-			PlayerCache[playerid][pBW],
-			PlayerCache[playerid][pAJ],
-
-			PlayerCache[playerid][pHouse],
-			PlayerCache[playerid][pJob],
-
-			PlayerCache[playerid][pDocuments],
-			PlayerCache[playerid][pLastSkin],
-
-			PlayerCache[playerid][pMileage]);
-	        
-       		if(strlen(main_query) > 32)
-			{
-	  			strcat(main_query, ",", sizeof(main_query));
-			}
-			strcat(main_query, query, sizeof(main_query));
-	    }
-	    
-	    if(what & SAVE_PLAYER_POS)
-	    {
-			// Pozycja (x, y, z, virtual world, interior)
-	        format(query, sizeof(query), " char_posx = '%f', char_posy = '%f', char_posz = '%f', char_world = '%d', char_interior = '%d'",
-	        PlayerCache[playerid][pPosX],
-	        PlayerCache[playerid][pPosY],
-	        PlayerCache[playerid][pPosZ],
-
-			PlayerCache[playerid][pVirtualWorld],
-			PlayerCache[playerid][pInteriorID]);
-	        
-       		if(strlen(main_query) > 32)
-			{
-	  			strcat(main_query, ",", sizeof(main_query));
-			}
-			strcat(main_query, query, sizeof(main_query));
-	    }
-	    
-	    if(what & SAVE_PLAYER_SETTING)
-	    {
-  			// Ustawienia (styl rozmowy, animacja chodzenia)
-	        format(query, sizeof(query), " char_talkstyle = '%d', char_walkstyle = '%d', char_fightstyle = '%d', char_ooc = '%d'",
-			PlayerCache[playerid][pTalkStyle],
-			GetAnimUID(PlayerCache[playerid][pWalkStyle]),
-			
-			PlayerCache[playerid][pFightStyle],
-			PlayerCache[playerid][pOOC]);
-
-       		if(strlen(main_query) > 32)
-			{
-	  			strcat(main_query, ",", sizeof(main_query));
-			}
-			strcat(main_query, query, sizeof(main_query));
-	    }
-	    
-    	format(query, sizeof(query), " WHERE char_uid = '%d' LIMIT 1", PlayerCache[playerid][pUID]);
-		strcat(main_query, query, sizeof(main_query));
-
-		mysql_query(connHandle, main_query);
-	}
-	return 1;
-}
-
 public OnPlayerDeath(playerid, killerid, reason)
 {
 	if(killerid != INVALID_PLAYER_ID)
@@ -4617,7 +4587,7 @@ public OnPlayerDeath(playerid, killerid, reason)
 	GetPlayerPos(playerid, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]);
 
 	PlayerCache[playerid][pHealth] = 24;
-	OnPlayerSave(playerid, SAVE_PLAYER_POS);
+	orm_update(PlayerCache[playerid][pOrm]);
 	return 1;
 }
 
@@ -5635,6 +5605,12 @@ public OnPlayerEnterRaceCheckpoint(playerid)
 	return 1;
 }
 
+public OnQueryError(errorid, error[], callback[], query[], connectionHandle)
+{
+    printf("ERROR [%d]: %s (%s) \"%s\"", errorid, error, callback, query);
+	return 1;
+}
+
 public OnPlayerLeaveRaceCheckpoint(playerid)
 {
 	return 1;
@@ -5843,7 +5819,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 		            return 1;
 		        }
 		        crp_GivePlayerMoney(playerid, -AccessData[access_id][aPrice]);
-		        OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+		        orm_update(PlayerCache[playerid][pOrm]);
 		        
        			ResetPlayerCamera(playerid);
 				OnPlayerFreeze(playerid, false, 0);
@@ -5891,7 +5867,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 		            return 1;
 		        }
 		        crp_GivePlayerMoney(playerid, -SkinData[skin_id][sPrice]);
-		        OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+		        orm_update(PlayerCache[playerid][pOrm]);
 
        			ResetPlayerCamera(playerid);
 				OnPlayerFreeze(playerid, false, 0);
@@ -6043,7 +6019,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 		        
 		        PlayerCache[playerid][pSelectTalkStyle] = false;
 		    
-				OnPlayerSave(playerid, SAVE_PLAYER_SETTING);
+				orm_update(PlayerCache[playerid][pOrm]);
 				TD_ShowSmallInfo(playerid, 3, "Wybrany styl zostal ~g~pomyslnie ~w~zapisany.");
 		    }
 		}
@@ -6856,7 +6832,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new password[64];
+	        new password[256];
 	        if(strlen(inputtext) >= 32 || strlen(inputtext) <= 0)
 	        {
 				PlayerCache[playerid][pLogTries] --;
@@ -6866,7 +6842,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				return 1;
 			}
 			
-			mysql_escape_string(inputtext, password, 64);
+			mysql_escape_string(inputtext, password, connHandle, 256);
 			bcrypt_check(password, PlayerCache[playerid][pPassword], "OnPlayerPasswordChecked", "d", playerid);
 			return 1;
 		}
@@ -6920,7 +6896,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    if(PlayerCache[playerid][pWalkStyle] != INVALID_ANIM_ID)
 			    {
 			        PlayerCache[playerid][pWalkStyle] = INVALID_ANIM_ID;
-					OnPlayerSave(playerid, SAVE_PLAYER_SETTING);
+					orm_update(PlayerCache[playerid][pOrm]);
 			        
 			        TD_ShowSmallInfo(playerid, 3, "Animacja chodzenia ~r~wylaczona~w~.");
 			        return 1;
@@ -6955,7 +6931,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
        				PlayerCache[playerid][pOOC] = true;
 			        TD_ShowSmallInfo(playerid, 5, "Czat OOC ~g~wlaczony~w~.~n~Wiadomosci na ~y~/b ~w~beda teraz widoczne na czacie.");
 			    }
-				OnPlayerSave(playerid, SAVE_PLAYER_SETTING);
+				orm_update(PlayerCache[playerid][pOrm]);
 			    return 1;
 			}
 			
@@ -8064,7 +8040,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			}
 			
 			PlayerCache[playerid][pBankCash] -= check_price;
-			OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+			orm_update(PlayerCache[playerid][pOrm]);
 
 			format(item_name, sizeof(item_name), "Czek na $%d", check_price);
             CreatePlayerItem(playerid, item_name, ITEM_CHECK, check_price, 0);
@@ -8142,7 +8118,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
         		    group_activity = product_price;
 
 				crp_GivePlayerMoney(playerid, -product_price);
-				OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+				orm_update(PlayerCache[playerid][pOrm]);
 
 				new group_id = GetGroupID(DoorCache[doorid][dOwner]);
 				
@@ -8602,7 +8578,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
      		new bank_number = 100000000 + random(999999999);
      		
 	        PlayerCache[playerid][pBankNumber] = bank_number;
-			OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+			orm_update(PlayerCache[playerid][pOrm]);
 
 	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Konto bankowe zosta³o za³o¿one pomyœlnie.\nTwój nowy numer konta: %d.", PlayerCache[playerid][pBankNumber]);
 	        return 1;
@@ -8665,7 +8641,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
    			crp_GivePlayerMoney(playerid, -deposit_cash);
 			PlayerCache[playerid][pBankCash] += deposit_cash;
 
-			OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+			orm_update(PlayerCache[playerid][pOrm]);
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Na konto bankowe wp³acono kwotê $%d.\nNowy stan konta: $%d", deposit_cash, PlayerCache[playerid][pBankCash]);
 
 			printf("[cash] %s (UID: %d, GID: %d) wp³aci³ $%d na swoje konto bankowe (bank: $%d, portfel: $%d).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], deposit_cash, PlayerCache[playerid][pBankCash], PlayerCache[playerid][pCash]);
@@ -8689,7 +8665,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			PlayerCache[playerid][pBankCash] -= withdraw_cash;
 			crp_GivePlayerMoney(playerid, withdraw_cash);
 
-			OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+			orm_update(PlayerCache[playerid][pOrm]);
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Z konta bankowego wyp³acono kwotê $%d.\nNowy stan konta: $%d", withdraw_cash, PlayerCache[playerid][pBankCash]);
 
             printf("[cash] %s (UID: %d, GID: %d) wyp³aci³ $%d ze swojego konta bankowego (bank: $%d, portfel: $%d).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], withdraw_cash, PlayerCache[playerid][pBankCash], PlayerCache[playerid][pCash]);
@@ -8758,14 +8734,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			if(giveplayer_id != INVALID_PLAYER_ID && PlayerCache[giveplayer_id][pLogged] && PlayerCache[giveplayer_id][pSpawned])
 			{
                 PlayerCache[giveplayer_id][pBankCash] += transfer_cash;
-                OnPlayerSave(giveplayer_id, SAVE_PLAYER_BASIC);
+                orm_update(PlayerCache[giveplayer_id][pOrm]);
 			}
 			else
 			{
    				mysql_query_format("UPDATE `"SQL_PREF"characters` SET char_bankcash = char_bankcash + %d WHERE char_uid = '%d' LIMIT 1", transfer_cash, char_uid);
 			}
 			PlayerCache[playerid][pBankCash] -= transfer_cash;
-			OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+			orm_update(PlayerCache[playerid][pOrm]);
 
 			if(transfer_cash >= 10000)  GivePlayerAchievement(playerid, ACHIEVE_INTEREST);
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pieni¹dze zosta³y pomyœlnie przelane.\nPrzelana iloœæ gotówki: %d\n\nGotówka zosta³a pobrana z Twojego konta bankowego.", transfer_cash);
@@ -9551,7 +9527,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			new anim_id = listitem;
 			
 			PlayerCache[playerid][pWalkStyle] = anim_id;
-			OnPlayerSave(playerid, SAVE_PLAYER_SETTING);
+			orm_update(PlayerCache[playerid][pOrm]);
 			
 			TD_ShowSmallInfo(playerid, 3, "Animacja chodzenia zostala ~g~pomyslnie ~w~wybrana.~n~Klawisz ~r~~k~~SNEAK_ABOUT~ ~w~aktywuje animacje.");
 	        return 1;
@@ -9857,7 +9833,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	    if(response)
 	    {
 	        PlayerCache[playerid][pJob] = PlayerCache[playerid][pMainTable];
-	        OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+	        orm_update(PlayerCache[playerid][pOrm]);
 	        
 	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Gratulacje! Podj¹³eœ siê nowej pracy dorywczej.\nSkorzystaj z komendy /pomoc, by zobaczyæ dodatkowe przywileje.");
 	        return 1;
@@ -10436,56 +10412,42 @@ public OnPlayerClickPlayer(playerid, clickedplayerid, source)
 public OnPlayerClickTextDraw(playerid, Text:clickedid)
 {
 	new string[128];
-	
-	// Jeœli kliknie na grupowe gui
-	for(new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
+
+	// Okno opcji grup
+	if(PlayerCache[playerid][pListPlayerGroups])
 	{
-		if(clickedid == TextDrawGroupOption[group_slot][GROUP_OPTION_INFO])
+		if(clickedid != Text:INVALID_TEXT_DRAW)
 		{
-			format(string, sizeof(string), "%d info", group_slot + 1);
-			cmd_g(playerid, string);
+			for(new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
+			{
+				for(new group_option = 0; group_option < 6; group_option++)
+				{
+					if(TD_GroupOption[group_option][group_slot] == clickedid)
+					{
+					    new option[24];
+					    switch(group_option)
+					    {
+					        case 0: option = "info";
+					        case 1: option = "magazyn";
+					        case 2:
+					        {
+					            option = "sluzba";
+					            //PlayerCache[playerid][pDuty][DUTY_GROUP] = PlayerGroup[playerid][group_slot][gpID];
+					        }
+					        case 3: option = "pojazdy";
+					        case 4: option = "online";
+					        case 5: option = "zadania";
+					    }
 
-			CancelSelectTextDraw(playerid);
+					    // pc_cmd_grupa(playerid, option);
+					    new string[64], group_id = PlayerGroup[playerid][group_slot][gpID];
+					    format(string, sizeof(string), "Klikn¹³eœ na %s dla grupy %s [UID: %d]", option, GroupData[group_id][gName], PlayerGroup[playerid][group_slot][gpUID]);
+						SendClientMessage(playerid, COLOR_RED, string);
+					}
+				}
+			}
 		}
-
-		if(clickedid == TextDrawGroupOption[group_slot][GROUP_OPTION_CARS])
-		{
-			format(string, sizeof(string), "%d pojazdy", group_slot + 1);
-			cmd_g(playerid, string);
-
-			CancelSelectTextDraw(playerid);
-		}
-
-		if(clickedid == TextDrawGroupOption[group_slot][GROUP_OPTION_DUTY])
-		{
-			format(string, sizeof(string), "%d duty", group_slot + 1);
-			cmd_g(playerid, string);
-
-			CancelSelectTextDraw(playerid);
-		}
-
-		if(clickedid == TextDrawGroupOption[group_slot][GROUP_OPTION_MAGAZINE])
-		{
-			format(string, sizeof(string), "%d magazyn", group_slot + 1);
-			cmd_g(playerid, string);
-
-			CancelSelectTextDraw(playerid);
-		}
-
-		if(clickedid == TextDrawGroupOption[group_slot][GROUP_OPTION_ONLINE])
-		{
-			format(string, sizeof(string), "%d online", group_slot + 1);
-			cmd_g(playerid, string);
-
-			CancelSelectTextDraw(playerid);
-		}
-
-		TextDrawHideForPlayer(playerid, Text:TextDrawGroupsTitle);
-
-		PlayerTextDrawSetString(playerid, PlayerText:TextDrawGroups[playerid][group_slot], "_");
-		PlayerTextDrawHide(playerid, PlayerText:TextDrawGroups[playerid][group_slot]);
-
-		for(new option_id = 0; option_id < 5; option_id++)	TextDrawHideForPlayer(playerid, Text:TextDrawGroupOption[group_slot][option_id]);
+		CallLocalFunction("HidePlayerGroupOptions", "d", playerid);
 	}
 	
 	new offererid = GetOffererID(playerid);
@@ -11005,44 +10967,37 @@ public DeleteGroup(group_id)
 	return 1;
 }
 
-public LoadGroups()
+public query_OnLoadGroups()
 {
-	new group_id, data[128];
-	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"groups`");
+	new rows, group_id, ORM:orm_id;
+	rows = cache_get_row_count(connHandle);
 
-	print("[load] Rozpoczynam proces wczytywania wszystkich grup...");
-
-	mysql_store_result();
-	while(mysql_fetch_row_format(data, "|"))
+	for(new row = 0; row != rows; row++)
 	{
-		sscanf(data, "p<|>ds[32]ddddddxds[5]dd",
-		GroupData[group_id][gUID],
-		GroupData[group_id][gName],
+ 		group_id = Iter_Free(Groups);
+   		orm_id = GroupData[group_id][gOrm] = orm_create(""SQL_PREF"game_groups", connHandle);
 
-		GroupData[group_id][gCash],
-		GroupData[group_id][gDotation],
+		orm_addvar_int(orm_id, GroupData[group_id][gUID], "group_uid");
+		orm_addvar_string(orm_id, GroupData[group_id][gName], 32, "group_name");
 
-		GroupData[group_id][gType],
-		GroupData[group_id][gOwner],
+		orm_addvar_int(orm_id, GroupData[group_id][gType], "group_type");
+		orm_addvar_int(orm_id, GroupData[group_id][gCash], "group_cash");
 
-		GroupData[group_id][gValue1],
-		GroupData[group_id][gValue2],
+		orm_addvar_string(orm_id, GroupData[group_id][gTag], 5, "group_tag");
 
-		GroupData[group_id][gColor],
-		GroupData[group_id][gActivity],
-		
-		GroupData[group_id][gTag],
-		GroupData[group_id][gLastTax],
+		orm_addvar_int(orm_id, GroupData[group_id][gColor], "group_color");
+		orm_addvar_int(orm_id, GroupData[group_id][gFlags], "group_flags");
 
-		GroupData[group_id][gFlags]);
+		orm_addvar_int(orm_id, GroupData[group_id][gOwner], "group_owner");
+
+		orm_setkey(orm_id, "group_uid");
+		orm_apply_cache(orm_id, row);
 
 		Iter_Add(Groups, group_id);
-		group_id ++;
+		printf("ORM_ID: %d, ID: %d, UID: %d, NAME: %s", orm_id, group_id, GroupData[group_id][gUID], GroupData[group_id][gName]);
 	}
-	mysql_free_result();
-	
 	printf("[load] Proces wczytywania grup zosta³ zakoñczony (count: %d).", Iter_Count(Groups));
-	return 1;
+	return rows;
 }
 
 public ShowPlayerGroupInfo(playerid, group_id)
@@ -11092,38 +11047,92 @@ public ShowPlayerGroupInfo(playerid, group_id)
 	return 1;
 }
 
+public ShowPlayerGroupOptions(playerid)
+{
+	new string[256], group_id;
+	for (new slot = 0; slot < MAX_GROUP_SLOTS; slot++)
+	{
+	    if(PlayerGroup[playerid][slot][gpUID])
+	    {
+			group_id = PlayerGroup[playerid][slot][gpID];
+
+			/*if(PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
+			{
+		    	format(string, sizeof(string), "~>~ %s ~o~~n~~n~~n~~n~~n~~n~~n~", GroupData[group_id][gTag]);
+			}
+			else
+			{*/
+   			format(string, sizeof(string), "~>~ %s ~n~~n~~n~~n~~n~~n~~n~", GroupData[group_id][gTag]);
+			//}
+			PlayerTextDrawSetString(playerid, TD_MainGroupTag[playerid][slot], string);
+			PlayerTextDrawColor(playerid, TD_MainGroupTag[playerid][slot], GroupData[group_id][gColor]);
+
+			format(string, sizeof(string), "%s (%d)", GroupData[group_id][gName], GroupData[group_id][gUID]);
+			PlayerTextDrawSetString(playerid, TD_MainGroupName[playerid][slot], string);
+
+			PlayerTextDrawShow(playerid, TD_MainGroupTag[playerid][slot]);
+			PlayerTextDrawShow(playerid, TD_MainGroupName[playerid][slot]);
+
+			for(new group_option = 0; group_option != 6; group_option++)	TextDrawShowForPlayer(playerid, TD_GroupOption[group_option][slot]);
+		}
+	}
+	SelectTextDraw(playerid, COLOR_GREEN);
+	PlayerCache[playerid][pListPlayerGroups] = true;
+	return 1;
+}
+
+public HidePlayerGroupOptions(playerid)
+{
+	for (new slot = 0; slot < MAX_GROUP_SLOTS; slot++)
+	{
+		PlayerTextDrawHide(playerid, TD_MainGroupTag[playerid][slot]);
+		PlayerTextDrawHide(playerid, TD_MainGroupName[playerid][slot]);
+
+		for(new group_option = 0; group_option != 6; group_option++)	TextDrawHideForPlayer(playerid, TD_GroupOption[group_option][slot]);
+	}
+	CancelSelectTextDraw(playerid);
+	PlayerCache[playerid][pListPlayerGroups] = false;
+	return 1;
+}
+
 public LoadPlayerGroups(playerid)
 {
-	new data[128], group_uid, group_id, group_slot;
-	mysql_query_format("SELECT `group_uid`, `group_perm`, `group_title`, `group_payment`, `group_skin`, `group_tag`, `group_color`, `group_flags` FROM `crp_groups`, `crp_char_groups` WHERE crp_groups.group_uid = crp_char_groups.group_belongs AND char_uid = '%d' LIMIT %d", PlayerCache[playerid][pUID], MAX_GROUP_SLOTS);
+	new query[512];
 
-	mysql_store_result();
-	while(mysql_fetch_row_format(data, "|"))
-	{
-	    sscanf(data, "p<|>d", group_uid);
-	    group_id = GetGroupID(group_uid);
+	format(query, sizeof(query), "SELECT `group_uid`, `group_perm`, `group_title`, `group_payment`, `group_skin`, `group_tag`, `group_color`, `group_flags` FROM `"SQL_PREF"game_groups`, `"SQL_PREF"char_groups` WHERE "SQL_PREF"game_groups.group_uid = "SQL_PREF"char_groups.group_belongs AND char_uid = '%d' LIMIT %d", PlayerCache[playerid][pUID], MAX_GROUP_SLOTS);
+	mysql_tquery(connHandle, query, "query_OnLoadPlayerGroups", "d", playerid);
+	return 1;
+}
+
+public query_OnLoadPlayerGroups(playerid)
+{
+	new rows, group_slot, group_id, group_uid;
+	rows = cache_get_row_count(connHandle);
 	
-	    if(group_id == INVALID_GROUP_ID)    continue;
-	    
-	    sscanf(data, "p<|>dds[32]dds[5]dd",
-		PlayerGroup[playerid][group_slot][gpUID],
+	for(new row = 0; row != rows; row++)
+	{
+	    group_uid = cache_get_row_int(row, 0, connHandle);
+        group_id = GetGroupID(group_uid);
+        
+		if(group_id == INVALID_GROUP_ID)    continue;
 
-		PlayerGroup[playerid][group_slot][gpPerm],
-		PlayerGroup[playerid][group_slot][gpTitle],
+		PlayerGroup[playerid][group_slot][gpUID] = GroupData[group_id][gUID];
 
-		PlayerGroup[playerid][group_slot][gpPayment],
-		PlayerGroup[playerid][group_slot][gpSkin],
-
-		GroupData[group_id][gTag],
-		GroupData[group_id][gColor],
-
-		GroupData[group_id][gFlags]);
+		PlayerGroup[playerid][group_slot][gpPerm] = cache_get_row_int(row, 1, connHandle);
+		cache_get_row(row, 2, PlayerGroup[playerid][group_slot][gpTitle], connHandle, 32);
 		
+		PlayerGroup[playerid][group_slot][gpPayment] = cache_get_row_int(row, 3, connHandle);
+		PlayerGroup[playerid][group_slot][gpSkin] = cache_get_row_int(row, 4, connHandle);
+
+        cache_get_row(row, 5, GroupData[group_id][gTag], connHandle, 5);
+
+        GroupData[group_id][gColor] = cache_get_row_int(row, 6, connHandle);
+        GroupData[group_id][gFlags] = cache_get_row_int(row, 7, connHandle);
+
 		PlayerGroup[playerid][group_slot][gpID] = group_id;
 		group_slot ++;
 	}
-	mysql_free_result();
-	return 1;
+	return rows;
 }
 
 public CreateStaticVehicle(modelid, Float:PosX, Float:PosY, Float:PosZ, Float:PosA, color1, color2, respawn_delay)
@@ -12477,7 +12486,7 @@ public OnPlayerUseItem(playerid, itemid)
 			SaveItem(itemid, SAVE_ITEM_VALUES);
 			
 			crp_GivePlayerMoney(playerid, -price);
-			OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+			orm_update(PlayerCache[playerid][pOrm]);
 			
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Uda³o siê pomyœlnie zape³niæ %s (UID: %d).\nObecna iloœæ paliwa: %dL", ItemCache[itemid][iName], ItemCache[itemid][iUID], ItemCache[itemid][iValue1]);
 	        return 1;
@@ -12690,7 +12699,7 @@ public OnPlayerUseItem(playerid, itemid)
 		    return 0;
 		}
 		PlayerCache[playerid][pBankCash] += ItemCache[itemid][iValue1];
-		OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+		orm_update(PlayerCache[playerid][pOrm]);
 
 		format(string, sizeof(string), "* %s realizuje czek na $%d.", PlayerName(playerid), ItemCache[itemid][iValue1]);
 		ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
@@ -13168,7 +13177,7 @@ public OnPlayerUseItem(playerid, itemid)
 			SetPlayerCameraLookAt(playerid, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ], CAMERA_CUT);
 
 			OnPlayerFreeze(playerid, true, 0);
-			OnPlayerSave(playerid, SAVE_PLAYER_POS);
+			orm_update(PlayerCache[playerid][pOrm]);
 
 			TD_ShowSmallInfo(playerid, 5, "Przesadziles z ~r~uzywkami~w~, straciles przytomnosc.");
 
@@ -13431,7 +13440,7 @@ public OnPlayerUseItem(playerid, itemid)
     			{
 					if(GetPlayerAreaID(i) == areaid)
 					{
-		   				Audio_Stop(i, PlayerCache[playerid][pAudioHandle]);
+		   				//Audio_Stop(i, PlayerCache[playerid][pAudioHandle]);
 					    PlayerCache[i][pAudioHandle] = 0;
 					}
 				}
@@ -13470,7 +13479,7 @@ public OnPlayerUseItem(playerid, itemid)
    				    {
    				        if(PlayerCache[i][pCurrentArea] == PlayerCache[playerid][pCurrentArea])
    				        {
-   				            PlayerCache[i][pAudioHandle] = Audio_PlayStreamed(i, audio_url);
+   				            //PlayerCache[i][pAudioHandle] = Audio_PlayStreamed(i, audio_url);
    				        }
    				    }
    				}
@@ -15289,7 +15298,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 		PlayerCache[playerid][pFightStyle] = style + 4;
 		SetPlayerFightingStyle(playerid, PlayerCache[playerid][pFightStyle]);
 		
-		OnPlayerSave(playerid, SAVE_PLAYER_SETTING);
+		orm_update(PlayerCache[playerid][pOrm]);
 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Gratulacje! Twoja postaæ pozna³a now¹ sztukê walki.\nOd teraz podczas walk pos³ugiwaæ siê bêdzie tylko i wy³¹cznie nim.\n\nNauczono siê nowego stylu: %s", FightStyleData[style][0]);
 	}
 	
@@ -15334,8 +15343,8 @@ public OnPlayerAcceptOffer(playerid, offererid)
 	TD_ShowSmallInfo(playerid, 5, "Oferta od %s zostala ~g~zaakceptowana~w~.", PlayerName(offererid));
 	TD_ShowSmallInfo(offererid, 5, "%s ~g~zaakceptowal ~w~Twoja oferte.", PlayerName(playerid));
 
-	OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
-	OnPlayerSave(offererid, SAVE_PLAYER_BASIC);
+	orm_update(PlayerCache[playerid][pOrm]);
+	orm_update(PlayerCache[offererid][pOrm]);
 	
 	printf("[offe] %s (UID: %d, GID: %d) zaakceptowa³ ofertê gracza %s (UID: %d, GID: %d). Typ oferty: %s, nazwa: %s, wartoœci: %d/%d, cena: $%d.", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerName(offererid), PlayerCache[offererid][pUID], PlayerCache[offererid][pGID], OfferTypeInfo[OfferData[offererid][oType]][oTypeName], OfferData[offererid][oName], OfferData[offererid][oValue1], OfferData[offererid][oValue2], OfferData[offererid][oPrice]);
 
@@ -15467,7 +15476,7 @@ public OnPlayerEnterDoor(playerid, doorid)
         if(PlayerCache[playerid][pHours] > 5)
         {
 			crp_GivePlayerMoney(playerid, -DoorCache[doorid][dEnterPay]);
-			OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+			orm_update(PlayerCache[playerid][pOrm]);
 			
 	        if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
 	        {
@@ -15475,7 +15484,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 				if(owner_id != INVALID_PLAYER_ID && PlayerCache[owner_id][pLogged] && PlayerCache[owner_id][pSpawned])
 				{
 					PlayerCache[owner_id][pBankCash] += DoorCache[doorid][dEnterPay];
-					OnPlayerSave(owner_id, SAVE_PLAYER_BASIC);
+					orm_update(PlayerCache[owner_id][pOrm]);
 				}
 				else
 				{
@@ -15602,7 +15611,7 @@ public OnPlayerEnterDynamicArea(playerid, areaid)
 	if(strlen(AreaCache[areaid][aAudioURL]))
 	{
 	    if(PlayerCache[playerid][pItemPlayer] != INVALID_ITEM_ID)	return 1;
-		PlayerCache[playerid][pAudioHandle] = Audio_PlayStreamed(playerid, AreaCache[areaid][aAudioURL]);
+		//PlayerCache[playerid][pAudioHandle] = Audio_PlayStreamed(playerid, AreaCache[areaid][aAudioURL]);
 	}
 	return 1;
 }
@@ -15620,7 +15629,7 @@ public OnPlayerLeaveDynamicArea(playerid, areaid)
    			{
 				if(PlayerCache[i][pCurrentArea] == areaid)
 				{
-    				Audio_Stop(i, PlayerCache[playerid][pAudioHandle]);
+    				//Audio_Stop(i, PlayerCache[playerid][pAudioHandle]);
 				    PlayerCache[i][pAudioHandle] = 0;
 				}
 			}
@@ -15637,7 +15646,7 @@ public OnPlayerLeaveDynamicArea(playerid, areaid)
 	if(strlen(AreaCache[areaid][aAudioURL]))
 	{
  		if(PlayerCache[playerid][pItemPlayer] != INVALID_ITEM_ID)	return 1;
-		Audio_Stop(playerid, PlayerCache[playerid][pAudioHandle]);
+		//Audio_Stop(playerid, PlayerCache[playerid][pAudioHandle]);
 	}
 	return 1;
 }
@@ -15664,7 +15673,7 @@ public GivePlayerAchievement(playerid, achieve_type)
 	PlayerCache[playerid][pAchieveInfoTime] = 10;
 	SetPlayerScore(playerid, PlayerCache[playerid][pPoints]);
 	
-	Audio_Play(playerid, AUDIO_ACHIEVE);
+	//Audio_Play(playerid, AUDIO_ACHIEVE);
 	mysql_query_format("UPDATE `ipb_members`, `"SQL_PREF"characters` SET member_game_points = '%d', char_achievements = '%d' WHERE char_uid = '%d' AND member_id = '%d'", PlayerCache[playerid][pPoints], PlayerCache[playerid][pAchievements], PlayerCache[playerid][pUID], PlayerCache[playerid][pGID]);
 	return 1;
 }
@@ -16105,7 +16114,7 @@ CMD:qs(playerid, params[])
 	defer OnDestroyReasonLabel[15000](_:reason_label);
 
 	PlayerCache[playerid][pCrash] = gettime();
-	OnPlayerSave(playerid, SAVE_PLAYER_POS);
+	orm_update(PlayerCache[playerid][pOrm]);
 
 	defer OnKickPlayer(playerid);
 	return 1;
@@ -16428,31 +16437,7 @@ CMD:g(playerid, params[])
 		
 		if(IsPlayerInAnyGroup(playerid))
 		{
-			new string[128], group_id;
-			GivePlayerAchievement(playerid, ACHIEVE_GROUP);
-			TextDrawShowForPlayer(playerid, Text:TextDrawGroupsTitle);
-
-			for (new slot = 0; slot < MAX_GROUP_SLOTS; slot++)
-			{
-			    if(PlayerGroup[playerid][slot][gpUID])
-				{
-			        group_id = PlayerGroup[playerid][slot][gpID];
-			        if(PlayerCache[playerid][pDutyGroup] == GroupData[group_id][gUID])
-			        {
-			        	format(string, sizeof(string), "~g~~h~%d_____%s (%d)", slot + 1, GroupData[group_id][gName], GroupData[group_id][gUID]);
-					}
-					else
-					{
-					    format(string, sizeof(string), "%d_____%s (%d)", slot + 1, GroupData[group_id][gName], GroupData[group_id][gUID]);
-					}
-					PlayerTextDrawSetString(playerid, PlayerText:TextDrawGroups[playerid][slot], string);
-					PlayerTextDrawShow(playerid, PlayerText:TextDrawGroups[playerid][slot]);
-
-                    if(PlayerGroup[playerid][slot][gpPerm] & G_PERM_LEADER)   	GivePlayerAchievement(playerid, ACHIEVE_LEADER);
-					for(new option_id = 0; option_id < 5; option_id++)			TextDrawShowForPlayer(playerid, Text:TextDrawGroupOption[slot][option_id]);
-				}
-			}
-			SelectTextDraw(playerid, COLOR_RED);
+			ShowPlayerGroupOptions(playerid);
 		}
 		else
 		{
@@ -16732,7 +16717,7 @@ CMD:g(playerid, params[])
 	   	    return 1;
 	   	}
 	   	crp_GivePlayerMoney(playerid, price);
-	   	OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+	   	orm_update(PlayerCache[playerid][pOrm]);
 
 	   	GroupData[group_id][gCash] -= price;
 	   	SaveGroup(group_id);
@@ -16790,7 +16775,7 @@ CMD:g(playerid, params[])
 	   	new group_id = PlayerGroup[playerid][group_slot][gpID];
 
 		crp_GivePlayerMoney(playerid, -price);
-	   	OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+	   	orm_update(PlayerCache[playerid][pOrm]);
 
 	   	GroupData[group_id][gCash] += price;
 	   	SaveGroup(group_id);
@@ -17669,8 +17654,8 @@ CMD:pojazd(playerid, params[])
 				{
 	   				if(IsPlayerInRangeOfPoint(i, 10.0, VehPosX, VehPosY, VehPosZ))
 				    {
-				    	audio_handle = Audio_Play(i, AUDIO_ALARM);
-					    Audio_Set3DPosition(i, audio_handle, VehPosX, VehPosY, VehPosZ, 10.0);
+				    	//audio_handle = Audio_Play(i, AUDIO_ALARM);
+					    //Audio_Set3DPosition(i, audio_handle, VehPosX, VehPosY, VehPosZ, 10.0);
 					}
 				}
     		}
@@ -19039,8 +19024,8 @@ CMD:tel(playerid, params[])
 					{
 					    if(IsPlayerInRangeOfPoint(player, 10.0, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ]))
 					    {
-						    audio_handle = Audio_Play(player, AUDIO_CALLING, false, true);
-						    Audio_Set3DPosition(player, audio_handle, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 10.0);
+						    //audio_handle = Audio_Play(player, AUDIO_CALLING, false, true);
+						    //Audio_Set3DPosition(player, audio_handle, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 10.0);
 						}
 					}
 			    }
@@ -19093,10 +19078,10 @@ CMD:sms(playerid, params[])
 					{
 					    if(IsPlayerInRangeOfPoint(player, 10.0, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ]))
 					    {
-						    audio_handle = Audio_Play(player, AUDIO_SMS);
+						    //audio_handle = Audio_Play(player, AUDIO_SMS);
 						    
-						    Audio_SetFX(i, audio_handle, 6);
-						    Audio_Set3DPosition(player, audio_handle, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 10.0);
+						    //Audio_SetFX(i, audio_handle, 6);
+						    //Audio_Set3DPosition(player, audio_handle, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 10.0);
 						}
 					}
 			    }
@@ -19163,7 +19148,7 @@ CMD:dom(playerid, params[])
 		    return 1;
 		}
 		PlayerCache[giveplayer_id][pHouse] = DoorCache[doorid][dUID];
-		OnPlayerSave(giveplayer_id, SAVE_PLAYER_BASIC);
+		orm_update(PlayerCache[giveplayer_id][pOrm]);
 
 		SendClientFormatMessage(giveplayer_id, COLOR_LIGHTBLUE, "%s zaprosi³ Ciê do swojego domu.", PlayerName(playerid));
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Zaprosi³eœ gracza %s do swojego domu.", PlayerName(giveplayer_id));
@@ -19198,7 +19183,7 @@ CMD:dom(playerid, params[])
 		    return 1;
 		}
 		PlayerCache[giveplayer_id][pHouse] = 0;
-		OnPlayerSave(giveplayer_id, SAVE_PLAYER_BASIC);
+		orm_update(PlayerCache[giveplayer_id][pOrm]);
 
 		SendClientFormatMessage(giveplayer_id, COLOR_LIGHTBLUE, "%s wyprosi³ Ciê ze swojego domu.", PlayerName(playerid));
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wyprosi³eœ gracza %s ze swojego domu.", PlayerName(giveplayer_id));
@@ -22108,7 +22093,7 @@ CMD:tankuj(playerid, params[])
 	    return 1;
 	}
 	crp_GivePlayerMoney(playerid, -price);
-	OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
+	orm_update(PlayerCache[playerid][pOrm]);
 
 	CarInfo[vehid][cFuel] = floatadd(CarInfo[vehid][cFuel], value);
 	SaveVehicle(vehid, SAVE_VEH_COUNT);
@@ -22665,7 +22650,7 @@ CMD:w(playerid, params[])
 		    SendClientMessage(playerid, COLOR_SEND_PW, string);
 		}
 	}
-	Audio_Play(giveplayer_id, AUDIO_MESSAGE);
+	//Audio_Play(giveplayer_id, AUDIO_MESSAGE);
 	
 	PlayerCache[giveplayer_id][pLastW] = playerid;
 	PlayerCache[playerid][pLastW] = giveplayer_id;
@@ -22832,10 +22817,10 @@ CMD:m(playerid, params[])
 			{
 				if(IsPlayerInRangeOfPoint(i, 80.0, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]))
     			{
-    				audio_handle = Audio_Play(i, AUDIO_LSPD);
+    				//audio_handle = Audio_Play(i, AUDIO_LSPD);
     				
-    				Audio_SetFX(i, audio_handle, 4);
-				    Audio_Set3DPosition(i, audio_handle, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ], 80.0);
+    				//Audio_SetFX(i, audio_handle, 4);
+				    //Audio_Set3DPosition(i, audio_handle, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ], 80.0);
 				}
 			}
  		}
@@ -23653,7 +23638,7 @@ CMD:areszt(playerid, params[])
 		PlayerCache[giveplayer_id][pVirtualWorld] = GetPlayerVirtualWorld(giveplayer_id);
 
 		GetPlayerPos(giveplayer_id, PlayerCache[giveplayer_id][pPosX], PlayerCache[giveplayer_id][pPosY], PlayerCache[giveplayer_id][pPosZ]);
-		OnPlayerSave(giveplayer_id, SAVE_PLAYER_POS);
+		orm_update(PlayerCache[giveplayer_id][pOrm]);
 		
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "%s zosta³ pomyœlnie aresztowany na czas %d godzin.", PlayerName(giveplayer_id), time);
 		SendClientFormatMessage(giveplayer_id, COLOR_INFO, "%s aresztowa³ Ciê na czas %d godzin.", PlayerName(playerid), time);
@@ -24803,8 +24788,8 @@ CMD:pay(playerid, params[])
 	crp_GivePlayerMoney(playerid, -price);
 	crp_GivePlayerMoney(giveplayer_id, price);
 
-	OnPlayerSave(playerid, SAVE_PLAYER_BASIC);
-	OnPlayerSave(giveplayer_id, SAVE_PLAYER_BASIC);
+	orm_update(PlayerCache[playerid][pOrm]);
+	orm_update(PlayerCache[giveplayer_id][pOrm]);
 
 	ApplyAnimation(playerid, "DEALER", "shop_pay", 4.1, 0, 0, 0, 0, 0, true);
 
@@ -25854,7 +25839,7 @@ CMD:bw(playerid, params[])
 		SetPlayerCameraLookAt(giveplayer_id, PlayerCache[giveplayer_id][pPosX], PlayerCache[giveplayer_id][pPosY], PlayerCache[giveplayer_id][pPosZ], CAMERA_CUT);
 
         OnPlayerFreeze(giveplayer_id, true, 0);
-		OnPlayerSave(giveplayer_id, SAVE_PLAYER_POS);
+		orm_update(PlayerCache[giveplayer_id][pOrm]);
 
 		SendClientFormatMessage(giveplayer_id, COLOR_INFO, "%s na³o¿y³ Ci BW na czas %d min.", PlayerName(playerid), time);
 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Pomyœlnie na³o¿ono BW graczowi %s na czas %d min.", PlayerName(giveplayer_id), time);
@@ -26949,12 +26934,11 @@ stock TD_ShowSmallInfo(playerid, showTime = 5, infoString[], va_args<>)
 {
 	new string[512];
 	va_format(string, sizeof(string), infoString, va_start<3>);
-	
-	PlayerTextDrawSetString(playerid, PlayerText:TextDrawSmallInfo[playerid], string);
-	PlayerTextDrawAlignment(playerid, PlayerText:TextDrawSmallInfo[playerid], 1);
-	
-	PlayerTextDrawShow(playerid, PlayerText:TextDrawSmallInfo[playerid]);
-	PlayerCache[playerid][pSmallTextTime] = showTime;
+
+	PlayerTextDrawSetString(playerid, PlayerText:TD_SmallInfo[playerid], string);
+	PlayerTextDrawShow(playerid, PlayerText:TD_SmallInfo[playerid]);
+
+	PlayerCache[playerid][pSmallTextTime] = (showTime > 0) ? (gettime() + showTime) : 0;
 	return 1;
 }
 
@@ -26974,7 +26958,7 @@ stock TD_ShowLargeInfo(playerid, showTime = 5, infoString[], va_args<>)
 
 stock TD_HideSmallInfo(playerid)
 {
-	PlayerTextDrawHide(playerid, PlayerText:TextDrawSmallInfo[playerid]);
+	PlayerTextDrawHide(playerid, PlayerText:TD_SmallInfo[playerid]);
 	PlayerCache[playerid][pSmallTextTime] = 0;
 	return 1;
 }
@@ -26993,17 +26977,17 @@ stock TD_ShowDoor(playerid, showTime = 5, doorString[], va_args<>)
 	new string[512];
 	va_format(string, sizeof(string), doorString, va_start<3>);
 
-	PlayerTextDrawSetString(playerid, PlayerText:TextDrawSmallInfo[playerid], string);
-	PlayerTextDrawAlignment(playerid, PlayerText:TextDrawSmallInfo[playerid], 2);
+	PlayerTextDrawSetString(playerid, PlayerText:TD_SmallInfo[playerid], string);
+	PlayerTextDrawAlignment(playerid, PlayerText:TD_SmallInfo[playerid], 2);
 	
-	PlayerTextDrawShow(playerid, PlayerText:TextDrawSmallInfo[playerid]);
+	PlayerTextDrawShow(playerid, PlayerText:TD_SmallInfo[playerid]);
 	PlayerCache[playerid][pSmallTextTime] = showTime;
 	return 1;
 }
 
 stock TD_HideDoor(playerid)
 {
-	PlayerTextDrawHide(playerid, PlayerText:TextDrawSmallInfo[playerid]);
+	PlayerTextDrawHide(playerid, PlayerText:TD_SmallInfo[playerid]);
 	PlayerCache[playerid][pSmallTextTime] = 0;
 	return 1;
 }
@@ -27011,30 +26995,62 @@ stock TD_HideDoor(playerid)
 stock TD_CreateForPlayer(playerid)
 {
 	// TextDraw informacyjny (small)
-	TextDrawSmallInfo[playerid] = CreatePlayerTextDraw(playerid, 450.000000, 360.000000, "_");
-	PlayerTextDrawBackgroundColor(playerid, TextDrawSmallInfo[playerid], 255);
-	PlayerTextDrawFont(playerid, TextDrawSmallInfo[playerid], 1);
-	PlayerTextDrawLetterSize(playerid, TextDrawSmallInfo[playerid], 0.200000, 1.000000);
-	PlayerTextDrawColor(playerid, TextDrawSmallInfo[playerid], -1);
-	PlayerTextDrawSetOutline(playerid, TextDrawSmallInfo[playerid], 0);
-	PlayerTextDrawSetProportional(playerid, TextDrawSmallInfo[playerid], 1);
-	PlayerTextDrawSetShadow(playerid, TextDrawSmallInfo[playerid], 1);
-	PlayerTextDrawUseBox(playerid, TextDrawSmallInfo[playerid], 1);
-	PlayerTextDrawBoxColor(playerid, TextDrawSmallInfo[playerid], 85);
-	PlayerTextDrawTextSize(playerid, TextDrawSmallInfo[playerid], 614.000000, 140.000000);
+    TD_SmallInfo[playerid] = CreatePlayerTextDraw(playerid, 150.000000, 360.000000, "_");
+	PlayerTextDrawBackgroundColor(playerid, TD_SmallInfo[playerid], 255);
+	PlayerTextDrawFont(playerid, TD_SmallInfo[playerid], 1);
+	PlayerTextDrawLetterSize(playerid, TD_SmallInfo[playerid], 0.290000, 1.699999);
+	PlayerTextDrawColor(playerid, TD_SmallInfo[playerid], -1);
+	PlayerTextDrawSetOutline(playerid, TD_SmallInfo[playerid], 0);
+	PlayerTextDrawSetProportional(playerid, TD_SmallInfo[playerid], 1);
+	PlayerTextDrawSetShadow(playerid, TD_SmallInfo[playerid], 1);
+	PlayerTextDrawUseBox(playerid, TD_SmallInfo[playerid], 1);
+	PlayerTextDrawBoxColor(playerid, TD_SmallInfo[playerid], 0);
+	PlayerTextDrawTextSize(playerid, TD_SmallInfo[playerid], 500.000000, 0.000000);
 	//  *** *** //
 	
-	// TextDraw grup
-    for(new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
-    {
-		TextDrawGroups[playerid][group_slot] = CreatePlayerTextDraw(playerid, 100.000000, 182.000000 + group_slot * 15 + 1, "_");
-		PlayerTextDrawLetterSize(playerid, PlayerText:TextDrawGroups[playerid][group_slot], 0.219999, 1.100000);
-		PlayerTextDrawSetOutline(playerid, PlayerText:TextDrawGroups[playerid][group_slot], 1);
-		PlayerTextDrawUseBox(playerid, PlayerText:TextDrawGroups[playerid][group_slot], 1);
-		PlayerTextDrawBoxColor(playerid, PlayerText:TextDrawGroups[playerid][group_slot], 68);
-		PlayerTextDrawTextSize(playerid, PlayerText:TextDrawGroups[playerid][group_slot], 496.000000, 0.000000);
+	new Float:posX, Float:posY;
+	for(new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
+	{
+	    posX = 190.000000;
+		posY = 130.000000;
+
+		if(group_slot == 1) posX += 130.000000;
+		if(group_slot == 2) posY += 110.000000;
+		if(group_slot == 3)
+		{
+			posX += 130.000000;
+			posY += 110.000000;
+		}
+
+		TD_MainGroupTag[playerid][group_slot] = CreatePlayerTextDraw(playerid, posX, posY, "_");
+		TD_MainGroupName[playerid][group_slot] = CreatePlayerTextDraw(playerid, posX + 2.0, posY + 16.0, "_");
+
+		PlayerTextDrawBackgroundColor(playerid, TD_MainGroupTag[playerid][group_slot], 255);
+		PlayerTextDrawFont(playerid, TD_MainGroupTag[playerid][group_slot], 1);
+		PlayerTextDrawLetterSize(playerid, TD_MainGroupTag[playerid][group_slot], 0.410000, 1.500000);
+		PlayerTextDrawColor(playerid, TD_MainGroupTag[playerid][group_slot], -1);
+		PlayerTextDrawSetOutline(playerid, TD_MainGroupTag[playerid][group_slot], 1);
+		PlayerTextDrawSetProportional(playerid, TD_MainGroupTag[playerid][group_slot], 1);
+		PlayerTextDrawUseBox(playerid, TD_MainGroupTag[playerid][group_slot], 1);
+		PlayerTextDrawBoxColor(playerid, TD_MainGroupTag[playerid][group_slot], 68);
+
+		if(group_slot == 1 || group_slot == 3)
+		{
+			PlayerTextDrawTextSize(playerid, TD_MainGroupTag[playerid][group_slot], 440.000000, 150.000000);
+		}
+		else
+		{
+		    PlayerTextDrawTextSize(playerid, TD_MainGroupTag[playerid][group_slot], 310.000000, 150.000000);
+		}
+
+		PlayerTextDrawBackgroundColor(playerid, TD_MainGroupName[playerid][group_slot], 255);
+		PlayerTextDrawFont(playerid, TD_MainGroupName[playerid][group_slot], 1);
+		PlayerTextDrawLetterSize(playerid, TD_MainGroupName[playerid][group_slot], 0.200000, 1.000000);
+		PlayerTextDrawColor(playerid, TD_MainGroupName[playerid][group_slot], -1);
+		PlayerTextDrawSetOutline(playerid, TD_MainGroupName[playerid][group_slot], 0);
+		PlayerTextDrawSetProportional(playerid, TD_MainGroupName[playerid][group_slot], 1);
+		PlayerTextDrawSetShadow(playerid, TD_MainGroupName[playerid][group_slot], 1);
 	}
-	// ***  *** //
 	
 	// TextDrawOferty
 	TextDrawOfferDesc[playerid] = CreatePlayerTextDraw(playerid, 211.000000, 290.000000, "_");
@@ -27090,6 +27106,7 @@ stock TD_CreateForPlayer(playerid)
 	// ***  *** //
 	return 1;
 }
+
 
 stock HidePlayerGroups(playerid)
 {
@@ -28619,6 +28636,7 @@ stock IsValidObjectModel(model)
 
 stock PlayStreamedAudioForPlayer(playerid, streamString[])
 {
+	/*
 	// Jeœli klient w³¹czony
 	if(Audio_IsClientConnected(playerid))
 	{
@@ -28632,11 +28650,13 @@ stock PlayStreamedAudioForPlayer(playerid, streamString[])
 		StopAudioStreamForPlayer(playerid);
 		PlayAudioStreamForPlayer(playerid, streamString);
 	}
+	*/
 	return 1;
 }
 
 stock PlayStreamedAudio3DForPlayer(playerid, streamString[], Float:PosX, Float:PosY, Float:PosZ)
 {
+/*
 	if(Audio_IsClientConnected(playerid))
 	{
 	    Audio_StopRadio(playerid);
@@ -28651,11 +28671,13 @@ stock PlayStreamedAudio3DForPlayer(playerid, streamString[], Float:PosX, Float:P
 		StopAudioStreamForPlayer(playerid);
 		PlayAudioStreamForPlayer(playerid, streamString, PosX, PosY, PosZ, 10.0, true);
 	}
+*/
 	return 1;
 }
 
 stock StopStreamedAudioForPlayer(playerid)
 {
+	/*
 	if(PlayerCache[playerid][pAudioHandle])
 	{
 	    if(Audio_IsClientConnected(playerid))
@@ -28669,6 +28691,7 @@ stock StopStreamedAudioForPlayer(playerid)
 	{
 	    StopAudioStreamForPlayer(playerid);
 	}
+	*/
 	return 1;
 }
 
