@@ -822,7 +822,7 @@ forward ShowPlayerDoorInfo(playerid, doorid);
 forward CreatePlayerItem(playerid, item_name[], item_type, item_value1, item_value2);
 forward LoadItemCache(item_uid);
 forward SaveItem(itemid, what);
-forward DeleteItem(itemid);
+forward DeletePlayerItem(playerid, itemid);
 forward ShowPlayerItemInfo(playerid, item_uid);
 forward ListPlayerItems(playerid);
 forward ListPlayerCheckedItems(playerid);
@@ -2346,8 +2346,8 @@ public OnGameModeExit()
 
 task OnMinuteTask[60000]()
 {
-	new time, hour, minute, second;
-	time = gettime(hour, minute, second);
+	new hour, minute, second;
+	gettime(hour, minute, second);
 
 	// Godzina
 	static LastHour = 25;
@@ -3090,7 +3090,7 @@ task OnSecondTask[1000]()
 						RemovePlayerAttachedObject(i, SLOT_TRAIN);
 		    			TD_ShowSmallInfo(i, 3, "Trening zostal ~g~pomyslnie ~w~zakonczony.");
 					}
-					DeleteItem(itemid);
+					DeletePlayerItem(i,  itemid);
 
 					PlayerCache[i][pItemPass]    = INVALID_ITEM_ID;
 			  		PlayerCache[i][pGymTime]     = 0;
@@ -3153,14 +3153,14 @@ task OnSecondTask[1000]()
 				if(GetDistanceToVehicle(i, vehid) <= 4.0)
 				{
 					new itemid = PlayerCache[i][pItemWeapon];
-					if(itemid != INVALID_ITEM_ID && (keysa & KEY_FIRE) && ItemCache[itemid][iType] == ITEM_PAINT && GetPlayerState(i) == PLAYER_STATE_ONFOOT)
+					if(itemid != INVALID_ITEM_ID && (keysa & KEY_FIRE) && PlayerItemCache[i][itemid][iType] == ITEM_PAINT && GetPlayerState(i) == PLAYER_STATE_ONFOOT)
 					{
 				        if(IsPlayerFacingVehicle(i, vehid))
 				        {
-				            new weapon_ammo = GetPlayerWeaponAmmo(i, ItemCache[itemid][iValue1]);
-				            if(weapon_ammo < ItemCache[itemid][iValue2])
+				            new weapon_ammo = GetPlayerWeaponAmmo(i, PlayerItemCache[i][itemid][iValue][0]);
+				            if(weapon_ammo < PlayerItemCache[i][itemid][iValue][1])
 				            {
-		  						PlayerCache[i][pSprayTime] -= (ItemCache[itemid][iValue2] - weapon_ammo);
+		  						PlayerCache[i][pSprayTime] -= (PlayerItemCache[i][itemid][iValue][1] - weapon_ammo);
 								TD_ShowSmallInfo(i, 0, "Psikaj ~g~lakierem ~w~w strone pojazdu.~n~Pozostala wymagana ilosc: ~y~%d", PlayerCache[i][pSprayTime]);
 
 		  						new Text3D:label_id = PlayerCache[i][pSprayTag],
@@ -3236,29 +3236,29 @@ task OnSecondTask[1000]()
   					    new itemid = PlayerCache[i][pMontageItem];
 
   					    // Komponent tuningu
-  					    if(ItemCache[itemid][iType] == ITEM_TUNING)
+  					    if(PlayerItemCache[i][itemid][iType] == ITEM_TUNING)
   					    {
   					        new query[256];
   					        
-							mysql_format(connHandle, query, sizeof(query), "UPDATE `"SQL_PREF"items` SET item_place = '-1', item_owner = '0', item_vehuid = '%d' WHERE item_uid = '%d' LIMIT 1", CarInfo[vehid][cUID], ItemCache[itemid][iUID]);
+							mysql_format(connHandle, query, sizeof(query), "UPDATE `"SQL_PREF"items` SET item_place = '-1', item_owner = '0', item_vehuid = '%d' WHERE item_uid = '%d' LIMIT 1", CarInfo[vehid][cUID], PlayerItemCache[i][itemid][iUID]);
 							mysql_query(connHandle, query);
 							
-							crp_AddVehicleComponent(vehid, ItemCache[itemid][iValue1]);
+							crp_AddVehicleComponent(vehid, PlayerItemCache[i][itemid][iValue][0]);
 	  					    
-	  					    printf("[cars] W pojeŸdzie %s (UID: %d) zosta³ zamontowany komponent %s (UID: %d).", GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cUID], ItemCache[itemid][iName], ItemCache[itemid][iUID]);
-	  					    ClearItemCache(itemid);
+	  					    printf("[cars] W pojeŸdzie %s (UID: %d) zosta³ zamontowany komponent %s (UID: %d).", GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cUID], PlayerItemCache[i][itemid][iName], PlayerItemCache[i][itemid][iUID]);
+	  					    UnloadPlayerItem(i, itemid);
 						}
 
 						// Akcesoria (alarm, immobiliser, sprzêt audio [...])
-						if(ItemCache[itemid][iType] == ITEM_VEH_ACCESS)
+						if(PlayerItemCache[i][itemid][iType] == ITEM_VEH_ACCESS)
 						{
-						    CarInfo[vehid][cAccess] += ItemCache[itemid][iValue1];
-						    if(ItemCache[itemid][iValue1] & VEH_ACCESS_GAS)	CarInfo[vehid][cFuelType] = FUEL_TYPE_GAS;
+						    CarInfo[vehid][cAccess] += PlayerItemCache[i][itemid][iValue][0];
+						    if(PlayerItemCache[i][itemid][iValue][0] & VEH_ACCESS_GAS)	CarInfo[vehid][cFuelType] = FUEL_TYPE_GAS;
 						    
 						    SaveVehicle(vehid, SAVE_VEH_ACCESS);
 
-							printf("[cars] W pojeŸdzie %s (UID: %d) zosta³o zamontowane akcesorie %s (UID: %d).", GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cUID], ItemCache[itemid][iName], ItemCache[itemid][iUID]);
-						    DeleteItem(itemid);
+							printf("[cars] W pojeŸdzie %s (UID: %d) zosta³o zamontowane akcesorie %s (UID: %d).", GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cUID], PlayerItemCache[i][itemid][iName], PlayerItemCache[i][itemid][iUID]);
+						    DeletePlayerItem(i, itemid);
 						}
 						
 						PlayerCache[i][pMontageVeh] 	= INVALID_VEHICLE_ID;
@@ -4193,7 +4193,7 @@ public OnPlayerDisconnect(playerid, reason)
 		ItemCache[itemid][iValue1] --;
 		
 		if(ItemCache[itemid][iValue1] > 0)	SaveItem(itemid, SAVE_ITEM_VALUES);
-		else								DeleteItem(itemid);
+		else								DeletePlayerItem(playerid, itemid);
  	}
  	
  	// Boombox
@@ -7573,8 +7573,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	}
 	if(dialogid == D_ITEM_PLAYER_LIST)
 	{
-		 if(response)
-		 {
+		if(response)
+		{
 			// Funkcja zaznaczania
 			if(listitem == 0)
 			{
@@ -7602,7 +7602,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		else
 		{
 			if(listitem <= 2)   return 1;
-			
 
 			new itemid = DynamicGui_GetDataInt(playerid, listitem), title[128];
 			format(title, sizeof(title), "Opcje przedmiotu: %s (UID: %d)", PlayerItemCache[playerid][itemid][iName], PlayerItemCache[playerid][itemid][iUID]);
@@ -8134,33 +8133,30 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			}
 
         	new list_items[1024], item_uid, item_name[32], rows;
-        	format(list_items, sizeof(list_items), "Identyfikator\t*\tNazwa przedmiotu\n» Podnieœ\t%d\tprzedmioty/ów\n Zaznacz wszystkie\n---\n", Iter_Count(CheckedPlayerItem[playerid]));
 
 			DynamicGui_Init(playerid);
 
 			DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
 			DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
-
+            DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
 
 			cache_set_active(external_items_cache[playerid][PLACE_NONE]);
 
 		    cache_get_row_count(rows);
+		    format(list_items, sizeof(list_items), "Identyfikator\t*\tNazwa przedmiotu\n» Podnieœ\t%d\tprzedmioty/ów\n» Zaznacz wszystkie\n---\n", (select_all) ? rows : Iter_Count(CheckedPlayerItem[playerid]));
+
 			for(new row = 0; row != rows; row++)
 			{
 				cache_get_value_index_int(row, 0, item_uid);
 				cache_get_value_index(row, 1, item_name, 32);
 				
 				if(select_all)
-				{
-				    if(Iter_Contains(CheckedPlayerItem[playerid], row))
+    			{
+				    if(!Iter_Contains(CheckedPlayerItem[playerid], row))
 				    {
 						Iter_Add(CheckedPlayerItem[playerid], row);
-					}
-					else
-					{
-					    Iter_Remove(CheckedPlayerItem[playerid], row);
-					}
-				}
+     				}
+    			}
 
 				if(Iter_Contains(CheckedPlayerItem[playerid], row))
 				{
@@ -8291,7 +8287,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 
 			ApplyAnimation(playerid, "COLT45", "colt45_reload", 4.0, 0, 0, 0, 0, 0, 1);
-			DeleteItem(itemid);
+			DeletePlayerItem(playerid, itemid);
 	        return 1;
 	    }
 	    else
@@ -8333,7 +8329,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			}
 			else
 			{
-			    DeleteItem(itemid);
+			    DeletePlayerItem(playerid, itemid);
 			}
 
 			format(string, sizeof(string), "* %s wyrywa karteczkê z notatnika.", PlayerName(playerid));
@@ -8371,7 +8367,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			}
 			else
 			{
-			    DeleteItem(itemid);
+			    DeletePlayerItem(playerid, itemid);
 			}
 
  			format(string, sizeof(string), "* %s wypisuje czek na $%d.", PlayerName(playerid), check_price);
@@ -8685,7 +8681,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        
 	        if(list_item == 4)
 	        {
- 				new data[128], list_contacts[1024], contacts,
+ 				new list_contacts[1024], contacts,
      				contact_number, contact_name[24];
 
 				new rows, Cache:tmp_cache, query[256];
@@ -9225,7 +9221,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
              	ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdny numer kana³u.");
 	            return 1;
 	        }
-	        new vehid = GetPlayerVehicleID(playerid), radio_canal = strval(inputtext), data[64], string[128],
+	        new vehid = GetPlayerVehicleID(playerid), radio_canal = strval(inputtext), string[128],
 				channel_ownertype, channel_owner, channel_password[32];
 
 	        new rows, Cache:tmp_cache, query[256];
@@ -9372,7 +9368,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
              	ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdny numer kana³u.");
 	            return 1;
 	        }
-	        new radio_canal = strval(inputtext), data[32], string[256],
+	        new radio_canal = strval(inputtext), string[256],
 				channel_ownertype, channel_owner;
 
 	        new rows, Cache:tmp_cache, query[256];
@@ -10808,8 +10804,6 @@ public OnPlayerClickPlayer(playerid, clickedplayerid, source)
 
 public OnPlayerClickTextDraw(playerid, Text:clickedid)
 {
-	new string[128];
-
 	// Okno opcji grup
 	if(PlayerCache[playerid][pListPlayerGroups])
 	{
@@ -11398,10 +11392,9 @@ public query_OnLoadGroups()
 		orm_apply_cache(orm_id, row);
 
 		Iter_Add(Groups, group_id);
-		printf("ORM_ID: %d, ID: %d, UID: %d, NAME: %s", orm_id, group_id, GroupData[group_id][gUID], GroupData[group_id][gName]);
 	}
 	printf("[load] Proces wczytywania grup zosta³ zakoñczony (count: %d).", Iter_Count(Groups));
-	return rows;
+	return 1;
 }
 
 public ShowPlayerGroupInfo(playerid, group_id)
@@ -12435,10 +12428,12 @@ public SaveItem(itemid, what)
 	return 1;
 }
 
-public DeleteItem(itemid)
+public DeletePlayerItem(playerid, itemid)
 {
-	mysql_query_format("DELETE FROM `"SQL_PREF"items` WHERE item_uid = '%d' LIMIT 1", ItemCache[itemid][iUID]);
-	ClearItemCache(itemid);
+	orm_delete(PlayerItemCache[playerid][itemid][iOrm]);
+	for(new sPlayerItem:e; e < sPlayerItem; ++e)	PlayerItemCache[playerid][itemid][e] = 0;
+
+	Iter_Remove(PlayerItem[playerid], itemid);
 	return 1;
 }
 
@@ -12763,7 +12758,7 @@ public OnPlayerUseItem(playerid, itemid)
 		ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 
         ApplyAnimation(playerid, "FOOD", "EAT_Pizza", 4.0, 0, 0, 0, 0, 0, true);
-		DeleteItem(itemid);
+		DeletePlayerItem(playerid, itemid);
 	    return 1;
 	}
 	
@@ -12774,7 +12769,7 @@ public OnPlayerUseItem(playerid, itemid)
   		ItemCache[itemid][iValue1] --;
   		if(ItemCache[itemid][iValue1] <= 0)
 		{
-            DeleteItem(itemid);
+            DeletePlayerItem(playerid, itemid);
             return 1;
 		}
 		SaveItem(itemid, SAVE_ITEM_VALUES);
@@ -12870,7 +12865,7 @@ public OnPlayerUseItem(playerid, itemid)
 			else
 			{
    				ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Ta broñ zosta³a oflagowana specjalnie dla grupy!\nPrzedmiot zostanie usuniêty, ze wzglêdu na brak mo¿liwoœci jego u¿ytkowania (grupa nie istnieje).");
-				DeleteItem(itemid);
+				DeletePlayerItem(playerid, itemid);
 				return 0;
 			}
 		}
@@ -13097,7 +13092,7 @@ public OnPlayerUseItem(playerid, itemid)
 
 			ItemCache[itemid][iValue1] --;
 			if(ItemCache[itemid][iValue1] > 0)	SaveItem(itemid, SAVE_ITEM_VALUES);
-			else								DeleteItem(itemid);
+			else								DeletePlayerItem(playerid, itemid);
 		}
 	    return 1;
 	}
@@ -13214,7 +13209,7 @@ public OnPlayerUseItem(playerid, itemid)
 		ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Czek zosta³ pomyœlnie zrealizowany.\nNa Twoje konto bankowe przelano $%d.\n\nAktualny stan konta: $%d", ItemCache[itemid][iValue1], PlayerCache[playerid][pBankCash]);
-        DeleteItem(itemid);
+        DeletePlayerItem(playerid, itemid);
 	    return 1;
 	}
 	
@@ -13261,7 +13256,7 @@ public OnPlayerUseItem(playerid, itemid)
 		}
 		
 		SetPlayerSpecialAction(playerid, ItemCache[itemid][iValue1]);
-        DeleteItem(itemid);
+        DeletePlayerItem(playerid, itemid);
 	    return 1;
 	}
 	
@@ -13556,7 +13551,7 @@ public OnPlayerUseItem(playerid, itemid)
 		format(string, sizeof(string), "* %s spo¿ywa \"%s\".", PlayerName(playerid), ItemCache[itemid][iName]);
 		ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 
-		DeleteItem(itemid);
+		DeletePlayerItem(playerid, itemid);
 	    return 1;
 	}
 	
@@ -13589,7 +13584,7 @@ public OnPlayerUseItem(playerid, itemid)
 		        ItemCache[itemid][iValue2] --;
 		        if(ItemCache[itemid][iValue2] <= 0)
 		        {
-		            DeleteItem(itemid);
+		            DeletePlayerItem(playerid, itemid);
 		        }
 		        else
 		        {
@@ -13619,7 +13614,7 @@ public OnPlayerUseItem(playerid, itemid)
 					}
 					
 					PlayerCache[playerid][pDepend] += (0.1 * ItemCache[itemid][iValue2]);
-					DeleteItem(itemid);
+					DeletePlayerItem(playerid, itemid);
 				}
 				else
 				{
@@ -13641,7 +13636,7 @@ public OnPlayerUseItem(playerid, itemid)
 				}
 				
 				PlayerCache[playerid][pDepend] += (0.2 * ItemCache[itemid][iValue2]);
-				DeleteItem(itemid);
+				DeletePlayerItem(playerid, itemid);
 		    }
 		    case DRUG_AMPHETAMINE:
 		    {
@@ -13665,7 +13660,7 @@ public OnPlayerUseItem(playerid, itemid)
 				ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 		    
 		        PlayerCache[playerid][pDepend] += (0.1 * ItemCache[itemid][iValue2]);
-		        DeleteItem(itemid);
+		        DeletePlayerItem(playerid, itemid);
 		    }
 		    case DRUG_CONDITIONER:
 		    {
@@ -13683,7 +13678,7 @@ public OnPlayerUseItem(playerid, itemid)
 				format(string, sizeof(string), "* %s za¿ywa %s.", PlayerName(playerid), ItemCache[itemid][iName]);
 				ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 			
-				DeleteItem(itemid);
+				DeletePlayerItem(playerid, itemid);
 		    }
 		}
 		
@@ -13720,7 +13715,7 @@ public OnPlayerUseItem(playerid, itemid)
  		PlayerCache[playerid][pDrugType] = DRUG_MARIHUANA;
 	    PlayerCache[playerid][pDrugValue1] = 10 * ItemCache[itemid][iValue2];
 	
-	    DeleteItem(itemid);
+	    DeletePlayerItem(playerid, itemid);
 	    SetPlayerSpecialAction(playerid, SPECIAL_ACTION_SMOKE_CIGGY);
 	    
 	    TD_ShowSmallInfo(playerid, 7, "Odpaliles jointa, ~r~wciskaj ~w~rytmicznie klawisz ~y~~k~~PED_FIREWEAPON~~w~, by zazywac narkotyku.~n~~n~Po jakims czasie powinienes ~p~odczuwac ~w~efekty jego zazywania.");
@@ -13916,7 +13911,7 @@ public OnPlayerUseItem(playerid, itemid)
 		CreateExplosion(PosX, PosY, PosZ, 12, 5.0);
 
 		DoorCache[doorid][dFireData][FIRE_TIME] = 1;
-		DeleteItem(itemid);
+		DeletePlayerItem(playerid, itemid);
 	    return 1;
 	}
 	
@@ -14288,7 +14283,6 @@ public LoadPlayerItems(playerid)
 			orm_setkey(orm_id, "item_uid");
 			orm_apply_cache(orm_id, row, 0);
 
-			printf("ORm: %d, ItemUID: %d, ItemName: %s", orm_id, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
 			Iter_Add(PlayerItem[playerid], itemid);
 		}
 	}
@@ -14356,6 +14350,7 @@ public query_OnListPlayerNearItems(playerid, item_place)
 
 	DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
 	DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
+	DynamicGui_AddRow(playerid, D_ITEM_RAISE, 0);
 
     cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
@@ -14407,7 +14402,7 @@ public CreateArea(Float:AreaMinX, Float:AreaMinY, Float:AreaMaxX, Float:AreaMaxY
 
 public LoadArea(area_uid)
 {
-	new data[128], areaid = Iter_Free(Area);
+	new areaid = Iter_Free(Area);
 	/*
 	mysql_query_format("SELECT * FROM `"SQL_PREF"areas` WHERE area_uid = '%d' LIMIT 1", area_uid);
 	
@@ -14449,7 +14444,7 @@ public DeleteArea(areaid)
 
 public LoadAreas()
 {
-	new data[128], areaid;
+//	new data[128], areaid;
 	
 	/*
 	GangZoneCreate(0.0, 0.0, 0.0, 0.0);
@@ -14551,8 +14546,8 @@ public CreateDoorProduct(doorid, ProductName[], ProductType, ProductValue1, Prod
 
 public LoadAllProducts()
 {
-	new data[128], product_id;
-	/*
+/*
+	new product_id;
 	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"products`");
 
 	print("[load] Rozpoczynam proces wczytywania produktów...");
@@ -14651,10 +14646,13 @@ public SaveProduct(product_id, what)
 
 public ListGroupProductsForPlayer(group_id, playerid, list_type)
 {
-	new list_products[1024],
+	new list_products[1024], query[256],
         product_uid, product_name[32], product_price, product_count;
-        
-	new rows, Cache:tmp_cache = mysql_query_format("SELECT `product_uid`, `product_name`, `product_price`, `product_count` FROM `"SQL_PREF"products` WHERE product_owner = '%d'", GroupData[group_id][gUID]);
+
+    new rows, Cache:tmp_cache;
+    
+ 	mysql_format(connHandle, query, sizeof(query), "SELECT `product_uid`, `product_name`, `product_price`, `product_count` FROM `"SQL_PREF"products` WHERE product_owner = '%d'", GroupData[group_id][gUID]);
+	tmp_cache = mysql_query(connHandle, query);
 
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
@@ -14863,7 +14861,10 @@ public LoadPlayerAccess(playerid)
   		Float:access_rotx, Float:access_roty, Float:access_rotz,
    		Float:access_scalex, Float:access_scaley, Float:access_scalez;
 
-	new rows, Cache:tmp_cache = mysql_query_format("SELECT `access_model`, `access_bone`, `access_posx`, `access_posy`, `access_posz`, `access_rotx`, `access_roty`, `access_rotz`, `access_scalex`, `access_scaley`, `access_scalez` FROM `"SQL_PREF"items`, `"SQL_PREF"access` WHERE (item_place = '%d' AND item_owner = '%d' AND item_type = '%d' AND item_used = '1') AND (access_uid = item_value1 OR access_uid = item_value2)", PLACE_PLAYER, PlayerCache[playerid][pUID], ITEM_CLOTH_ACCESS);
+	new rows, Cache:tmp_cache, query[512];
+	
+	mysql_format(connHandle, query, sizeof(query), "SELECT `access_model`, `access_bone`, `access_posx`, `access_posy`, `access_posz`, `access_rotx`, `access_roty`, `access_rotz`, `access_scalex`, `access_scaley`, `access_scalez` FROM `"SQL_PREF"items`, `"SQL_PREF"access` WHERE (item_place = '%d' AND item_owner = '%d' AND item_type = '%d' AND item_used = '1') AND (access_uid = item_value1 OR access_uid = item_value2)", PLACE_PLAYER, PlayerCache[playerid][pUID], ITEM_CLOTH_ACCESS);
+	tmp_cache = mysql_query(connHandle, query);
 
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
@@ -15338,12 +15339,12 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			}
 	    }
 	    
-   		new vehid = OfferData[offererid][oValue1], value = OfferData[offererid][oValue2];
+   		new vehid = OfferData[offererid][oValue1], fuel_value = OfferData[offererid][oValue2];
 
-		CarInfo[vehid][cFuel] = floatadd(CarInfo[vehid][cFuel], value);
+		CarInfo[vehid][cFuel] = floatadd(CarInfo[vehid][cFuel], fuel_value);
 		SaveVehicle(vehid, SAVE_VEH_COUNT);
 
-		SendClientFormatMessage(playerid, COLOR_LIGHTBLUE, "Zap³aci³eœ $%d za %d litrów paliwa.", offer_price, value);
+		SendClientFormatMessage(playerid, COLOR_LIGHTBLUE, "Zap³aci³eœ $%d za %d litrów paliwa.", offer_price, fuel_value);
 		ApplyAnimation(offererid, "INT_HOUSE", "wash_up",4.1, 0, 0, 0, 0, 0, 1);
 
 		format(string, sizeof(string), "* %s wk³ada w¹¿ do baku.", PlayerName(offererid));
@@ -16374,7 +16375,11 @@ public GivePlayerAchievement(playerid, achieve_type)
 public ShowPlayerDirectoryForPlayer(playerid, giveplayer_id)
 {
 	new string[128], list_directory[512];
-	new rows, Cache:tmp_cache = mysql_query_format("SELECT `directory_uid`, `directory_reason`, `directory_date` FROM `crp_directory` WHERE directory_owner = '%d' ORDER BY `directory_date` DESC", PlayerCache[playerid][pUID]);
+	
+	new rows, Cache:tmp_cache, query[256];
+	
+	mysql_format(connHandle, query, sizeof(query), "SELECT `directory_uid`, `directory_reason`, `directory_date` FROM `"SQL_PREF"directory` WHERE directory_owner = '%d' ORDER BY `directory_date` DESC", PlayerCache[playerid][pUID]);
+	tmp_cache = mysql_query(connHandle, query);
 	
 	new directory_uid, dir_count,
 		directory_reason[64], directory_date[24];
@@ -16538,7 +16543,10 @@ public LoadPlayerBans(playerid)
 	GetPlayerIp(playerid, IP, sizeof(IP));
 	//gpci(playerid, ban_serial, sizeof(ban_serial));
 	
-	new rows, Cache:tmp_cache = mysql_query_format("SELECT `ban_reason` FROM `"SQL_PREF"bans` WHERE (ban_owner = '%d' OR ban_ip = '%s' OR ban_serial = '%s') AND ban_filter != '%d' LIMIT 1", PlayerCache[playerid][pGID], IP, ban_serial, PlayerCache[playerid][pGID]);
+	new rows, Cache:tmp_cache, query[256];
+
+	mysql_format(connHandle, query, sizeof(query), "SELECT `ban_reason` FROM `"SQL_PREF"bans` WHERE (ban_owner = '%d' OR ban_ip = '%s' OR ban_serial = '%s') AND ban_filter != '%d' LIMIT 1", PlayerCache[playerid][pGID], IP, ban_serial, PlayerCache[playerid][pGID]);
+	tmp_cache = mysql_query(connHandle, query);
 
    	if(cache_get_row_count(rows))
    	{
@@ -16580,8 +16588,8 @@ public CreatePackage(PackageDoorUID, PackageItemName[], PackageItemType, Package
 
 public LoadPackages()
 {
+/*
 	new data[64], package_id;
-	/*
 	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"packages`");
 
 	mysql_store_result();
@@ -18125,7 +18133,11 @@ CMD:pojazd(playerid, params[])
 	    if(!IsPlayerInAnyVehicle(playerid))
 	    {
 	 		new veh_uid, veh_model, list_vehicles[256], list;
-			new rows, Cache:tmp_cache = mysql_query_format("SELECT `vehicle_uid`, `vehicle_model` FROM `"SQL_PREF"vehicles` WHERE vehicle_ownertype = '%d' AND vehicle_owner = '%d'", OWNER_PLAYER, PlayerCache[playerid][pUID]);
+	 		
+			new rows, Cache:tmp_cache, query[256];
+			
+			mysql_format(connHandle, query, sizeof(query), "SELECT `vehicle_uid`, `vehicle_model` FROM `"SQL_PREF"vehicles` WHERE vehicle_ownertype = '%d' AND vehicle_owner = '%d'", OWNER_PLAYER, PlayerCache[playerid][pUID]);
+			tmp_cache = mysql_query(connHandle, query);
 
 			cache_get_row_count(rows);
 			for(new row = 0; row != rows; row++)
@@ -18294,7 +18306,10 @@ CMD:pojazd(playerid, params[])
 		new list_tuning_items[512],
 		    item_uid, item_value1, item_name[32];
 
-		new rows, Cache:tmp_cache = mysql_query_format("SELECT `item_uid`, `item_value1`, `item_name` FROM `"SQL_PREF"items` WHERE item_vehuid = '%d'", CarInfo[vehid][cUID]);
+		new rows, Cache:tmp_cache, query[256];
+		
+		mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_value1`, `item_name` FROM `"SQL_PREF"items` WHERE item_vehuid = '%d'", CarInfo[vehid][cUID]);
+		tmp_cache = mysql_query(connHandle, query);
 
 		cache_get_row_count(rows);
 		for(new row = 0; row != rows; row++)
@@ -18951,7 +18966,10 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz znajdowaæ siê w tych drzwiach podczas prze³adowywania.");
 	        return 1;
 	    }
-		new rows, Cache:tmp_cache = mysql_query_format("SELECT * FROM `"SQL_PREF"objects` WHERE object_world = '%d'", DoorCache[doorid][dUID]);
+		new rows, Cache:tmp_cache, query[128];
+		
+		mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"objects` WHERE object_world = '%d'", DoorCache[doorid][dUID]);
+		tmp_cache = mysql_query(connHandle, query);
 
 		if(cache_get_row_count(rows))
 		{
@@ -20675,8 +20693,8 @@ CMD:oferuj(playerid, params[])
 	 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znaleziono ¿adnego dystrybutora w pobli¿u.");
 	   		return 1;
 		}
-	    new giveplayer_id, bens_type, value;
-	    if(sscanf(varchar, "udd", giveplayer_id, bens_type, value))
+	    new giveplayer_id, bens_type, fuel_value;
+	    if(sscanf(varchar, "udd", giveplayer_id, bens_type, fuel_value))
 	    {
 	        ShowTipForPlayer(playerid, "/oferuj tankowanie [ID gracza] [Rodzaj paliwa] [Iloœæ litrów]");
 	        
@@ -20729,12 +20747,12 @@ CMD:oferuj(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wybrany rodzaj paliwa nie pasuje do tego pojazdu.");
 		    return 1;
 		}
-		if(value < 0)
+		if(fuel_value < 0)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³ow¹ iloœæ litrów.");
 		    return 1;
 		}
-		if(value + CarInfo[vehid][cFuel] > GetVehicleMaxFuel(CarInfo[vehid][cModel]))
+		if(fuel_value + CarInfo[vehid][cFuel] > GetVehicleMaxFuel(CarInfo[vehid][cModel]))
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "W baku nie zmieœci siê tyle paliwa.");
 		    return 1;
@@ -20742,12 +20760,12 @@ CMD:oferuj(playerid, params[])
 		new price;
 		bens_type -= 1;
 
-		if(bens_type == FUEL_TYPE_BENS) 			price = floatround(value * 3.5);
-		else if(bens_type == FUEL_TYPE_GAS) 		price = floatround(value * 2.0);
-		else if(bens_type == FUEL_TYPE_DIESEL) 		price = floatround(value * 3.0);
+		if(bens_type == FUEL_TYPE_BENS) 			price = floatround(fuel_value * 3.5);
+		else if(bens_type == FUEL_TYPE_GAS) 		price = floatround(fuel_value * 2.0);
+		else if(bens_type == FUEL_TYPE_DIESEL) 		price = floatround(fuel_value * 3.0);
 
-		format(string, sizeof(string), "%s (%dL)", FuelTypeName[bens_type], value);
-		OnPlayerSendOffer(playerid, giveplayer_id, string, OFFER_REFUEL, vehid, value, price);
+		format(string, sizeof(string), "%s (%dL)", FuelTypeName[bens_type], fuel_value);
+		OnPlayerSendOffer(playerid, giveplayer_id, string, OFFER_REFUEL, vehid, fuel_value, price);
 	    return 1;
 	}
 	
@@ -21492,7 +21510,10 @@ CMD:oferuj(playerid, params[])
 		    return 1;
 		}
 		new members_count;
-		new rows, Cache:tmp_cache = mysql_query_format("SELECT COUNT(char_uid) FROM `"SQL_PREF"char_groups` WHERE group_belongs = '%d'", GroupData[group_id][gUID]);
+		new rows, Cache:tmp_cache, query[256];
+		
+		mysql_format(connHandle, query, sizeof(query), "SELECT COUNT(char_uid) FROM `"SQL_PREF"char_groups` WHERE group_belongs = '%d'", GroupData[group_id][gUID]);
+		tmp_cache = mysql_query(connHandle, query);
 		
 		if(cache_get_row_count(rows))
 		{
@@ -21826,7 +21847,10 @@ CMD:oferuj(playerid, params[])
 				break;
   			}
 		}
-		new veh_price, Cache:tmp_cache = mysql_query_format("SELECT `salon_price` FROM `"SQL_PREF"salon_vehicles` WHERE salon_model = '%d' LIMIT 1", veh_model);
+		new veh_price, Cache:tmp_cache, query[256];
+		
+		mysql_format(connHandle, query, sizeof(query), "SELECT `salon_price` FROM `"SQL_PREF"salon_vehicles` WHERE salon_model = '%d' LIMIT 1", veh_model);
+		tmp_cache = mysql_query(connHandle, query);
 		
 		cache_get_value_index_int(0, 0, veh_price);
 		if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
@@ -22769,8 +22793,8 @@ CMD:tankuj(playerid, params[])
  		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znaleziono ¿adnego dystrybutora w pobli¿u.");
    		return 1;
 	}
-	new bens_type, value, string[128];
-	if(sscanf(params, "dd", bens_type, value))
+	new bens_type, fuel_value, string[128];
+	if(sscanf(params, "dd", bens_type, fuel_value))
 	{
 	    ShowTipForPlayer(playerid, "/tankuj [Rodzaj paliwa] [Iloœæ litrów]");
 	    
@@ -22798,12 +22822,12 @@ CMD:tankuj(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wybrany rodzaj paliwa nie pasuje tego pojazdu.");
 	    return 1;
 	}
-	if(value <= 0)
+	if(fuel_value <= 0)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³ow¹ iloœæ litrów.");
 	    return 1;
 	}
-	if(value + CarInfo[vehid][cFuel] > GetVehicleMaxFuel(CarInfo[vehid][cModel]))
+	if(fuel_value + CarInfo[vehid][cFuel] > GetVehicleMaxFuel(CarInfo[vehid][cModel]))
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "W baku nie zmieœci siê tyle paliwa.");
 	    return 1;
@@ -22811,9 +22835,9 @@ CMD:tankuj(playerid, params[])
 	new price;
 	bens_type -= 1;
 
-	if(bens_type == FUEL_TYPE_BENS) 			price = floatround(value * 4.5);
-	else if(bens_type == FUEL_TYPE_GAS) 		price = floatround(value * 2.5);
-	else if(bens_type == FUEL_TYPE_DIESEL) 		price = floatround(value * 4.0);
+	if(bens_type == FUEL_TYPE_BENS) 			price = floatround(fuel_value * 4.5);
+	else if(bens_type == FUEL_TYPE_GAS) 		price = floatround(fuel_value * 2.5);
+	else if(bens_type == FUEL_TYPE_DIESEL) 		price = floatround(fuel_value * 4.0);
 
 	if(PlayerCache[playerid][pCash] < price)
 	{
@@ -22823,10 +22847,10 @@ CMD:tankuj(playerid, params[])
 	crp_GivePlayerMoney(playerid, -price);
 	orm_update(PlayerCache[playerid][pOrm]);
 
-	CarInfo[vehid][cFuel] = floatadd(CarInfo[vehid][cFuel], value);
+	CarInfo[vehid][cFuel] = floatadd(CarInfo[vehid][cFuel], fuel_value);
 	SaveVehicle(vehid, SAVE_VEH_COUNT);
 
-	SendClientFormatMessage(playerid, COLOR_LIGHTBLUE, "Zap³aci³eœ $%d za %d litrów paliwa.", price, value);
+	SendClientFormatMessage(playerid, COLOR_LIGHTBLUE, "Zap³aci³eœ $%d za %d litrów paliwa.", price, fuel_value);
 	ApplyAnimation(playerid, "INT_HOUSE", "wash_up",4.1, 0, 0, 0, 0, 0, 1);
 
 	format(string, sizeof(string), "* %s wk³ada w¹¿ do baku.", PlayerName(playerid));
@@ -25040,7 +25064,10 @@ CMD:wyscig(playerid, params[])
 	    new race_list[512],
 	        race_uid, race_title[64];
 	        
-	    new rows, Cache:tmp_cache = mysql_query_format("SELECT `race_uid`, `race_title` FROM `"SQL_PREF"races` WHERE race_owner = '%d'", GroupData[group_id][gUID]);
+	    new rows, Cache:tmp_cache, query[256];
+	    
+		mysql_format(connHandle, query, sizeof(query), "SELECT `race_uid`, `race_title` FROM `"SQL_PREF"races` WHERE race_owner = '%d'", GroupData[group_id][gUID]);
+	    tmp_cache = mysql_query(connHandle, query);
 	    
 	    cache_get_row_count(rows);
 	    for(new row = 0; row != rows; row++)
@@ -26147,7 +26174,10 @@ CMD:craft(playerid, params[])
 	new object_uid = GetObjectUID(object_id), list_craft[512],
 	    item_uid, item_name[32], item_value1, craft_value = 0;
 	    
-	new rows, Cache:tmp_cache = mysql_query_format("SELECT `item_uid`, `item_name`, `item_value1` FROM `"SQL_PREF"items` WHERE item_place = '%d' AND item_owner = '%d'", PLACE_CRAFT, object_uid);
+	new rows, Cache:tmp_cache, query[256];
+	
+	mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_name`, `item_value1` FROM `"SQL_PREF"items` WHERE item_place = '%d' AND item_owner = '%d'", PLACE_CRAFT, object_uid);
+	tmp_cache = mysql_query(connHandle, query);
 	
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
@@ -27500,7 +27530,8 @@ stock mysql_query_format(format_query[], va_args<>)
 	new query[512];
 	va_format(query, sizeof(query), format_query, va_start<1>);
 	
-	return mysql_query(connHandle, query);
+	mysql_query(connHandle, query);
+	return 1;
 }
 
 stock PreloadAnimLib(playerid, animlib[])
@@ -28246,7 +28277,10 @@ stock IsVehiclePlaceFree(vehid)
 	new Float:VehPosX, Float:VehPosY, Float:VehPosZ, bool: IsFree = true;
  	GetVehiclePos(vehid, VehPosX, VehPosY, VehPosZ);
 
-  	new rows, Cache:tmp_cache = mysql_query_format("SELECT vehicle_uid FROM `"SQL_PREF"vehicles` WHERE vehicle_posx < %f + 4 AND vehicle_posx > %f - 4 AND vehicle_posy < %f + 4 AND vehicle_posy > %f - 4 AND vehicle_posz < %f + 4 AND vehicle_posz > %f - 4 LIMIT 1", VehPosX, VehPosX, VehPosY, VehPosY, VehPosZ, VehPosZ);
+  	new rows, Cache:tmp_cache, query[512];
+  	
+	mysql_format(connHandle, query, sizeof(query), "SELECT vehicle_uid FROM `"SQL_PREF"vehicles` WHERE vehicle_posx < %f + 4 AND vehicle_posx > %f - 4 AND vehicle_posy < %f + 4 AND vehicle_posy > %f - 4 AND vehicle_posz < %f + 4 AND vehicle_posz > %f - 4 LIMIT 1", VehPosX, VehPosX, VehPosY, VehPosY, VehPosZ, VehPosZ);
+	tmp_cache = mysql_query(connHandle, query);
   	
     if(cache_get_row_count(rows))
     {
@@ -28525,17 +28559,17 @@ stock FormatTextDrawColors(givenString[])
     return editingString;
 }
 
-stock ColorFade(color, value, maxvalue)
+stock ColorFade(color, minvalue, maxvalue)
 {
-    if (0 <= value <= maxvalue)
+    if (0 <= minvalue <= maxvalue)
     {
         new
-            Float: ratio = float (value) / float (maxvalue);
+            Float: ratio = float (minvalue) / float (maxvalue);
         new
             r = max (0, min (255, floatround (float ((color >> 24) & 0xFF) * ratio))),
             g = max (0, min (255, floatround (float ((color >> 16) & 0xFF) * ratio))),
             b = max (0, min (255, floatround (float ((color >> 8) & 0xFF) * ratio)));
-        return (r << 24) | (g << 16) | (b << 8) | (value & 0xFF);
+        return (r << 24) | (g << 16) | (b << 8) | (minvalue & 0xFF);
     }
     return 0;
 }
