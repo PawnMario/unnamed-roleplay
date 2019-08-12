@@ -6760,10 +6760,13 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			        return 1;
 			    }
 			
+			    DynamicGui_Init(playerid);
+			
   				new list_anims[1024];
 				foreach(new anim_id : Anim)
 				{
 				    format(list_anims, sizeof(list_anims), "%s\n%s", list_anims, AnimCache[anim_id][aCommand]);
+				    DynamicGui_AddRow(playerid, D_WALK_ANIM, anim_id);
 				}
 
 				if(strlen(list_anims))
@@ -6901,10 +6904,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-			new veh_uid, veh_name[32];
-			sscanf(inputtext, "ds[32]", veh_uid, veh_name);
-			
-			new vehid = GetVehicleID(veh_uid);
+			new veh_uid = DynamicGui_GetDataInt(playerid, listitem),
+				vehid = GetVehicleID(veh_uid);
 			
 			if(vehid == INVALID_VEHICLE_ID)
 			{
@@ -6940,7 +6941,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new vehid = strval(inputtext), Float:VehPosX, Float:VehPosY, Float:VehPosZ;
+	        new vehid = DynamicGui_GetDataInt(playerid, listitem), Float:VehPosX, Float:VehPosY, Float:VehPosZ;
 	        GetVehiclePos(vehid, VehPosX, VehPosY, VehPosZ);
 
 	        SetPlayerCheckpoint(playerid, VehPosX, VehPosY, VehPosZ, 5.0);
@@ -6958,7 +6959,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new group_slot = strval(inputtext) - 1, vehid = GetPlayerVehicleID(playerid), string[256];
+	        new group_slot = DynamicGui_GetDataInt(playerid, listitem), vehid = GetPlayerVehicleID(playerid), string[256];
 			if(vehid == INVALID_VEHICLE_ID)
   			{
   			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w pojeŸdzie, który chcesz przypisaæ.");
@@ -7182,6 +7183,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz przypisaæ tych drzwi.");
 				        return 1;
 				    }
+				    DynamicGui_Init(playerid);
+				    
 					new list_groups[256], group_id;
 					for (new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
 					{
@@ -7189,7 +7192,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			  			{
 			  				group_id = PlayerGroup[playerid][group_slot][gpID];
 							format(list_groups, sizeof(list_groups), "%s\n%d\t%s (%d)", list_groups, group_slot + 1, GroupData[group_id][gName], GroupData[group_id][gUID]);
-			 			}
+
+							DynamicGui_AddRow(playerid, D_DOOR_ASSIGN, group_slot);
+						}
 					}
 					ShowPlayerDialog(playerid, D_DOOR_ASSIGN, DIALOG_STYLE_LIST, "SLOT      NAZWA GRUPY", list_groups, "Wybierz", "Anuluj");
 				}
@@ -7459,7 +7464,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new group_slot = strval(inputtext) - 1, doorid = PlayerCache[playerid][pMainTable], string[256];
+	        new group_slot = DynamicGui_GetDataInt(playerid, listitem), doorid = PlayerCache[playerid][pMainTable], string[256];
 			if(!HavePlayerGroupPerm(playerid, PlayerGroup[playerid][group_slot][gpUID], G_PERM_LEADER))
 			{
 			    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz uprawnieñ lidera tej grupy.");
@@ -8066,7 +8071,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-			new itemid = strval(inputtext);
+			new itemid = DynamicGui_GetDataInt(playerid, listitem);
 			OnPlayerUseItem(playerid, itemid);
 	        return 1;
 	    }
@@ -8485,7 +8490,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-     		new product_uid = strval(inputtext), product_id = GetProductID(product_uid), string[128];
+     		new product_uid = DynamicGui_GetDataInt(playerid, listitem), product_id = GetProductID(product_uid), string[128];
 	        format(string, sizeof(string), "%s (%d, %d) %d szt.", ProductData[product_id][pName], ProductData[product_id][pValue1], ProductData[product_id][pValue2], ProductData[product_id][pCount]);
 
 			ShowPlayerDialog(playerid, D_PRODUCT_OPTIONS, DIALOG_STYLE_LIST, string, "1. Wyjmij produkt\n2. Zmieñ cenê\n3. Usuñ z magazynu", "Wybierz", "Anuluj");
@@ -9545,6 +9550,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	            {
 	                PlayerCache[playerid][pMainTable] = radio_canal;
 
+					DynamicGui_Init(playerid);
+
 					new list_groups[256], group_id;
 					for (new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
 					{
@@ -9552,7 +9559,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			  			{
 			  				group_id = PlayerGroup[playerid][group_slot][gpID];
 							format(list_groups, sizeof(list_groups), "%s\n%d\t%s (%d)", list_groups, group_slot + 1, GroupData[group_id][gName], GroupData[group_id][gUID]);
-			 			}
+
+							DynamicGui_AddRow(playerid, D_RADIO_ASSIGN_ACCEPT, group_slot);
+						}
 					}
 					ShowPlayerDialog(playerid, D_RADIO_ASSIGN_ACCEPT, DIALOG_STYLE_LIST, "SLOT      NAZWA GRUPY", list_groups, "Wybierz", "Anuluj");
 				}
@@ -9577,7 +9586,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new group_slot = strval(inputtext) - 1, radio_canal = PlayerCache[playerid][pMainTable];
+	        new group_slot = DynamicGui_GetDataInt(playerid, listitem), radio_canal = PlayerCache[playerid][pMainTable];
 			if(group_slot < 0)
 			{
 			    TD_ShowSmallInfo(playerid, 3, "Przypisywanie kanalu zostalo ~r~anulowane~w~.");
@@ -9637,9 +9646,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-  			new item_uid, componentid, vehid = GetPlayerVehicleID(playerid);
-			sscanf(inputtext, "dd", item_uid, componentid);
-
+  			new item_uid = DynamicGui_GetValue(playerid, listitem), componentid = DynamicGui_GetDataInt(playerid, listitem), vehid = GetPlayerVehicleID(playerid);
 			mysql_query_format("UPDATE `"SQL_PREF"items` SET item_ownertype = '%d', item_owner = '%d', item_vehuid = '0' WHERE item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], item_uid);
 
 			LoadPlayerItem(playerid, item_uid);
@@ -9767,8 +9774,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    return 1;
 			}
 			
-			new directory_uid;
-			if(sscanf(inputtext, "d{s[14]s[24]}", directory_uid))	return 1;
+			new directory_uid = DynamicGui_GetDataInt(playerid, listitem);
+			if(directory_uid == 0)  return 1;
 			
 			new string[256], title[64],
 				giver_name[32], directory_reason[64], directory_date[32], directory_pdp;
@@ -9896,7 +9903,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-     		new anim_id = listitem;
+     		new anim_id = DynamicGui_GetDataInt(playerid, listitem);
 	        if(!AnimCache[anim_id][aAction])
 	        {
 	        	ApplyAnimation(playerid, AnimCache[anim_id][aLib], AnimCache[anim_id][aName], AnimCache[anim_id][aSpeed], AnimCache[anim_id][aOpt1], AnimCache[anim_id][aOpt2], AnimCache[anim_id][aOpt3], AnimCache[anim_id][aOpt4], AnimCache[anim_id][aOpt5], true);
@@ -9919,7 +9926,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-			new anim_id = listitem;
+			new anim_id = DynamicGui_GetDataInt(playerid, listitem);
 			
 			PlayerCache[playerid][pWalkStyle] = anim_id;
 			orm_update(PlayerCache[playerid][pOrm]);
@@ -10691,7 +10698,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    new checkpoint;
 			    new rows, Cache:tmp_cache, query[128];
 
-				mysql_format(connHandle, query, sizeof(query), "SELECT `route_cpx`, `route_cpy`, `route_cpz` FROM `crp_races_route` WHERE route_owner = '%d'", race_uid);
+				mysql_format(connHandle, query, sizeof(query), "SELECT `route_cpx`, `route_cpy`, `route_cpz` FROM `"SQL_PREF"races_route` WHERE route_owner = '%d'", race_uid);
 			    tmp_cache = mysql_query(connHandle, query);
 			    
 			    cache_get_row_count(rows);
@@ -10739,8 +10746,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	    {
 	        new race_uid = PlayerCache[playerid][pMainTable];
 	        
-	        mysql_query_format("DELETE FROM `crp_races` WHERE race_uid = '%d' LIMIT 1", race_uid);
-	        mysql_query_format("DELETE FROM `crp_races_route` WHERE route_owner = '%d'", race_uid);
+	        mysql_query_format("DELETE FROM `"SQL_PREF"races` WHERE race_uid = '%d' LIMIT 1", race_uid);
+	        mysql_query_format("DELETE FROM `"SQL_PREF"races_route` WHERE route_owner = '%d'", race_uid);
 	        
 	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wyœcig (UID: %d) zosta³ ca³kowicie usuniêty.", race_uid);
 	        return 1;
@@ -10763,7 +10770,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
    			new race_uid = PlayerCache[playerid][pMainTable], esc_race_title[128];
 			mysql_escape_string(inputtext, esc_race_title);
 
-			mysql_query_format("UPDATE `crp_races` SET race_title = '%s' WHERE race_uid = '%d' LIMIT 1", esc_race_title, race_uid);
+			mysql_query_format("UPDATE `"SQL_PREF"races` SET race_title = '%s' WHERE race_uid = '%d' LIMIT 1", esc_race_title, race_uid);
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Nazwa wyœcigu (UID: %d) zosta³a pomyœlnie zmieniona.\nNowa nazwa: %s", race_uid, esc_race_title);
 		    return 1;
 		}
@@ -12298,7 +12305,9 @@ public ListPlayerCheckedItems(playerid)
 
 public ListPlayerFavoriteItems(playerid)
 {
-	new list_favorite_items[512] = "*\tIdentyfikator\tNazwa przedmiotu", favorite_items_counts;
+	new list_favorite_items[512] = "Identyfikator\tNazwa przedmiotu", favorite_items_counts;
+	DynamicGui_Init(playerid);
+	
 	foreach(new itemid : PlayerItem[playerid])
 	{
 	    if(PlayerItemCache[playerid][itemid][iUID])
@@ -12307,12 +12316,13 @@ public ListPlayerFavoriteItems(playerid)
 	        {
 	     		if(PlayerItemCache[playerid][itemid][iUsed])
 	     		{
-	             	format(list_favorite_items, sizeof(list_favorite_items), "%s\n{000000}%d\t{FFFFFF}%d\t{FFFFFF}%s", list_favorite_items, itemid, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
+	             	format(list_favorite_items, sizeof(list_favorite_items), "%s\n{FFFFFF}%d\t{FFFFFF}%s", list_favorite_items, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
 				}
 				else
 				{
-	   				format(list_favorite_items, sizeof(list_favorite_items), "%s\n{000000}%d\t{C0C0C0}%d\t{C0C0C0}%s", list_favorite_items, itemid, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
+	   				format(list_favorite_items, sizeof(list_favorite_items), "%s\n{C0C0C0}%d\t{C0C0C0}%s", list_favorite_items, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
 				}
+				DynamicGui_AddRow(playerid, D_ITEM_FAVORITE, itemid);
 				favorite_items_counts ++;
 			}
 	    }
@@ -14358,6 +14368,8 @@ public ListGroupProductsForPlayer(group_id, playerid, list_type)
     
  	mysql_format(connHandle, query, sizeof(query), "SELECT `product_uid`, `product_name`, `product_price`, `product_count` FROM `"SQL_PREF"products` WHERE product_owner = '%d'", GroupData[group_id][gUID]);
 	tmp_cache = mysql_query(connHandle, query);
+	
+	DynamicGui_Init(playerid);
 
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
@@ -14371,6 +14383,8 @@ public ListGroupProductsForPlayer(group_id, playerid, list_type)
 		
 		if(list_type == PRODUCT_LIST_PRICE)	format(list_products, sizeof(list_products), "%s\n$%d\t\t%s", list_products, product_price, product_name);
 		else								format(list_products, sizeof(list_products), "%s\n%d\tx%d\t$%d\t\t%s", list_products, product_uid, product_count, product_price, product_name);
+
+		DynamicGui_AddRow(playerid, D_NONE, product_uid);
 	}
 	if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 	
@@ -16091,7 +16105,9 @@ public ShowPlayerDirectoryForPlayer(playerid, giveplayer_id)
 		directory_reason[64], directory_date[24];
 		
     format(list_directory, sizeof(list_directory), "Dodaj nowy wpis...\n-----");
-		
+    
+    DynamicGui_Init(playerid);
+    
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
 	{
@@ -16104,6 +16120,7 @@ public ShowPlayerDirectoryForPlayer(playerid, giveplayer_id)
 	    format(list_directory, sizeof(list_directory), "%s\n%d\t%s\t\t%s...", list_directory, directory_uid, directory_date, directory_reason);
 	    
 	    dir_count ++;
+	    DynamicGui_AddRow(playerid, D_DIRECTORY_LIST, directory_uid);
 	}
 	if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 	if(!dir_count)	format(list_directory, sizeof(list_directory), "%s\n{FF3D3D}#\t\tNie znaleziono ¿adnych wpisów w kartotece", list_directory);
@@ -17216,13 +17233,17 @@ CMD:g(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz uprawnieñ prowadzenia pojazdów.");
 	    	return 1;
 		}
+		
+		DynamicGui_Init(playerid);
+		
 	    new list_vehicles[1024];
 	    foreach(new vehid : Vehicles)
 	    {
      		if(CarInfo[vehid][cOwnerType] == OWNER_GROUP && CarInfo[vehid][cOwner] == PlayerGroup[playerid][group_slot][gpUID])
      		{
 				format(list_vehicles, sizeof(list_vehicles), "%s\n%d\t\t%s (%d)", list_vehicles, vehid, GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cUID]);
-	 		}
+				DynamicGui_AddRow(playerid, D_TARGET_VEH, vehid);
+			}
 	    }
 	    if(strlen(list_vehicles))
 	    {
@@ -17842,6 +17863,8 @@ CMD:pojazd(playerid, params[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `vehicle_uid`, `vehicle_model` FROM `"SQL_PREF"vehicles` WHERE vehicle_ownertype = '%d' AND vehicle_owner = '%d'", OWNER_PLAYER, PlayerCache[playerid][pUID]);
 			tmp_cache = mysql_query(connHandle, query);
 
+			DynamicGui_Init(playerid);
+
 			cache_get_row_count(rows);
 			for(new row = 0; row != rows; row++)
 			{
@@ -17851,8 +17874,10 @@ CMD:pojazd(playerid, params[])
 				cache_get_value_index_int(row, 1, veh_model);
 				
 				format(list_vehicles, sizeof(list_vehicles), "%s\n%d\t\t%s", list_vehicles, veh_uid, GetVehicleName(veh_model));
+				DynamicGui_AddRow(playerid, D_SPAWN_VEH, veh_uid);
 			}
 			if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
+			
 			if(strlen(list_vehicles))
 			{
 			    if(list >= 5) 	GivePlayerAchievement(playerid, ACHIEVE_COLLECTOR);
@@ -18014,6 +18039,8 @@ CMD:pojazd(playerid, params[])
 		mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_value1`, `item_name` FROM `"SQL_PREF"items` WHERE item_vehuid = '%d'", CarInfo[vehid][cUID]);
 		tmp_cache = mysql_query(connHandle, query);
 
+		DynamicGui_Init(playerid);
+
 		cache_get_row_count(rows);
 		for(new row = 0; row != rows; row++)
 		{
@@ -18023,6 +18050,8 @@ CMD:pojazd(playerid, params[])
 		    cache_get_value_index(row, 2, item_name, 32);
 		    
 		    format(list_tuning_items, sizeof(list_tuning_items), "%s\n%d\t%d\t%s", list_tuning_items, item_uid, item_value1, item_name);
+			DynamicGui_AddRow(playerid, item_uid, item_value1);
+
 		}
         if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 		if(strlen(list_tuning_items))
@@ -18155,13 +18184,17 @@ CMD:pojazd(playerid, params[])
 		    return 1;
 		}
   		new list_groups[256], group_id;
+  		DynamicGui_Init(playerid);
+  		
 		for (new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
 		{
 			if(PlayerGroup[playerid][group_slot][gpUID])
   			{
   				group_id = PlayerGroup[playerid][group_slot][gpID];
 				format(list_groups, sizeof(list_groups), "%s\n%d\t%s (%d)", list_groups, group_slot + 1, GroupData[group_id][gName], GroupData[group_id][gUID]);
- 			}
+
+				DynamicGui_AddRow(playerid, D_ASSIGN_VEH, group_slot);
+			}
 		}
 		ShowPlayerDialog(playerid, D_ASSIGN_VEH, DIALOG_STYLE_LIST, "SLOT      NAZWA GRUPY", list_groups, "Wybierz", "Anuluj");
 	    return 1;
@@ -25658,10 +25691,13 @@ CMD:bus(playerid, params[])
 
 CMD:anim(playerid, params[])
 {
+	DynamicGui_Init(playerid);
+
 	new list_anims[2048];
 	foreach(new anim_id : Anim)
 	{
 	    format(list_anims, sizeof(list_anims), "%s\n%s", list_anims, AnimCache[anim_id][aCommand]);
+	    DynamicGui_AddRow(playerid, D_PLAY_ANIM, anim_id);
 	}
 	
 	if(strlen(list_anims))
