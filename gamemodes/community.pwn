@@ -19,7 +19,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #include <streamer>
 #include <dynamicgui>
 #include <bcrypt>
-//#include <mtime>
+#include <timestamptodate>
 
 // Main config
 #define GAMEMODE		"MRP ©"
@@ -179,9 +179,6 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 		
 #define RELEASED(%0) \
 		(((newkeys & (%0)) != (%0)) && ((oldkeys & (%0)) == (%0)))
-
-#define GetObjectUID(%0) \
-		Streamer_GetIntData(STREAMER_TYPE_OBJECT, %0, E_STREAMER_EXTRA_ID)
 
 #define GetObjectModel(%0) \
 		Streamer_GetIntData(STREAMER_TYPE_OBJECT, %0, E_STREAMER_MODEL_ID)
@@ -699,6 +696,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define D_ITEM_OPTIONS          22
 #define D_ITEM_SEPARATE         23
 #define D_ITEM_CHECK            110
+#define D_ITEM_FAVORITE         111
 #define D_ITEM_OFFER            24
 #define D_ITEM_OFFER_PRICE      25
 #define D_ITEM_RAISE            26
@@ -810,8 +808,7 @@ forward UpdatePlayerSession(playerid, session_type, session_extraid);
 
 forward ShowPlayerStatsForPlayer(playerid, giveplayer_id);
 
-forward CreateGroup(GroupName[]);
-forward SaveGroup(group_id);
+forward CreateGroup(GroupName[], group_type);
 forward DeleteGroup(group_id);
 forward query_OnLoadGroups();
 forward ShowPlayerGroupInfo(playerid, group_id);
@@ -828,7 +825,6 @@ forward OnVehicleEngineStarted(vehicleid);
 
 forward CreateDoor(Float:DoorEnterX, Float:DoorEnterY, Float:DoorEnterZ, Float:DoorEnterA, DoorEnterInt, DoorEnterVW, DoorName[]);
 forward LoadDoor(door_uid);
-forward SaveDoor(doorid, what);
 forward DeleteDoor(doorid);
 forward query_OnLoadDoors();
 forward ShowPlayerDoorInfo(playerid, doorid);
@@ -837,6 +833,7 @@ forward CreatePlayerItem(playerid, item_name[], item_type, item_value1, item_val
 forward DeletePlayerItem(playerid, itemid);
 forward ShowPlayerItemInfo(playerid, item_uid);
 forward ListPlayerItems(playerid);
+forward ListPlayerFavoriteItems(playerid);
 forward ListPlayerCheckedItems(playerid);
 
 forward ListPlayerNearItems(playerid);
@@ -1210,12 +1207,6 @@ enum sPlayerGroup
 	bool: gpTogG
 }
 new PlayerGroup[MAX_PLAYERS][MAX_GROUP_SLOTS][sPlayerGroup];
-
-
-
-#define G_TYPE_DRIVING          18
-#define G_TYPE_RENTAL           19
-
 
 enum sGroupTypeInfo
 {
@@ -1703,26 +1694,6 @@ new InteriorInfo[][sInteriorData] = {
 
 new PickupID[9] = {1239, 1274, 1273, 1272, 1240, 1247, 1277, 1275, 1318};
 
-/*
-enum sItemData
-{
-	iUID,
-	iName[32],
-	
-	iValue1,
-	iValue2,
-	
-	iType,
-	
-	iPlace,
-	iOwner,
-	
-	iGroup,
-	bool: iUsed
-}
-new MAX_ITEM_CACHE][sItemData];
-*/
-
 enum sPlayerItem
 {
 	iUID,
@@ -1744,9 +1715,6 @@ enum sPlayerItem
 	ORM:iOrm
 }
 new PlayerItemCache[MAX_PLAYERS][MAX_ITEM_CACHE][sPlayerItem];
-
-
-
 
 enum sItemTypeInfo
 {
@@ -2143,6 +2111,22 @@ enum sRaceData
  	rPosition
 }
 new RaceInfo[MAX_PLAYERS][sRaceData];
+
+enum sObjectData
+{
+	objUID,
+	Float:objGateX,
+	Float:objGateY,
+	Float:objGateZ,
+	
+	Float:objGateRX,
+	Float:objGateRY,
+	Float:objGateRZ,
+	
+	bool:objGateStatus,
+	bool:objGate
+};
+
 
 new BlockadeType[8] = {3578, 1228, 1237, 1425, 978, 979, 2892, 1437};
 
@@ -2594,7 +2578,7 @@ task OnMinuteTask[60000]()
       		    DoorCache[doorid][dFireData][FIRE_TIME] = 0;
       		    CreateExplosion(DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], 6, 8.0);
       		    
-      		    SaveDoor(doorid, SAVE_DOOR_EXIT);
+      		    orm_update(DoorCache[doorid][dOrm]);
       		}
       		else if(percent <= 0)
       		{
@@ -3743,7 +3727,7 @@ public OnPlayerConnect(playerid)
 	for (new i = 0; i < MAX_PLAYERS; i++)	PlayerCache[playerid][pIgnored][i] = false;
 	
 	GetPlayerName(playerid, PlayerCache[playerid][pCharName], MAX_PLAYER_NAME);
-	new ORM:orm_id = PlayerCache[playerid][pOrm] = orm_create(""SQL_PREF"characters");
+	new ORM:orm_id = PlayerCache[playerid][pOrm] = orm_create(""SQL_PREF"characters",  connHandle);
 	
 	orm_addvar_int(orm_id, PlayerCache[playerid][pUID], "char_uid");
 	orm_addvar_int(orm_id, PlayerCache[playerid][pGID], "char_gid");
@@ -3924,45 +3908,6 @@ public OnPlayerPasswordChecked(playerid)
 
 		mysql_format(connHandle, string, sizeof(string), "INSERT INTO `"SQL_PREF"logged_players` VALUES ('%d', '%d', '%d')", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pSession][SESSION_GAME]);
         mysql_query(connHandle, string);
-
-
-		// 24/7 Pershing Square
-		RemoveBuildingForPlayer(playerid, 4051, 1371.8203, -1754.8203, 19.0469, 0.25);
-		RemoveBuildingForPlayer(playerid, 4191, 1353.2578, -1764.5313, 15.5938, 0.25);
-		RemoveBuildingForPlayer(playerid, 4022, 1353.2578, -1764.5313, 15.5938, 0.25);
-		RemoveBuildingForPlayer(playerid, 1532, 1353.1328, -1759.6563, 12.5000, 0.25);
-		RemoveBuildingForPlayer(playerid, 4021, 1371.8203, -1754.8203, 19.0469, 0.25);
-
-		// Bloki SC
-		RemoveBuildingForPlayer(playerid, 3562, 2326.6094, -1712.1641, 15.3047, 0.25);
-		RemoveBuildingForPlayer(playerid, 3559, 2384.9453, -1708.7656, 15.5078, 0.25);
-		RemoveBuildingForPlayer(playerid, 17935, 2401.2656, -1708.3828, 14.9766, 0.25);
-		RemoveBuildingForPlayer(playerid, 3582, 2326.6094, -1712.1641, 15.3047, 0.25);
-		RemoveBuildingForPlayer(playerid, 3558, 2384.9453, -1708.7656, 15.5078, 0.25);
-		RemoveBuildingForPlayer(playerid, 17934, 2401.2656, -1708.3828, 14.9766, 0.25);
-
-		// Idlewood
-		RemoveBuildingForPlayer(playerid, 1412, 1917.3203, -1797.4219, 13.8125, 0.25);
-		RemoveBuildingForPlayer(playerid, 1412, 1912.0547, -1797.4219, 13.8125, 0.25);
-		RemoveBuildingForPlayer(playerid, 1412, 1906.7734, -1797.4219, 13.8125, 0.25);
-		RemoveBuildingForPlayer(playerid, 1412, 1927.8516, -1797.4219, 13.8125, 0.25);
-		RemoveBuildingForPlayer(playerid, 1412, 1922.5859, -1797.4219, 13.8125, 0.25);
-		RemoveBuildingForPlayer(playerid, 1412, 1938.3906, -1797.4219, 13.8125, 0.25);
-
-		// Bloki
-		RemoveBuildingForPlayer(playerid, 4226, 1359.2813, -1796.4688, 24.3438, 0.25);
-		RemoveBuildingForPlayer(playerid, 4023, 1359.2813, -1796.4688, 24.3438, 0.25);
-
-		// Dystrybutory Idlewood
-		RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1778.4531, 14.1406, 0.25);
-	 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1774.3125, 14.1406, 0.25);
-	 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1771.3438, 14.1406, 0.25);
-	 	RemoveBuildingForPlayer(playerid, 1676, 1941.6563, -1767.2891, 14.1406, 0.25);
-
-		// Unity Station
-		RemoveBuildingForPlayer(playerid, 4025, 1777.8359, -1773.9063, 12.5234, 0.25);
-		RemoveBuildingForPlayer(playerid, 4215, 1777.5547, -1775.0391, 36.7500, 0.25);
-		RemoveBuildingForPlayer(playerid, 4019, 1777.8359, -1773.9063, 12.5234, 0.25);
 	}
 	else
 	{
@@ -4049,7 +3994,7 @@ public OnPlayerDisconnect(playerid, reason)
 					new group_id = PlayerCache[playerid][pDuty][DUTY_GROUP];
 
 		   			GroupData[group_id][gCash] += group_cash;
-					SaveGroup(group_id);
+					orm_update(GroupData[group_id][gOrm]);
 				}
 	        }
 	    }
@@ -4151,7 +4096,7 @@ public OnPlayerDisconnect(playerid, reason)
 			new group_id = PlayerCache[driverid][pDuty][DUTY_GROUP];
 
    			GroupData[group_id][gCash] += group_cash;
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 
 			ShowPlayerInfoDialog(driverid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\nNa konto grupy dodano: $%d", playercash, group_cash);
 		}
@@ -4252,7 +4197,7 @@ public OnPlayerDisconnect(playerid, reason)
 			group_activity = (floatround((gettime() - PlayerCache[playerid][pSession][SESSION_GROUP]) / 60)) * 3;
 
 		GroupData[group_id][gActivity] += group_activity;
-		SaveGroup(group_id);
+		orm_update(GroupData[group_id][gOrm]);
 	
 	    UpdatePlayerSession(playerid, SESSION_GROUP, GroupData[group_id][gUID]);
 	}
@@ -5264,7 +5209,7 @@ public OnPlayerStateChange(playerid, newstate, oldstate)
 		        new group_id = PlayerCache[playerid][pDuty][DUTY_GROUP];
 
 		        GroupData[group_id][gCash] += group_cash;
-		        SaveGroup(group_id);
+		        orm_update(GroupData[group_id][gOrm]);
 
        			ShowPlayerInfoDialog(passenger_id, D_TYPE_INFO, "Zap³aci³eœ $%d za przejazd taksówk¹.", price);
 				ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\nNa konto grupy dodano: $%d", playercash, group_cash);
@@ -5302,7 +5247,7 @@ public OnPlayerStateChange(playerid, newstate, oldstate)
 		        new group_id = PlayerCache[driverid][pDuty][DUTY_GROUP];
 
 		        GroupData[group_id][gCash] += group_cash;
-		        SaveGroup(group_id);
+		        orm_update(GroupData[group_id][gOrm]);
 
        			ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zap³aci³eœ $%d za przejazd taksówk¹.", price);
 				ShowPlayerInfoDialog(driverid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\nNa konto grupy dodano: $%d", playercash, group_cash);
@@ -5739,7 +5684,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 				GroupData[group_id][gCash] += floatround(0.3 * AccessData[access_id][aPrice]);
 				GroupData[group_id][gActivity] += group_activity;
 				
-				SaveGroup(group_id);
+				orm_update(GroupData[group_id][gOrm]);
 				PlayerCache[playerid][pSelectAccess] = INVALID_ACCESS_ID;
 		        
 		        CreatePlayerItem(playerid, AccessData[access_id][aName], ITEM_CLOTH_ACCESS, 0, AccessData[access_id][aUID]);
@@ -5786,7 +5731,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 				GroupData[group_id][gCash] += floatround(0.3 * SkinData[skin_id][sPrice]);
 				GroupData[group_id][gActivity] += group_activity;
 				
-				SaveGroup(group_id);
+				orm_update(GroupData[group_id][gOrm]);
 				
 		        PlayerCache[playerid][pSelectSkin] = INVALID_SKIN_ID;
 		        SetPlayerSkin(playerid, PlayerCache[playerid][pSkin]);
@@ -6253,6 +6198,11 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
                 GameTextForPlayer(playerid, "~n~~n~~n~~n~~n~~n~~n~~w~Linia mety ~y~ustawiona", 3000, 3);
                 TD_ShowSmallInfo(playerid, 10, "Postawiles ~y~linie mety~w~. Mozesz teraz zaprosic rywali do wyscigu komenda ~r~/wyscig zapros~w~.~n~~n~Zeby rozpoczac wyscig wpisz ~y~/wyscig start~w~.~n~Mozesz takze zapisac trase (~p~~h~/wyscig zapisz~w~).");
 		    }
+		}
+		
+		if(newkeys & KEY_NO)
+		{
+		    ListPlayerFavoriteItems(playerid);
 		}
 		return 1;
 	}
@@ -7179,12 +7129,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
      		new doorid = PlayerCache[playerid][pMainTable], door_uid = DoorCache[doorid][dUID];
      		
 			DoorCache[doorid][dPickupID] = PickupID[listitem];
-			SaveDoor(doorid, SAVE_DOOR_THINGS);
+			orm_update(DoorCache[doorid][dOrm]);
 
-			DestroyPickup(doorid);
+			DestroyDynamicPickup(doorid);
 			Iter_Remove(Door, doorid);
 			
+			orm_destroy(DoorCache[doorid][dOrm]);
 			doorid = LoadDoor(door_uid);
+			
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Model pickupa dla drzwi %s (SampID: %d, UID: %d) zosta³ pomyœlnie zmieniony.", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID]);
 			return 1;
 	    }
@@ -7262,7 +7214,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 							}
 						}
 					    strmid(DoorCache[doorid][dAudioURL], "", 0, 0);
-					    SaveDoor(doorid, SAVE_DOOR_AUDIO);
+					    orm_update(DoorCache[doorid][dOrm]);
 					    
 						ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Muzyka spoza gry dla tego budynku zosta³a wy³¹czona.\nAby w³¹czyæ muzykê spoza gry, wybierz tê opcjê ponownie.");
 					}
@@ -7295,14 +7247,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 						{
 		    				if(IsValidDynamicObject(object_id))
 						    {
-								if(Streamer_IsInArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_WORLD_ID, DoorCache[doorid][dUID]))
+								if(Streamer_GetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_WORLD_ID) == DoorCache[doorid][dUID])
 								{
 									DestroyDynamicObject(object_id);
 						  		}
 							}
 						}
 						
-						new object_id, object_uid, object_model,
+						new object_id, object_uid, object_model, objData[sObjectData],
 						    Float:object_pos[3], Float:object_rot[3], Float:object_gate[6],
 						    object_world; /*object_material[128];*/
 
@@ -7335,6 +7287,18 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 
 							object_id = CreateDynamicObject(object_model, object_pos[0], object_pos[1], object_pos[2], object_rot[0], object_rot[1], object_rot[2], object_world, 0, -1, MAX_DRAW_DISTANCE);
 
+							objData[objUID] = object_uid;
+
+							objData[objGateX] = object_gate[0];
+							objData[objGateY] = object_gate[1];
+							objData[objGateZ] = object_gate[2];
+
+							objData[objGateRX] = object_gate[3];
+							objData[objGateRY] = object_gate[4];
+							objData[objGateRZ] = object_gate[5];
+
+							objData[objGateStatus] = false;
+							
 							/*
 							if(!isnull(object_material))
 							{
@@ -7353,15 +7317,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 							    object_material = "";
 							}
 							*/
-							Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_X, object_gate[0]);
-							Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_Y, object_gate[1]);
-							Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_Z, object_gate[2]);
-
-							Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RX, object_gate[3]);
-							Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RY, object_gate[4]);
-							Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RZ, object_gate[5]);
-
-							Streamer_SetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, object_uid);
+							Streamer_SetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
 						}
 						
 						DestroyPickup(doorid);
@@ -7382,14 +7338,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					if(!DoorCache[doorid][dGarage])
 					{
 					    DoorCache[doorid][dGarage] = true;
-					    SaveDoor(doorid, SAVE_DOOR_THINGS);
+         				orm_update(DoorCache[doorid][dOrm]);
 
 						ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Mo¿liwoœæ przejazdu samochodem przez drzwi zosta³a w³¹czona.\n\nOd tej pory bêdziesz móg³ wjechaæ dowolnym pojazdem do budynku.\nAby wjechaæ pojazdem do budynku skorzystaj z komendy /przejazd.");
 					}
 					else
 					{
 	    				DoorCache[doorid][dGarage] = false;
-	    				SaveDoor(doorid, SAVE_DOOR_THINGS);
+                        orm_update(DoorCache[doorid][dOrm]);
 
 						ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Mo¿liwoœæ przejazdu samochodem przez drzwi zosta³a wy³¹czona.");
 					}
@@ -7403,7 +7359,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				    
 				    DoorCache[doorid][dExitInt] = GetPlayerInterior(playerid);
 				    
-				    SaveDoor(doorid, SAVE_DOOR_EXIT);
+				    orm_update(DoorCache[doorid][dOrm]);
 				    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pozycja wyjœcia z drzwi zosta³a pomyœlnie ustalona.\nWyjœcie na zewn¹trz znajduje siê teraz w miejscu, którym w³aœnie stoisz.");
 				}
 				case 8:
@@ -7461,7 +7417,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
             mysql_escape_string(door_name, esc_door_name);
             
 			strmid(DoorCache[doorid][dName], esc_door_name, 0, strlen(esc_door_name), 32);
-			SaveDoor(doorid, SAVE_DOOR_THINGS);
+			orm_update(DoorCache[doorid][dOrm]);
 
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Nazwa drzwi (SampID: %d, UID: %d) zosta³a zmieniona pomyœlnie.\nNowa nazwa drzwi: %s.", doorid, DoorCache[doorid][dUID], door_name);
 			return 1;
@@ -7482,7 +7438,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	            return 1;
 	        }
 	        DoorCache[doorid][dEnterPay] = price;
-	        SaveDoor(doorid, SAVE_DOOR_THINGS);
+	        orm_update(DoorCache[doorid][dOrm]);
 
 	        if(DoorCache[doorid][dEnterPay])
 	        {
@@ -7536,7 +7492,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        DoorCache[doorid][dOwnerType] = OWNER_GROUP;
 	        DoorCache[doorid][dOwner] = GroupData[group_id][gUID];
 
-			SaveDoor(doorid, SAVE_DOOR_THINGS);
+			orm_update(DoorCache[doorid][dOrm]);
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Budynek %s (SampID: %d, UID: %d) zosta³ pomyœlnie przypisany pod grupê.\nBudynek przypisano dla grupy %s (UID: %d).", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
 		    return 1;
 		}
@@ -7564,7 +7520,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        }
 	        
 	        strmid(DoorCache[doorid][dAudioURL], audio_url, 0, strlen(audio_url), 128);
-	        SaveDoor(doorid, SAVE_DOOR_AUDIO);
+	        orm_update(DoorCache[doorid][dOrm]);
 
 	        // Za³¹cz muze dla wszystkich, którzy s¹ w pomieszczeniu
 	        foreach(new i : Player)
@@ -8106,6 +8062,19 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        return 1;
 	    }
 	}
+	if(dialogid == D_ITEM_FAVORITE)
+	{
+	    if(response)
+	    {
+			new itemid = strval(inputtext);
+			OnPlayerUseItem(playerid, itemid);
+	        return 1;
+	    }
+	    else
+	    {
+			return 1;
+	    }
+	}
 	if(dialogid == D_ITEM_OFFER)
 	{
 	    if(response)
@@ -8490,7 +8459,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				GroupData[group_id][gCash] += group_cash;
 				GroupData[group_id][gActivity] += group_activity;
 				
-				SaveGroup(group_id);
+				orm_update(GroupData[group_id][gOrm]);
     		}
     		
       		ProductData[product_id][pCount] --;
@@ -9654,7 +9623,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		    new group_id = GetGroupID(DoorCache[doorid][dOwner]);
 
 			GroupData[group_id][gValue1] = price;
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Koszt wynajmu pokoju zosta³ pomyœlnie zmieniony.\nNowy koszt za wynajem pokoju wynosi: $%d.", GroupData[group_id][gValue1]);
 		    return 1;
@@ -11156,7 +11125,7 @@ public UpdatePlayerSession(playerid, session_type, session_extraid)
 	new session_start = PlayerCache[playerid][pSession][session_type], session_end = gettime(), session_ip[16];
 	GetPlayerIp(playerid, session_ip, sizeof(session_ip));
 	
-	mysql_query_format("INSERT INTO `"SQL_PREF"game_sessions` (session_owner, session_extraid, session_type, session_start, session_end, session_ip) VALUES ('%d', '%d', '%d', '%d', '%d')", PlayerCache[playerid][pUID], session_extraid, session_type, session_start, session_end, session_ip);
+	mysql_query_format("INSERT INTO `"SQL_PREF"game_sessions` (session_owner, session_extraid, session_type, session_start, session_end, session_ip) VALUES ('%d', '%d', '%d', '%d', '%d', '%s')", PlayerCache[playerid][pUID], session_extraid, session_type, session_start, session_end, session_ip);
 	return 1;
 }
 
@@ -11274,62 +11243,42 @@ public ShowPlayerStatsForPlayer(playerid, giveplayer_id)
 	return 1;
 }
 
-public CreateGroup(GroupName[])
+public CreateGroup(GroupName[], group_type)
 {
-	new group_id, group_uid, group_name[32];
+	new group_id = Iter_Free(Groups), group_color[12],
+		ORM:orm_id = GroupData[group_id][gOrm] = orm_create(""SQL_PREF"game_groups", connHandle);
 
-	mysql_escape_string(GroupName, group_name);
-	mysql_query_format("INSERT INTO `"SQL_PREF"groups` (`group_name`) VALUES ('%s')", group_name);
+	mysql_escape_string(GroupName, GroupData[group_id][gName], 32);
 
-	group_uid = cache_insert_id();
-	group_id = Iter_Free(Groups);
+	GroupData[group_id][gType] = group_type;
+	GroupData[group_id][gFlags] = GroupTypeInfo[group_type][gTypeFlags];
 
-	GroupData[group_id][gUID] = group_uid;
-	strmid(GroupData[group_id][gName], group_name, 0, strlen(group_name), 32);
+	orm_addvar_int(orm_id, GroupData[group_id][gUID], "group_uid");
+	orm_addvar_string(orm_id, GroupData[group_id][gName], 32, "group_name");
 
-	GroupData[group_id][gCash] = 0;
+	orm_addvar_int(orm_id, GroupData[group_id][gType], "group_type");
+	orm_addvar_int(orm_id, GroupData[group_id][gCash], "group_cash");
 
-	GroupData[group_id][gType] = G_TYPE_NONE;
-	GroupData[group_id][gOwner] = OWNER_NONE;
+	orm_addvar_string(orm_id, GroupData[group_id][gTag], 5, "group_tag");
 
-	GroupData[group_id][gValue1] = 0;
-	GroupData[group_id][gValue2] = 0;
+	orm_addvar_string(orm_id, group_color, 12, "group_color");
+	orm_addvar_int(orm_id, GroupData[group_id][gFlags], "group_flags");
 
-	GroupData[group_id][gColor] = COLOR_WHITE;
-	GroupData[group_id][gActivity] = 0;
-	
-	strmid(GroupData[group_id][gTag], "NONE", 0, 4, 5);
-	GroupData[group_id][gLastTax] = gettime();
+	orm_addvar_int(orm_id, GroupData[group_id][gOwner], "group_owner");
+	orm_addvar_int(orm_id, GroupData[group_id][gLastTax], "group_last_tax");
 
-	GroupData[group_id][gToggleChat] = false;
+	sscanf(group_color, "x", GroupData[group_id][gColor]);
+
+	orm_setkey(orm_id, "group_uid");
+	orm_insert(orm_id);
+
 	Iter_Add(Groups, group_id);
-
 	return group_id;
-}
-
-public SaveGroup(group_id)
-{
-	mysql_query_format("UPDATE `"SQL_PREF"groups` SET group_name = '%s', group_cash = '%d', group_dotation = '%d', group_owner = '%d', group_value1 = '%d', group_value2 = '%d', group_activity = '%d', group_lasttax = '%d' WHERE group_uid = '%d' LIMIT 1",
-	GroupData[group_id][gName],
-
-	GroupData[group_id][gCash],
-	GroupData[group_id][gDotation],
-	
-	GroupData[group_id][gOwner],
-
-	GroupData[group_id][gValue1],
-	GroupData[group_id][gValue2],
-	
-	GroupData[group_id][gActivity],
-	GroupData[group_id][gLastTax],
-
-	GroupData[group_id][gUID]);
-	return 1;
 }
 
 public DeleteGroup(group_id)
 {
-	mysql_query_format("DELETE FROM `"SQL_PREF"groups` WHERE group_uid = '%d'", GroupData[group_id][gUID]);
+	orm_delete(GroupData[group_id][gOrm]);
 
 	// Zwolnij cz³onków
 	mysql_query_format("DELETE FROM `"SQL_PREF"char_groups` WHERE group_belongs = '%d'", GroupData[group_id][gUID]);
@@ -11398,20 +11347,6 @@ public DeleteGroup(group_id)
 	        }
 	    }
 	}
-	GroupData[group_id][gUID] 		= 0;
-	GroupData[group_id][gCash] 		= 0;
-
-	GroupData[group_id][gType] 		= G_TYPE_NONE;
-	GroupData[group_id][gOwner] 	= OWNER_NONE;
-
-	GroupData[group_id][gValue1] 	= 0;
-	GroupData[group_id][gValue2] 	= 0;
-
-	GroupData[group_id][gColor] 	= 0;
-	GroupData[group_id][gActivity]  = 0;
-
-	GroupData[group_id][gLastTax]   = 0;
-	GroupData[group_id][gFlags]     = 0;
 	
 	Iter_Remove(Groups, group_id);
 	return 1;
@@ -11425,7 +11360,7 @@ public query_OnLoadGroups()
 	for(new row = 0; row != rows; row++)
 	{
  		group_id = Iter_Free(Groups);
-   		orm_id = GroupData[group_id][gOrm] = orm_create(""SQL_PREF"game_groups");
+   		orm_id = GroupData[group_id][gOrm] = orm_create(""SQL_PREF"game_groups", connHandle);
 
 		orm_addvar_int(orm_id, GroupData[group_id][gUID], "group_uid");
 		orm_addvar_string(orm_id, GroupData[group_id][gName], 32, "group_name");
@@ -11439,6 +11374,7 @@ public query_OnLoadGroups()
 		orm_addvar_int(orm_id, GroupData[group_id][gFlags], "group_flags");
 
 		orm_addvar_int(orm_id, GroupData[group_id][gOwner], "group_owner");
+		orm_addvar_int(orm_id, GroupData[group_id][gLastTax], "group_last_tax");
 		
 		sscanf(group_color, "x", GroupData[group_id][gColor]);
 
@@ -11486,11 +11422,10 @@ public ShowPlayerGroupInfo(playerid, group_id)
 	
 	if(GroupData[group_id][gFlags] & G_FLAG_TAX)
 	{
- 		new time_string[64];
-   		//mtime_UnixToDate(time_string, sizeof(time_string), GroupData[group_id][gLastTax] + (7 * 86000));
-   		
-		strmid(time_string, time_string, 0, 10, 64);
-		format(list_stats, sizeof(list_stats), "%s\nPodatek:\t\t%s", list_stats, time_string);
+ 		new year, month, day, hour, minute, second;
+		TimestampToDate(GroupData[group_id][gLastTax] + (7 * 86000), year, month, day, hour, minute, second, 1);
+		
+		format(list_stats, sizeof(list_stats), "%s\nPodatek:\t\t%02d/%02d/%d - %02d:%02d", list_stats, day, month, year, hour, minute);
 	}
 
 	format(string, sizeof(string), "%s (UID: %d) » Informacje", GroupData[group_id][gName], GroupData[group_id][gUID]);
@@ -11507,14 +11442,15 @@ public ShowPlayerGroupOptions(playerid)
 	    {
 			group_id = PlayerGroup[playerid][slot][gpID];
 
-			/*if(PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
+			if(PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
 			{
 		    	format(string, sizeof(string), "~>~ %s ~o~~n~~n~~n~~n~~n~~n~~n~", GroupData[group_id][gTag]);
 			}
 			else
-			{*/
-   			format(string, sizeof(string), "~>~ %s ~n~~n~~n~~n~~n~~n~~n~", GroupData[group_id][gTag]);
-			//}
+			{
+	   			format(string, sizeof(string), "~>~ %s ~n~~n~~n~~n~~n~~n~~n~", GroupData[group_id][gTag]);
+			}
+			
 			PlayerTextDrawSetString(playerid, TD_MainGroupTag[playerid][slot], string);
 			PlayerTextDrawColor(playerid, TD_MainGroupTag[playerid][slot], GroupData[group_id][gColor]);
 
@@ -11566,10 +11502,9 @@ public query_OnLoadPlayerGroups(playerid)
         group_id = GetGroupID(group_uid);
         
 		if(group_id == INVALID_GROUP_ID)    continue;
-
 		PlayerGroup[playerid][group_slot][gpUID] = GroupData[group_id][gUID];
 		
-		cache_get_value_index_int(row, 1, PlayerGroup[playerid][group_slot][gpUID]);
+		cache_get_value_index_int(row, 1, PlayerGroup[playerid][group_slot][gpPerm]);
 		cache_get_value_index(row, 2, PlayerGroup[playerid][group_slot][gpTitle], 32);
 		
 		cache_get_value_index_int(row, 3, PlayerGroup[playerid][group_slot][gpPayment]);
@@ -11957,160 +11892,64 @@ public ShowPlayerVehicleInfo(playerid, vehid)
 
 public CreateDoor(Float:DoorEnterX, Float:DoorEnterY, Float:DoorEnterZ, Float:DoorEnterA, DoorEnterInt, DoorEnterVW, DoorName[])
 {
-	new door_uid, door_name[64];
+	new doorid = INVALID_DOOR_ID, door_uid, door_name[64];
 
-    mysql_escape_string(DoorName, door_name);
+    mysql_escape_string(DoorName, door_name, 64);
 	mysql_query_format("INSERT INTO `"SQL_PREF"doors` (door_name, door_enterx, door_entery, door_enterz, door_entera, door_enterint, door_entervw) VALUES ('%s', '%f', '%f', '%f', '%f', '%d', '%d')", door_name, DoorEnterX, DoorEnterY, DoorEnterZ, DoorEnterA, DoorEnterInt, DoorEnterVW);
 
 	door_uid = cache_insert_id();
-	LoadDoor(door_uid);
+	doorid = LoadDoor(door_uid);
 
-	return door_uid;
+	return doorid;
 }
 
 public LoadDoor(door_uid)
 {
-	new doorid = Iter_Free(Door);
- /*
-	mysql_query_format("SELECT * FROM `"SQL_PREF"doors` WHERE door_uid = '%d' LIMIT 1", door_uid);
-
-	mysql_store_result();
-	if(mysql_fetch_row_format(data, "|"))
-	{
-		sscanf(data, "p<|>ds[32]ffffddffffddddddds[128]d",
-		DoorCache[doorid][dUID],
-		DoorCache[doorid][dName],
-		
-		DoorCache[doorid][dEnterX],
-		DoorCache[doorid][dEnterY],
-		DoorCache[doorid][dEnterZ],
-		DoorCache[doorid][dEnterA],
-		
-		DoorCache[doorid][dEnterInt],
-		DoorCache[doorid][dEnterVW],
-		
-		DoorCache[doorid][dExitX],
-		DoorCache[doorid][dExitY],
-		DoorCache[doorid][dExitZ],
-		DoorCache[doorid][dExitA],
-		
-		DoorCache[doorid][dExitInt],
-		DoorCache[doorid][dExitVW],
-		
-		DoorCache[doorid][dLocked],
-		DoorCache[doorid][dPickupID],
-		
-		DoorCache[doorid][dGarage],
-
-		DoorCache[doorid][dOwner],
-		DoorCache[doorid][dOwnerType],
-
-		DoorCache[doorid][dAudioURL],
-		DoorCache[doorid][dEnterPay]);
-		
-		Iter_Add(Door, doorid);
-		CreatePickup(DoorCache[doorid][dPickupID], 2, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], DoorCache[doorid][dEnterVW]);
-	}
-	mysql_free_result();
-	*/
-	return doorid;
-}
-
-public SaveDoor(doorid, what)
-{
- 	new query[256], main_query[512];
- 	format(main_query, sizeof(main_query), "UPDATE `"SQL_PREF"doors` SET");
- 	
-	if(what & SAVE_DOOR_ENTER)
-	{
-	    // Pozycja wejœcia
-		format(query, sizeof(query), " door_enterx = '%f', door_entery = '%f', door_enterz = '%f', door_entera = '%f', door_enterint = '%d', door_entervw = '%d'",
-		DoorCache[doorid][dEnterX],
-		DoorCache[doorid][dEnterY],
-		DoorCache[doorid][dEnterZ],
-		DoorCache[doorid][dEnterA],
-		
-		DoorCache[doorid][dEnterInt],
-		DoorCache[doorid][dEnterVW]);
-
-		if(strlen(main_query) > 32)
-		{
-		    strcat(main_query, ",", sizeof(main_query));
-		}
-  		strcat(main_query, query, sizeof(main_query));
-	}
-	if(what & SAVE_DOOR_EXIT)
-	{
-	    // Pozycja wyjœcia
-		format(query, sizeof(query), " door_exitx = '%f', door_exity = '%f', door_exitz = '%f', door_exita = '%f', door_exitint = '%d', door_exitvw = '%d'",
-		DoorCache[doorid][dExitX],
-		DoorCache[doorid][dExitY],
-		DoorCache[doorid][dExitZ],
-		DoorCache[doorid][dExitA],
-		
-		DoorCache[doorid][dExitInt],
-		DoorCache[doorid][dExitVW]);
-
-		if(strlen(main_query) > 32)
-		{
-		    strcat(main_query, ",", sizeof(main_query));
-		}
-  		strcat(main_query, query, sizeof(main_query));
-	}
-	if(what & SAVE_DOOR_THINGS)
-	{
-	    // Pozosta³e (nazwa, w³aœciciel, model pickupa, koszt wstêpu, gara¿, akcesoria, czas p³oniêcia)
-	    format(query, sizeof(query), " door_name = '%s', door_owner = '%d', door_ownertype = '%d', door_pickupid = '%d', door_garage = '%d'",
-	    DoorCache[doorid][dName],
+	new doorid = Iter_Free(Door),
+	    ORM:orm_id = DoorCache[doorid][dOrm] = orm_create(""SQL_PREF"doors", connHandle);
 	    
-	    DoorCache[doorid][dOwner],
-	    DoorCache[doorid][dOwnerType],
-	    
-	    DoorCache[doorid][dPickupID],
-		DoorCache[doorid][dGarage]);
-
-		if(strlen(main_query) > 32)
-		{
-		    strcat(main_query, ",", sizeof(main_query));
-		}
-  		strcat(main_query, query, sizeof(main_query));
-	}
-	if(what & SAVE_DOOR_AUDIO)
-	{
-		// Link do muzyki spoza gry
-	    format(query, sizeof(query), " door_audiourl = '%s'",
-	    DoorCache[doorid][dAudioURL]);
-
-   		if(strlen(main_query) > 32)
-		{
-		    strcat(main_query, ",", sizeof(main_query));
-		}
-  		strcat(main_query, query, sizeof(main_query));
-	}
-	if(what & SAVE_DOOR_LOCK)
-	{
-	    // Zamkniêcie drzwi
-	    format(query, sizeof(query), " door_lock = '%d'",
-	    DoorCache[doorid][dLocked]);
-
-		if(strlen(main_query) > 32)
-		{
-		    strcat(main_query, ",", sizeof(main_query));
-		}
-  		strcat(main_query, query, sizeof(main_query));
-	}
+	DoorCache[doorid][dUID] = door_uid;
 	
-	format(query, sizeof(query), " WHERE door_uid = '%d' LIMIT 1", DoorCache[doorid][dUID]);
-	strcat(main_query, query, sizeof(main_query));
+	orm_addvar_int(orm_id, DoorCache[doorid][dUID], "door_uid");
+	orm_addvar_string(orm_id, DoorCache[doorid][dName], 64, "door_name");
 
-	mysql_query(connHandle, main_query);
-	return 1;
+	orm_addvar_int(orm_id, DoorCache[doorid][dOwnerType], "door_ownertype");
+	orm_addvar_int(orm_id, DoorCache[doorid][dOwner], "door_owner");
+
+	orm_addvar_float(orm_id, DoorCache[doorid][dEnterX], "door_enterx");
+	orm_addvar_float(orm_id, DoorCache[doorid][dEnterY], "door_entery");
+	orm_addvar_float(orm_id, DoorCache[doorid][dEnterZ], "door_enterz");
+	orm_addvar_float(orm_id, DoorCache[doorid][dEnterA], "door_entera");
+
+	orm_addvar_int(orm_id, DoorCache[doorid][dEnterVW], "door_entervw");
+	orm_addvar_int(orm_id, DoorCache[doorid][dEnterInt], "door_enterint");
+
+	orm_addvar_float(orm_id, DoorCache[doorid][dExitX], "door_exitx");
+	orm_addvar_float(orm_id, DoorCache[doorid][dExitY], "door_exity");
+	orm_addvar_float(orm_id, DoorCache[doorid][dExitZ], "door_exitz");
+	orm_addvar_float(orm_id, DoorCache[doorid][dExitA], "door_exita");
+
+	orm_addvar_int(orm_id, DoorCache[doorid][dExitVW], "door_exitvw");
+	orm_addvar_int(orm_id, DoorCache[doorid][dExitInt], "door_exitint");
+
+	orm_addvar_int(orm_id, DoorCache[doorid][dPickupID], "door_pickupid");
+	orm_addvar_int(orm_id, DoorCache[doorid][dLocked], "door_lock");
+
+	orm_addvar_int(orm_id, DoorCache[doorid][dGarage], "door_garage");
+
+	orm_addvar_int(orm_id, DoorCache[doorid][dEnterPay], "door_enterpay");
+	orm_addvar_string(orm_id, DoorCache[doorid][dAudioURL], 128, "door_audiourl");
+
+	orm_setkey(orm_id, "door_uid");
+	orm_select(orm_id);
+
+	Iter_Add(Door, doorid);
+	CreateDynamicPickup(DoorCache[doorid][dPickupID], 2, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], DoorCache[doorid][dEnterVW], DoorCache[doorid][dEnterInt]);
+	return doorid;
 }
 
 public DeleteDoor(doorid)
 {
-	mysql_query_format("DELETE FROM `"SQL_PREF"doors` WHERE door_uid = '%d' LIMIT 1", DoorCache[doorid][dUID]);
-	
 	// Usuñ stare obiekty z tego VW (jeœli s¹)
 	new object_counts = Streamer_GetUpperBound(STREAMER_TYPE_OBJECT);
 	mysql_query_format("DELETE FROM `"SQL_PREF"objects` WHERE object_world = '%d'", DoorCache[doorid][dUID]);
@@ -12197,41 +12036,13 @@ public DeleteDoor(doorid)
 	    }
 	}
 	
-	DoorCache[doorid][dUID] 					= 0;
-
-	DoorCache[doorid][dEnterX] 					= 0.0;
-	DoorCache[doorid][dEnterY] 					= 0.0;
-	DoorCache[doorid][dEnterZ] 					= 0.0;
-	DoorCache[doorid][dEnterA] 					= 0.0;
-
-	DoorCache[doorid][dEnterInt] 				= 0;
-	DoorCache[doorid][dEnterVW] 				= 0;
-
-	DoorCache[doorid][dExitX] 					= 0.0;
-	DoorCache[doorid][dExitY] 					= 0.0;
-	DoorCache[doorid][dExitZ] 					= 0.0;
-	DoorCache[doorid][dExitA] 					= 0.0;
-
-	DoorCache[doorid][dExitInt] 				= 0;
-	DoorCache[doorid][dExitVW] 					= 0;
-
-	DoorCache[doorid][dLocked] 					= false;
-	DoorCache[doorid][dPickupID] 				= 0;
-	
-	DoorCache[doorid][dGarage]      			= false;
-
-	DoorCache[doorid][dOwner] 					= 0;
-	DoorCache[doorid][dOwnerType] 				= 0;
-	
-	DoorCache[doorid][dEnterPay] 				= 0;
-	
-	DoorCache[doorid][dAccess]      			= 0;
+	orm_delete(DoorCache[doorid][dOrm]);
 	
 	DoorCache[doorid][dFireData][FIRE_TIME] 	= 0;
 	DoorCache[doorid][dFireData][FIRE_OBJECT]   = _:INVALID_OBJECT_ID;
 	DoorCache[doorid][dFireData][FIRE_LABEL]    = _:INVALID_3DTEXT_ID;
 
-	DestroyPickup(doorid);
+	DestroyDynamicPickup(doorid);
 	Iter_Remove(Door, doorid);
 	return 1;
 }
@@ -12246,7 +12057,7 @@ public query_OnLoadDoors()
 	for(new row = 0; row != rows; row++)
 	{
  		doorid = Iter_Free(Door);
-   		orm_id = DoorCache[doorid][dOrm] = orm_create(""SQL_PREF"doors");
+   		orm_id = DoorCache[doorid][dOrm] = orm_create(""SQL_PREF"doors", connHandle);
    		
    		orm_addvar_int(orm_id, DoorCache[doorid][dUID], "door_uid");
 		orm_addvar_string(orm_id, DoorCache[doorid][dName], 64, "door_name");
@@ -12282,7 +12093,7 @@ public query_OnLoadDoors()
 		orm_apply_cache(orm_id, row);
         
         Iter_Add(Door, doorid);
-        CreatePickup(DoorCache[doorid][dPickupID], 2, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], DoorCache[doorid][dEnterVW]);
+        CreateDynamicPickup(DoorCache[doorid][dPickupID], 2, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], DoorCache[doorid][dEnterVW], DoorCache[doorid][dEnterInt]);
 	}
 	printf("[load] Proces wczytywania drzwi zosta³ zakoñczony (count: %d).", Iter_Count(Door));
 	return 1;
@@ -12482,6 +12293,39 @@ public ListPlayerCheckedItems(playerid)
 	    TD_ShowSmallInfo(playerid, 5, "Nie posiadasz ~r~zadnych ~w~przedmiotow mozliwych do zaznaczenia.");
 	}
 	PlayerCache[playerid][pPuttingBag] = false;
+	return 1;
+}
+
+public ListPlayerFavoriteItems(playerid)
+{
+	new list_favorite_items[512] = "*\tIdentyfikator\tNazwa przedmiotu", favorite_items_counts;
+	foreach(new itemid : PlayerItem[playerid])
+	{
+	    if(PlayerItemCache[playerid][itemid][iUID])
+	    {
+	        if(PlayerItemCache[playerid][itemid][iFavorite])
+	        {
+	     		if(PlayerItemCache[playerid][itemid][iUsed])
+	     		{
+	             	format(list_favorite_items, sizeof(list_favorite_items), "%s\n{000000}%d\t{FFFFFF}%d\t{FFFFFF}%s", list_favorite_items, itemid, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
+				}
+				else
+				{
+	   				format(list_favorite_items, sizeof(list_favorite_items), "%s\n{000000}%d\t{C0C0C0}%d\t{C0C0C0}%s", list_favorite_items, itemid, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName]);
+				}
+				favorite_items_counts ++;
+			}
+	    }
+	}
+
+	if(favorite_items_counts > 0)
+	{
+	    ShowPlayerDialog(playerid, D_ITEM_FAVORITE, DIALOG_STYLE_TABLIST_HEADERS, "Lista ulubionych przedmiotów:", list_favorite_items, "U¿yj", "Zamknij");
+	}
+	else
+	{
+	    TD_ShowSmallInfo(playerid, 5, "Nie dodales ~r~zadnego ~w~przedmiotu do ulubionych.");
+	}
 	return 1;
 }
 
@@ -13708,10 +13552,11 @@ public OnPlayerUseItem(playerid, itemid)
 		        }
 		        else
 				{
-  					new corpse_desc[512], time_string[64];
+  					new corpse_desc[512],
+  					    year, month, day, hour, minute, second;
   					
-			   		//mtime_UnixToDate(time_string, sizeof(time_string), corpse_date);
-					format(corpse_desc, sizeof(corpse_desc), "Dok³adna data zgonu %s.\nPrzyczyna œmierci: %s", time_string, DeathTypeData[corpse_death][0]);
+					TimestampToDate(corpse_date, year, month, day, hour, minute, second, 1);
+					format(corpse_desc, sizeof(corpse_desc), "Dok³adna data zgonu %02d/%02d/%d %02d:%02d.\nPrzyczyna œmierci: %s", day, month, year, hour, minute, DeathTypeData[corpse_death][0]);
 
 					if(corpse_weapon)
 					{
@@ -14134,7 +13979,7 @@ public LoadPlayerItems(playerid)
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iOwner], "item_owner");
 
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iType], "item_type");
-			//orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iFavorite], "item_favorite");
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iFavorite], "item_favorite");
 			
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iGroup], "item_group");
 
@@ -15068,7 +14913,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				GroupData[group_id][gCash] += group_cash;
 				GroupData[group_id][gActivity] += group_activity;
 
-				SaveGroup(group_id);
+				orm_update(GroupData[group_id][gOrm]);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 			}
 			else
@@ -15077,7 +14922,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 					group_id = GetGroupID(DoorCache[doorid][dOwner]);
 					
 				GroupData[group_id][gCash] += group_cash;
-				SaveGroup(group_id);
+				orm_update(GroupData[group_id][gOrm]);
 				
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Sprzeda³eœ produkt %s za cenê $%d. Otrzyma³eœ premiê w wysokoœci $%d!", OfferData[offererid][oName], offer_price, playercash);
 			}
@@ -15129,7 +14974,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 	    DoorCache[doorid][dOwnerType] = OWNER_PLAYER;
 	    DoorCache[doorid][dOwner] = PlayerCache[playerid][pUID];
 
-	    SaveDoor(doorid, SAVE_DOOR_THINGS);
+	    orm_update(DoorCache[doorid][dOrm]);
 	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Gratulacje, zakupi³eœ now¹ nieruchomoœæ %s (SampID: %d, UID: %d).\nNieruchomoœci¹ mo¿esz zarz¹dzaæ poprzez komendê /drzwi.", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID]);
 	}
 	
@@ -15193,7 +15038,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			        GroupData[group_id][gCash] += group_cash;
 			        GroupData[group_id][gActivity] += group_activity;
 			        
-			        SaveGroup(group_id);
+			        orm_update(GroupData[group_id][gOrm]);
 					ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 			    }
 			}
@@ -15241,7 +15086,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			        GroupData[group_id][gCash] += group_cash;
 			        GroupData[group_id][gActivity] += group_activity;
 			        
-			        SaveGroup(group_id);
+			        orm_update(GroupData[group_id][gOrm]);
        				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 			    }
 			}
@@ -15381,7 +15226,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 		}
 		new mandate_reason[128], add_pdp = OfferData[offererid][oValue1];
@@ -15415,7 +15260,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 		}
 		new vehid = OfferData[offererid][oValue1];
@@ -15449,7 +15294,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 		}
 		PlayerCache[playerid][pDocuments] += OfferData[offererid][oValue1];
@@ -15489,12 +15334,12 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 		}
 
-		new group_id = CreateGroup(OfferData[offererid][oName]),
-		    group_type = OfferData[offererid][oValue1];
+		new group_type = OfferData[offererid][oValue1],
+			group_id = CreateGroup(OfferData[offererid][oName], group_type);
 
 		PlayerGroup[playerid][group_slot][gpUID] = GroupData[group_id][gUID];
 		PlayerGroup[playerid][group_slot][gpID] = group_id;
@@ -15502,10 +15347,6 @@ public OnPlayerAcceptOffer(playerid, offererid)
 		PlayerGroup[playerid][group_slot][gpPerm] = G_PERM_MAX;
 		mysql_query_format("INSERT INTO `"SQL_PREF"char_groups` (`char_uid`, `group_belongs`, `group_perm`) VALUES ('%d', '%d', '%d')", PlayerCache[playerid][pUID], GroupData[group_id][gUID], G_PERM_MAX);
 
-        GroupData[group_id][gType] 	= group_type;
-        GroupData[group_id][gFlags] = GroupTypeInfo[group_type][gTypeFlags];
-
-		mysql_query_format("UPDATE `"SQL_PREF"groups` SET group_type = '%d', group_flags = '%d' WHERE group_uid = '%d' LIMIT 1", GroupData[group_id][gType], GroupData[group_id][gFlags], GroupData[group_id][gUID]);
 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Gratulacje! Od teraz jesteœ w³aœcicielem nowego biznesu.\n\nNazwa biznesu: %s\nTyp: %s\nIdentyfikator (UID): %d\n\nSkorzystaj z komendy /g, by poznaæ szczegó³y.", GroupData[group_id][gName], GroupTypeInfo[GroupData[group_id][gType]][gTypeName], GroupData[group_id][gUID]);
 	}
 	
@@ -15532,7 +15373,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 		}
 		
@@ -15569,7 +15410,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 		}
 		PlayerCache[offererid][pHealing] = playerid;
@@ -15601,7 +15442,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 		}
 		new pass_time = OfferData[offererid][oValue1], group_uid = OfferData[offererid][oValue2];
@@ -15710,7 +15551,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 	    }
 	}
@@ -15738,7 +15579,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 			
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 	    }
 	    new veh_model = OfferData[offererid][oValue1], veh_uid, spawn_point = random(sizeof(SalonSpawnPos)), color = random(36);
@@ -15779,14 +15620,14 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 	    }
 	    
 	    new group_id = OfferData[offererid][oValue1];
 	    
 	    GroupData[group_id][gLastTax] = gettime();
-	    SaveGroup(group_id);
+	    orm_update(GroupData[group_id][gOrm]);
 	    
 	    ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Podatek za firmê %s (UID: %d) zosta³ pomyœlnie sp³acony.", GroupData[group_id][gName], GroupData[group_id][gUID]);
 	}
@@ -15814,7 +15655,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 	    }
 		new vehid = OfferData[offererid][oValue1];
@@ -15848,7 +15689,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			GroupData[group_id][gCash] += group_cash;
 			GroupData[group_id][gActivity] += group_activity;
 
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 	    }
 	    
@@ -15883,7 +15724,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			    group_activity = group_cash / 3;
 
 			GroupData[group_id][gCash] += group_cash;
-			SaveGroup(group_id);
+			orm_update(GroupData[group_id][gOrm]);
 
 			ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash, group_activity);
 		}
@@ -16056,7 +15897,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 	            new group_id = GetGroupID(DoorCache[doorid][dOwner]);
 	            
 	            GroupData[group_id][gCash] += DoorCache[doorid][dEnterPay];
-	            SaveGroup(group_id);
+	            orm_update(GroupData[group_id][gOrm]);
 	        }
 		}
     }
@@ -16072,11 +15913,10 @@ public OnPlayerEnterDoor(playerid, doorid)
 			{
 			    if(GroupData[group_id][gLastTax] + (7 * 86000) <= gettime())
 			    {
-     				new time_string[64];
-			   		//mtime_UnixToDate(time_string, sizeof(time_string), GroupData[group_id][gLastTax] + (15 * 86000));
+					new year, month, day, hour, minute, second;
+					TimestampToDate(GroupData[group_id][gLastTax] + (15 * 86000), year, month, day, hour, minute, second, 1);
 
-					strmid(time_string, time_string, 0, 10, 64);
-			        ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Uwaga! Firma ta nie wywi¹za³a siê z obowi¹zku sp³aty podatku.\nZaleca siê jak najprêdzej sp³aciæ d³ug, w przeciwnym wypadku firma zostanie usuniêta!\n\nPodatek zap³aciæ mo¿na w Urzêdzie Miasta, udaj siê tam i poproœ urzêdnika o ofertê.\nAktywnoœæ firmy wygasa: %s", time_string);
+			        ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Uwaga! Firma ta nie wywi¹za³a siê z obowi¹zku sp³aty podatku.\nZaleca siê jak najprêdzej sp³aciæ d³ug, w przeciwnym wypadku firma zostanie usuniêta!\n\nPodatek zap³aciæ mo¿na w Urzêdzie Miasta, udaj siê tam i poproœ urzêdnika o ofertê.\nAktywnoœæ firmy wygasa: %02d/%02d/%d %02d:%02d", day, month, year, hour, minute);
 			    }
 			}
 		}
@@ -16668,6 +16508,7 @@ public OnMysqlQuery(resultid, spareid, MySQL:handle)
 /* Komendy */
 CMD:test(playerid, params[])
 {
+/*
 	new Float:posX, Float:posY, Float:posZ;
 	
 	GetPlayerPos(playerid, posX, posY, posZ);
@@ -16679,6 +16520,8 @@ CMD:test(playerid, params[])
 	SetPlayerCameraLookAt(playerid, posX, posY, posZ, CAMERA_CUT);
 	
 	TD_ShowLargeInfo(playerid, 0, "Skin: ~y~123             ~w~Identyfikator: ~y~274~n~~n~~b~PX: ~w~%05.1f            ~b~PY: ~w~%05.1f          ~b~PZ: ~w~%05.1f~n~~n~Uzywaj ~g~strzalek~w~, by zmienic pozycje aktora.~n~Klawisz ~r~SPACJA~w~ przyspiesza poruszanie nim. ~y~ALT ~w~zmienia rotacje.", posX, posY, posZ);
+*/
+
 	return 1;
 }
 
@@ -16775,15 +16618,19 @@ CMD:ag(playerid, params[])
 	}
 	if(!strcmp(type, "stworz", true) || !strcmp(type, "create", true))
 	{
-	    new group_name[32];
-	    if(sscanf(varchar, "s[32]", group_name))
+	    new group_type, group_name[32];
+	    if(sscanf(varchar, "k<group_type>s[32]", group_type, group_name))
 	    {
-	        ShowTipForPlayer(playerid, "/ag stworz [Nazwa grupy]");
+	        ShowTipForPlayer(playerid, "/ag stworz [Typ grupy] [Nazwa grupy]");
 	        return 1;
 	    }
-	    
-	    new group_id = CreateGroup(group_name);
-		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pomyœlnie utworzono grupê o nazwie %s (UID: %d).", GroupData[group_id][gName], GroupData[group_id][gUID]);
+	    if(group_type == INVALID_GROUP_TYPE)
+	    {
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdny typ grupy.");
+	        return 1;
+	    }
+	    new group_id = CreateGroup(group_name, group_type);
+		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pomyœlnie utworzono grupê %s (UID: %d).\n\nTyp grupy: %s", GroupData[group_id][gName], GroupData[group_id][gUID], GroupTypeInfo[group_type][gTypeName]);
 		return 1;
 	}
 	if(!strcmp(type, "lider", true) || !strcmp(type, "leader", true))
@@ -16847,7 +16694,7 @@ CMD:ag(playerid, params[])
 	    }
 	    mysql_escape_string(group_name, GroupData[group_id][gName]);
 	    
-		SaveGroup(group_id);
+		orm_update(GroupData[group_id][gOrm]);
 	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Nazwa grupy (UID: %d) zosta³a zmieniona pomyœlnie.\nNowa nazwa: %s", GroupData[group_id][gUID], group_name);
 		return 1;
 	}
@@ -16932,17 +16779,12 @@ CMD:ag(playerid, params[])
   			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Gracz o podanym ID nie jest zalogowany.");
 	    	return 1;
 		}
-  		new group_id = GetGroupID(group_uid);
+  		new group_id = GetPlayerGroupID(giveplayer_id, group_uid);
 	    if(group_id == INVALID_GROUP_ID)
 	    {
-	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID grupy.");
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten gracz nie jest cz³onkiem tej grupy, lub grupa nie istnieje.");
 	        return 1;
 	    }
-		if(!IsPlayerInGroup(giveplayer_id, GroupData[group_id][gUID]))
-		{
-		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten gracz nie jest cz³onkiem tej grupy.");
-		    return 1;
-		}
 		new group_slot = GetPlayerGroupSlot(giveplayer_id, GroupData[group_id][gUID]);
 
 		if(PlayerCache[giveplayer_id][pDuty][DUTY_GROUP] == group_id)
@@ -16984,15 +16826,10 @@ CMD:ag(playerid, params[])
   			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Gracz o podanym ID nie jest zalogowany.");
 	    	return 1;
 		}
-  		new group_id = GetGroupID(group_uid);
-	    if(group_id == INVALID_GROUP_ID)
+		new group_id = GetPlayerGroupID(giveplayer_id, group_uid);
+	    if(group_id != INVALID_GROUP_ID)
 	    {
-	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID grupy.");
-	        return 1;
-	    }
-	    if(IsPlayerInGroup(giveplayer_id, GroupData[group_id][gUID]))
-	    {
-	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten gracz nale¿y ju¿ do tej grupy.");
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten gracz nale¿y ju¿ do tej grupy, lub grupa nie istnieje.");
 	        return 1;
 	    }
 		new group_slot = GetPlayerFreeGroupSlot(giveplayer_id);
@@ -17086,7 +16923,7 @@ CMD:g(playerid, params[])
 			new group_activity = (floatround((gettime() - PlayerCache[playerid][pSession][SESSION_GROUP]) / 60)) * 3;
 	    
    			GroupData[group_id][gActivity] += group_activity;
-      		SaveGroup(group_id);
+            orm_update(GroupData[group_id][gOrm]);
 	    
 	        if(PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
 	        {
@@ -17307,7 +17144,7 @@ CMD:g(playerid, params[])
 	   	orm_update(PlayerCache[playerid][pOrm]);
 
 	   	GroupData[group_id][gCash] -= price;
-	   	SaveGroup(group_id);
+	   	orm_update(GroupData[group_id][gOrm]);
 
 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Wyp³aci³eœ pieni¹dze z konta grupy.\n\nZ konta grupy zosta³o wyp³acone: $%d\nPozosta³e œrodki na koncie: $%d", price, GroupData[group_id][gCash]);
 
@@ -17365,7 +17202,7 @@ CMD:g(playerid, params[])
 	   	orm_update(PlayerCache[playerid][pOrm]);
 
 	   	GroupData[group_id][gCash] += price;
-	   	SaveGroup(group_id);
+	    orm_update(GroupData[group_id][gOrm]);
 
 	   	ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Wp³aci³eœ pieni¹dze na konto grupy.\n\nNa konto grupy zosta³o wp³acone: $%d\nNowy stan konta grupy: $%d", price, GroupData[group_id][gCash]);
 
@@ -18529,7 +18366,7 @@ CMD:adrzwi(playerid, params[])
 	    mysql_escape_string(door_name, door_real_name);
         strmid(DoorCache[doorid][dName], door_real_name, 0, strlen(door_real_name), 32);
         
-        SaveDoor(doorid, SAVE_DOOR_THINGS);
+        orm_update(DoorCache[doorid][dOrm]);
 
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Nazwa drzwi (UID: %d) zosta³a pomyœlnie zmieniona.\nNowa nazwa: %s", DoorCache[doorid][dUID], door_name);
 		return 1;
@@ -18607,7 +18444,7 @@ CMD:adrzwi(playerid, params[])
 			DoorCache[doorid][dOwnerType] = OWNER_PLAYER;
 			DoorCache[doorid][dOwner] = PlayerCache[giveplayer_id][pUID];
 
-			SaveDoor(doorid, SAVE_DOOR_THINGS);
+			orm_update(DoorCache[doorid][dOrm]);
 			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (SampID: %d, UID: %d) zosta³y przypisane pomyœlnie.\n\nTyp w³aœciciela: gracz\nW³aœciciel: %s (ID: %d, UID: %d)", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID], PlayerName(giveplayer_id), giveplayer_id, PlayerCache[giveplayer_id][pUID]);
 			return 1;
 		}
@@ -18628,7 +18465,7 @@ CMD:adrzwi(playerid, params[])
 		    DoorCache[doorid][dOwnerType] = OWNER_GROUP;
 		    DoorCache[doorid][dOwner] = GroupData[group_id][gUID];
 
-		    SaveDoor(doorid, SAVE_DOOR_THINGS);
+		    orm_update(DoorCache[doorid][dOrm]);
    			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (SampID: %d, UID: %d) zosta³y przypisane pomyœlnie.\n\nTyp w³aœciciela: grupa\nW³aœciciel: %s (UID: %d)", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
 			return 1;
 		}
@@ -18683,7 +18520,7 @@ CMD:adrzwi(playerid, params[])
 	        DoorCache[doorid][dLocked] = true;
 	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (SampID: %d, UID: %d) zosta³y zamkniête.", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID]);
 	    }
-		SaveDoor(doorid, SAVE_DOOR_LOCK);
+		orm_update(DoorCache[doorid][dOrm]);
  		return 1;
 	}
 	if(!strcmp(type, "wejscie", true) || !strcmp(type, "enter", true))
@@ -18705,7 +18542,7 @@ CMD:adrzwi(playerid, params[])
 		GetPlayerFacingAngle(playerid, DoorCache[doorid][dEnterA]);
 
 		DoorCache[doorid][dEnterInt] = GetPlayerInterior(playerid);
-		SaveDoor(doorid, SAVE_DOOR_ENTER);
+		orm_update(DoorCache[doorid][dOrm]);
 
 		DestroyPickup(doorid);
 		Iter_Remove(Door, doorid);
@@ -18731,7 +18568,7 @@ CMD:adrzwi(playerid, params[])
 		GetPlayerFacingAngle(playerid, DoorCache[doorid][dExitA]);
 
 		DoorCache[doorid][dExitInt] = GetPlayerInterior(playerid);
-		SaveDoor(doorid, SAVE_DOOR_EXIT);
+		orm_update(DoorCache[doorid][dOrm]);
 
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pozycja wyjœcia dla drzwi %s (SampID: %d, UID: %d) zosta³a ustalona.", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID]);
 		return 1;
@@ -18750,7 +18587,7 @@ CMD:adrzwi(playerid, params[])
 			return 1;
 	    }
 	    DoorCache[doorid][dEnterVW] = entervw;
-	    SaveDoor(doorid, SAVE_DOOR_ENTER);
+	    orm_update(DoorCache[doorid][dOrm]);
 
 	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "VirtualWorld wejœcia dla drzwi %s (SampID: %d, UID: %d) zosta³ ustalony (VW: %d).", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID], entervw);
 		return 1;
@@ -18769,7 +18606,7 @@ CMD:adrzwi(playerid, params[])
 			return 1;
 	    }
 	    DoorCache[doorid][dExitVW] = exitvw;
-	    SaveDoor(doorid, SAVE_DOOR_EXIT);
+	    orm_update(DoorCache[doorid][dOrm]);
 
 	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "VirtualWorld wyjœcia dla drzwi %s (SampID: %d, UID: %d) zosta³ ustalony (VW: %d).", DoorCache[doorid][dName], doorid, DoorCache[doorid][dUID], exitvw);
 		return 1;
@@ -18966,7 +18803,7 @@ CMD:drzwi(playerid, params[])
 					PlayerPlaySound(playerid, 1145, 0.0, 0.0, 0.0);
 
 					DoorCache[doorid][dLocked] = false;
-					SaveDoor(doorid, SAVE_DOOR_LOCK);
+					orm_update(DoorCache[doorid][dOrm]);
 				}
 				else
 				{
@@ -18976,7 +18813,7 @@ CMD:drzwi(playerid, params[])
 					PlayerPlaySound(playerid, 1145, 0.0, 0.0, 0.0);
 
 					DoorCache[doorid][dLocked] = true;
-					SaveDoor(doorid, SAVE_DOOR_LOCK);
+					orm_update(DoorCache[doorid][dOrm]);
 				}
 				break;
     		}
@@ -22227,6 +22064,24 @@ CMD:mgate(playerid, params[])
 	
 	mysql_query_format("UPDATE `"SQL_PREF"objects` SET object_gatex = '%f', object_gatey = '%f', object_gatez = '%f', object_gaterx = '%f', object_gatery = '%f', object_gaterz = '%f', object_gate = '1' WHERE object_uid = '%d' LIMIT 1", GateX, GateY, GateZ, GateRX, GateRY, GateRZ, object_uid);
 	
+	new objData[sObjectData];
+	
+	objData[objUID] = object_uid;
+
+	objData[objGateX] = GateX;
+	objData[objGateY] = GateY;
+	objData[objGateZ] = GateZ;
+	
+	objData[objGateRX] = GateRX;
+	objData[objGateRY] = GateRY;
+	objData[objGateRZ] = GateRZ;
+	
+	objData[objGateStatus] = false;
+	objData[objGate] = true;
+	
+	Streamer_SetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
+	
+	/*
 	Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_X, GateX);
 	Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_Y, GateY);
 	Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_Z, GateZ);
@@ -22234,6 +22089,7 @@ CMD:mgate(playerid, params[])
 	Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RX, GateRX);
 	Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RY, GateRY);
 	Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RZ, GateRZ);
+	*/
 	
 	CancelEdit(playerid);
 	ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Brama zosta³a utworzona.\nSkorzystaj z komendy /brama.");
@@ -22422,10 +22278,8 @@ CMD:brama(playerid, params[])
 		    }
 		}
 	}
-	new count_objects = Streamer_CountVisibleItems(playerid, STREAMER_TYPE_OBJECT), object_id,
-	    Float:PosX, Float:PosY, Float:PosZ, Float:dist, count_gates, gate_status;
-	    
-	new Float:object_pos[6], Float:object_gate[6], Float:object_move[6];
+	new count_objects = Streamer_CountVisibleItems(playerid, STREAMER_TYPE_OBJECT), object_id, Float:object_pos[6],
+	    Float:PosX, Float:PosY, Float:PosZ, Float:dist, count_gates, objData[sObjectData];
 	
 	if(IsPlayerInAnyVehicle(playerid))  	dist = 8.0;
 	else                                	dist = 4.0;
@@ -22436,49 +22290,33 @@ CMD:brama(playerid, params[])
 	    if(IsValidPlayerObject(playerid, player_object))
 	    {
 			object_id = Streamer_GetItemStreamerID(playerid, STREAMER_TYPE_OBJECT, player_object);
-			if(GetDynamicObjectGatePos(object_id, object_gate[0], object_gate[1], object_gate[2], object_gate[3], object_gate[4], object_gate[5]))
+			Streamer_GetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
+			
+			if(objData[objGate] == true)
 			{
 			    GetDynamicObjectPos(object_id, object_pos[0], object_pos[1], object_pos[2]);
 			    GetDynamicObjectRot(object_id, object_pos[3], object_pos[4], object_pos[5]);
 			    
-				if(IsPlayerInRangeOfPoint(playerid, dist, object_pos[0], object_pos[1], object_pos[2]) || IsPlayerInRangeOfPoint(playerid, dist, object_gate[0], object_gate[1], object_gate[2]))
+				if(IsPlayerInRangeOfPoint(playerid, dist, object_pos[0], object_pos[1], object_pos[2]) || IsPlayerInRangeOfPoint(playerid, dist, objData[objGateX], objData[objGateY], objData[objGateZ]))
 				{
           	 		if(!IsDynamicObjectMoving(object_id))
           	 		{
-          	 		    object_move[0] = object_pos[0];
-          	 		    object_move[1] = object_pos[1];
-          	 		    object_move[2] = object_pos[2];
+          	 		    if(objData[objGateStatus])
+          	 		    {
+          	 		        GameTextForPlayer(playerid, "~w~Brama ~r~zamknieta", 4000, 6);
           	 		    
-          	 		    object_move[3] = object_pos[3];
-          	 		    object_move[4] = object_pos[4];
-          	 		    object_move[5] = object_pos[5];
+							MoveDynamicObject(object_id, object_pos[0], object_pos[1], object_pos[2], 3.0, object_pos[3], object_pos[4], object_pos[5]);
+							objData[objGateStatus] = false;
+          	 		    }
+          	 		    else
+          	 		    {
+          	 		        GameTextForPlayer(playerid, "~w~Brama ~g~otwarta", 4000, 6);
+          	 		    
+          	 		        MoveDynamicObject(object_id, objData[objGateX], objData[objGateY], objData[objGateZ], 3.0, objData[objGateRX], objData[objGateRY], objData[objGateRZ]);
+      	 		        	objData[objGateStatus] = true;
+          	 		    }
           	 		}
-          	 		else
-          	 		{
-          	 		    Streamer_GetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_MOVE_X, object_move[0]);
-          	 		    Streamer_GetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_MOVE_Y, object_move[1]);
-          	 		    Streamer_GetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_MOVE_Z, object_move[2]);
-          	 		    
-          	 		    Streamer_GetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_MOVE_R_X, object_move[3]);
-          	 		    Streamer_GetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_MOVE_R_Y, object_move[4]);
-          	 		    Streamer_GetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_MOVE_R_Z, object_move[5]);
-					}
-					
-					gate_status = Streamer_GetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE);
-	    			MoveDynamicObject(object_id, object_gate[0], object_gate[1], object_gate[2], 3.0, object_gate[3], object_gate[4], object_gate[5]);
-			            
-    			    if(gate_status)	GameTextForPlayer(playerid, "~w~Brama ~r~zamknieta", 4000, 6);
-    			    else			GameTextForPlayer(playerid, "~w~Brama ~g~otwarta", 4000, 6);
-
-					Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_X, object_move[0]);
-      				Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_Y, object_move[1]);
-       				Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_Z, object_move[2]);
-       				
-					Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RX, object_move[3]);
-      				Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RY, object_move[4]);
-       				Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE_RZ, object_move[5]);
-			            
-                    Streamer_SetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_GATE, (gate_status) ? false : true);
+                    Streamer_SetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
                     
            			count_gates ++;
            			continue;
@@ -23708,7 +23546,7 @@ CMD:dotacja(playerid, params[])
   	if(price <= max_dotation)
   	{
 		GroupData[group_id][gDotation] = price;
-		SaveGroup(group_id);
+		orm_update(GroupData[group_id][gOrm]);
 
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pomyœlnie ustalono wyokoœæ dotacji na pracownika dla grupy.\n\nGrupa: %s (UID: %d)\nAktualna kwota dotacji: $%d", GroupData[group_id][gName], GroupData[group_id][gUID], GroupData[group_id][gDotation]);
   	}
@@ -28820,13 +28658,21 @@ stock GetObjectID(object_uid)
 	{
 	    if(IsValidDynamicObject(object_id))
 	    {
-		    if(Streamer_GetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID) == object_uid)
+		    if(Streamer_IsInArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, object_uid))
 		    {
 		        return object_id;
 		    }
 		}
 	}
 	return INVALID_OBJECT_ID;
+}
+
+stock GetObjectUID(object_id)
+{
+	new objData[sObjectData];
+	Streamer_GetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
+	
+	return objData[objUID];
 }
 
 stock GetXYInFrontOfObject(object_id, &Float:x, &Float:y, Float:distance)
