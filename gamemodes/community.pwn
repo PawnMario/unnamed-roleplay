@@ -57,7 +57,6 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define MAX_PLAYERS         20
 #define MAX_VEHICLES        1000
 #define MAX_DOORS          	600
-#define MAX_AREAS           150
 #define MAX_ITEM_CACHE      100
 #define MAX_PRODUCTS        100
 #define MAX_ACCESS          200
@@ -115,7 +114,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define COLOR_LIGHTPINK 	0xFF80FFFF
 #define COLOR_PURPLE     	0xC2A2DAFF
 #define COLOR_PURPLE2	    0xE0EA64FF
-#define COLOR_AREA          0xD3C27877
+#define COLOR_AREA          0x0000BBAA
 
 #define COLOR_DO       		0x9A9CCDFF
 #define COLOR_INFO			0xD7A064FF
@@ -185,9 +184,6 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 #define GetLabelUID(%0) \
 		Streamer_GetIntData(STREAMER_TYPE_3D_TEXT_LABEL, %0, E_STREAMER_EXTRA_ID)
-		
-#define GetAreaUID(%0) \
-		Streamer_GetIntData(STREAMER_TYPE_AREA, %0, E_STREAMER_EXTRA_ID)
 
 #define GetVehicleName(%0) \
 		VehicleModelData[%0 - 400][vName]
@@ -852,11 +848,11 @@ forward UnloadPlayerItems(playerid);
 forward UnloadPlayerItem(playerid, itemid);
 forward query_OnListPlayerNearItems(playerid, item_place);
 
-forward CreateArea(Float:AreaMinX, Float:AreaMinY, Float:AreaMaxX, Float:AreaMaxY);
+forward CreateArea(Float:AreaMinX, Float:AreaMinY, Float:AreaMaxX, Float:AreaMaxY, area_world);
 forward LoadArea(area_uid);
 forward SaveArea(areaid);
 forward DeleteArea(areaid);
-forward LoadAreas();
+forward query_OnLoadAreas();
 
 forward CreateDoorProduct(doorid, ProductName[], ProductType, ProductValue1, ProductValue2, ProductPrice, ProductCount);
 forward LoadAllProducts();
@@ -870,8 +866,8 @@ forward DeleteObject(object_id);
 forward query_OnLoadObjects();
 
 forward Add3DTextLabel(LabelDesc[128], LabelColor, Float:LabelPosX, Float:LabelPosY, Float:LabelPosZ, Float:LabelDrawDistance, LabelWorld, LabelInteriorID);
-forward Load3DTextLabels();
-forward Destroy3DTextLabel(label_id);
+forward query_OnLoad3DTextLabels();
+forward crp_Delete3DTextLabel(label_id);
 forward Save3DTextLabel(label_id);
 
 forward OnPlayerSendOffer(playerid, customerid, OfferName[], OfferType, OfferValue1, OfferValue2, OfferPrice);
@@ -910,7 +906,7 @@ forward GivePlayerAchievement(playerid, achieve_type);
 
 // New's
 
-new baseurl[] = "https://m-rp.net/models";
+new baseurl[] = "http://m-rp.net/models";
 new MySQL:connHandle;
 
 new Text:TextDrawServerLogo;
@@ -949,7 +945,6 @@ new Iterator:Groups<MAX_GROUPS>;
 new Iterator:Vehicles<MAX_VEHICLES>;
 
 new Iterator:Door<MAX_DOORS>;
-new Iterator:Area<MAX_AREAS>;
 
 new Iterator:PlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
 new Iterator:CheckedPlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
@@ -1079,7 +1074,9 @@ enum sPlayer
 	pCuffedTo,
 	pCallingTo,
 	
-	pCreatingArea,
+	bool: pCreatingArea,
+	Float:pCreatingAreaPos[4],
+	
 	pCurrentArea,
 	
 	pEditObject,
@@ -1840,23 +1837,6 @@ new WeaponInfoData[][sWeaponInfoData] =
 	{371,	360}
 };
 
-enum sAreaInfo
-{
-	aUID,
-	
-	Float:aMinX,
-	Float:aMinY,
-	
-	Float:aMaxX,
-	Float:aMaxY,
-	
-	aOwnerType,
-	aOwner,
-	
-	aAudioURL[128]
-}
-new AreaCache[MAX_AREAS][sAreaInfo];
-
 enum sProductData
 {
 	pUID,
@@ -2187,23 +2167,18 @@ public OnGameModeInit()
 		mysql_tquery(connHandle, "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = 0 ORDER BY "SQL_PREF"objects.object_uid ASC", "query_OnLoadObjects", "");
 		mysql_tquery(connHandle, "SELECT * FROM `"SQL_PREF"vehicles` WHERE vehicle_ownertype <> 1", "query_OnLoadVehicles", "");
 		mysql_tquery(connHandle, "SELECT `item_vehuid`, `item_value1` FROM `"SQL_PREF"items` WHERE item_vehuid != '0'", "query_OnLoadVehicleComponents", "");
+		mysql_tquery(connHandle, "SELECT * FROM `"SQL_PREF"areas`", "query_OnLoadAreas", "");
+		mysql_tquery(connHandle, "SELECT * FROM `"SQL_PREF"3dlabels`", "query_OnLoad3DTextLabels", "");
 		
 		LoadAllAnims();
 		LoadAllAccess();
+		LoadAllSkins();
 		
 		// Wczytywanie
-		/*LoadGroups();
-		LoadVehicles();
-		
-		LoadDoors();
-		LoadAreas();
-		
+		/*
 		LoadAllProducts();
-		LoadAllObjects();
 		
 		
-		LoadAllSkins();
-		LoadAllAnims();
 		LoadAllCorpses();
 		
 		LoadPackages();
@@ -3682,7 +3657,6 @@ public OnPlayerConnect(playerid)
 	PlayerCache[playerid][pCuffedTo]                = INVALID_PLAYER_ID;
 	PlayerCache[playerid][pCallingTo]               = INVALID_PLAYER_ID;
 	
-	PlayerCache[playerid][pCreatingArea]            = INVALID_AREA_ID;
 	PlayerCache[playerid][pCurrentArea]             = INVALID_AREA_ID;
 	
 	PlayerCache[playerid][pEditObject]              = INVALID_OBJECT_ID;
@@ -4158,7 +4132,11 @@ public OnPlayerDisconnect(playerid, reason)
 				}
 			}
 		}
-		strmid(AreaCache[areaid][aAudioURL], "", 0, 0, 64);
+		new AreaData[sAreaData];
+		Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+		
+		strmid(AreaData[aAudioURL], "", 0, 0, 128);
+		Streamer_SetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
  	}
  	
  	// Kosz
@@ -5651,30 +5629,23 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 		*/
 
 		// Strefa
-		if(PlayerCache[playerid][pCreatingArea] != INVALID_AREA_ID)
+		if(PlayerCache[playerid][pCreatingArea])
 		{
 		    // PPM
 		    if(newkeys & KEY_HANDBRAKE)
 		    {
-			    new areaid = PlayerCache[playerid][pCreatingArea], Float:PosZ;
-			    GetPlayerPos(playerid, AreaCache[areaid][aMaxX], AreaCache[areaid][aMaxY], PosZ);
+			    new Float:PosZ;
+			    GetPlayerPos(playerid, PlayerCache[playerid][pCreatingAreaPos][2], PlayerCache[playerid][pCreatingAreaPos][3], PosZ);
 
-			    Iter_Remove(Area, areaid);
-	            areaid = CreateArea(AreaCache[areaid][aMinX], AreaCache[areaid][aMinY], AreaCache[areaid][aMaxX], AreaCache[areaid][aMaxY]);
+	            new area_uid = CreateArea(PlayerCache[playerid][pCreatingAreaPos][0], PlayerCache[playerid][pCreatingAreaPos][1], PlayerCache[playerid][pCreatingAreaPos][2], PlayerCache[playerid][pCreatingAreaPos][3], GetPlayerVirtualWorld(playerid));
+	            PlayerCache[playerid][pCreatingArea] = false;
 	            
-	            GangZoneShowForPlayer(playerid, areaid, COLOR_AREA);
-	            PlayerCache[playerid][pCreatingArea] = INVALID_AREA_ID;
-	            
-				ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Strefa (UID: %d) zosta³a pomyœlnie stworzona.\nSkorzystaj z komendy /strefa, by zarz¹dzaæ wybran¹ stref¹.", AreaCache[areaid][aUID]);
+				ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Strefa (UID: %d) zosta³a pomyœlnie stworzona.\nSkorzystaj z komendy /strefa, by zarz¹dzaæ wybran¹ stref¹.", area_uid);
 			}
 			
 			if(newkeys & KEY_SECONDARY_ATTACK)
 			{
-			    new areaid = PlayerCache[playerid][pCreatingArea];
-			    
-			    Iter_Remove(Area, areaid);
-			    PlayerCache[playerid][pCreatingArea] = INVALID_AREA_ID;
-			    
+			    PlayerCache[playerid][pCreatingArea] = false;
 			    ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Tworzenie strefy zosta³o anulowane.");
 			}
 		}
@@ -6527,7 +6498,7 @@ public OnPlayerUpdate(playerid)
 		        Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, label_id, E_STREAMER_Z, PosZ - Multiplier);
 		    }
 		}
-		Streamer_Update(playerid);
+		Streamer_Update(playerid, STREAMER_TYPE_3D_TEXT_LABEL);
 
 		SetPlayerCameraPos(playerid, PosX + 3, PosY + 4, PosZ + 4);
 		SetPlayerCameraLookAt(playerid, PosX, PosY, PosZ);
@@ -7671,6 +7642,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		}
 		else
 		{
+		    CallLocalFunction("ListPlayerItems", "d", playerid);
 		    return 1;
 		}
 	}
@@ -11151,7 +11123,7 @@ public ShowPlayerStatsForPlayer(playerid, giveplayer_id)
 	new areaid = PlayerCache[playerid][pCurrentArea];
 	if(areaid != INVALID_AREA_ID)
 	{
-	    format(list_stats, sizeof(list_stats), "%sStrefa\t\t\t\t%d\n", list_stats, AreaCache[areaid][aUID]);
+	    format(list_stats, sizeof(list_stats), "%sStrefa\t\t\t\t%d\n", list_stats, GetAreaUID(areaid));
 	}
 	else
 	{
@@ -11953,9 +11925,12 @@ public ShowPlayerDoorInfo(playerid, doorid)
 public CreatePlayerItem(playerid, item_name[], item_type, item_value1, item_value2)
 {
     new itemid = INVALID_ITEM_ID, item_uid, query[512];
-    mysql_escape_string(item_name, item_name, 32);
     
-    mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"items` (item_name, item_value1, item_value2, item_type, item_ownertype, item_owner) VALUES ('%s', '%d', '%d', '%d', '%d', '%d')", item_name, item_value1, item_value2, item_type, PLACE_PLAYER, PlayerCache[playerid][pUID]);
+   	if(item_type == ITEM_PHONE) 		item_value1 = 100000 + random(899999);
+	if(item_type == ITEM_INHIBITOR) 	item_value1 = 22;
+	if(item_type == ITEM_PAINT) 		item_value1 = 41;
+    
+    mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"items` (item_name, item_value1, item_value2, item_type, item_ownertype, item_owner) VALUES ('%e', '%d', '%d', '%d', '%d', '%d')", item_name, item_value1, item_value2, item_type, PLACE_PLAYER, PlayerCache[playerid][pUID]);
     mysql_query(connHandle, query);
 
 	item_uid = cache_insert_id();
@@ -12032,7 +12007,7 @@ public ListPlayerItems(playerid)
 		    	item_weight = GetPlayerItemWeight(playerid, itemid);
 		    	if(PlayerItemCache[playerid][itemid][iUsed])
 		    	{
-					format(list_items, sizeof(list_items), "%s\n{FFFFFF}%d\t{C0C0C0}%s\t%dg", list_items, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName], item_weight);
+					format(list_items, sizeof(list_items), "%s\n{FFFFFF}%d\t{FFFFFF}%s\t%dg", list_items, PlayerItemCache[playerid][itemid][iUID], PlayerItemCache[playerid][itemid][iName], item_weight);
 				}
 				else
 				{
@@ -13498,17 +13473,20 @@ public OnPlayerUseItem(playerid, itemid)
      		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc u¿yæ tego przedmiotu, musisz znajdowaæ siê w strefie.");
        		return 0;
 	    }
-	    if(AreaCache[areaid][aOwnerType] == OWNER_PLAYER)
+	    new AreaData[sAreaData];
+	    Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+	    
+	    if(AreaData[aOwnerType] == OWNER_PLAYER)
 	    {
-     		if(AreaCache[areaid][aOwner] != PlayerCache[playerid][pUID])
+     		if(AreaData[aOwner] != PlayerCache[playerid][pUID])
        		{
          		ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie jesteœ w³aœcicielem tej strefy.");
            		return 0;
 	        }
 	    }
-	    if(AreaCache[areaid][aOwnerType] == OWNER_GROUP)
+	    if(AreaData[aOwnerType] == OWNER_GROUP)
 	    {
-     		if(!IsPlayerInGroup(playerid, AreaCache[areaid][aOwner]))
+     		if(!IsPlayerInGroup(playerid, AreaData[aOwner]))
        		{
          		ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie jesteœ w³aœcicielem tej strefy.");
            		return 0;
@@ -13528,7 +13506,7 @@ public OnPlayerUseItem(playerid, itemid)
 					}
 				}
 			}
-			strmid(AreaCache[areaid][aAudioURL], "", 0, 0, 64);
+			strmid(AreaData[aAudioURL], "", 0, 0, 128);
 			StopStreamedAudioForPlayer(playerid);
 
 			PlayerCache[playerid][pItemBoombox] = INVALID_ITEM_ID;
@@ -13539,7 +13517,7 @@ public OnPlayerUseItem(playerid, itemid)
 		}
 		else
 		{
-  			if(strlen(AreaCache[areaid][aAudioURL]))
+  			if(strlen(AreaData[aAudioURL]) > 1)
 		    {
 		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ktoœ obecnie korzysta z boomboxa w tej strefie.");
 		        return 0;
@@ -13571,7 +13549,7 @@ public OnPlayerUseItem(playerid, itemid)
    				}
    				
        			PlayStreamedAudioForPlayer(playerid, audio_url);
-   				strmid(AreaCache[areaid][aAudioURL], audio_url, 0, strlen(audio_url), 64);
+   				strmid(AreaData[aAudioURL], audio_url, 0, strlen(audio_url), 128);
 			}
 			if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 			
@@ -13678,7 +13656,7 @@ public OnPlayerDropItem(playerid, itemid)
 
 public OnPlayerRaiseItems(playerid)
 {
-	new rows, main_query[2048], query[128], string_lenght, item_uid, items_count,
+	new rows, main_query[2048], query[128], string_lenght, item_uid, items_count, string[128],
 		object_id, object_extra_id, item_place = GetExternalItemCachePlace(playerid), item_owner;
 		
 	switch(item_place)
@@ -13696,7 +13674,7 @@ public OnPlayerRaiseItems(playerid)
 			}
 		}
 	}
-		
+
 	format(main_query, sizeof(main_query), "UPDATE `"SQL_PREF"items` SET item_ownertype = '%d', item_owner = '%d' WHERE item_ownertype = '%d' AND item_owner ='%d' AND (", PLACE_PLAYER, PlayerCache[playerid][pUID], item_place, item_owner);
 
     string_lenght = strlen(main_query);
@@ -13759,10 +13737,14 @@ public OnPlayerRaiseItems(playerid)
     strcat(main_query, ")", sizeof(main_query));
     mysql_query(connHandle, main_query);
     
-    print(main_query);
-    
     UnloadPlayerItems(playerid);
     LoadPlayerItems(playerid);
+/*
+	if(item_place == PLACE_NONE)	format(string, sizeof(string), "* %s podnosi coœ z ziemi.", PlayerName(playerid));
+    if(item_place == PLACE_VEHICLE) format(string, sizeof(string), "* %s podnosi coœ z pojazdu.", PlayerName(playerid));
+
+	ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
+*/
 	return 1;
 }
 
@@ -13770,7 +13752,7 @@ public LoadPlayerItems(playerid)
 {
 	new query[512], Cache:tmp_cache;
 	
-	mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_name`, `item_value1`, `item_value2`, `item_type`, `item_ownertype`, `item_owner`, `item_group` FROM `"SQL_PREF"items` WHERE `item_ownertype` = '%d' AND `item_owner` = '%d' LIMIT %d", PLACE_PLAYER, PlayerCache[playerid][pUID], MAX_ITEM_CACHE);
+	mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_name`, `item_value1`, `item_value2`, `item_type`, `item_ownertype`, `item_owner`, `item_group`, `item_used` FROM `"SQL_PREF"items` WHERE `item_ownertype` = '%d' AND `item_owner` = '%d' LIMIT %d", PLACE_PLAYER, PlayerCache[playerid][pUID], MAX_ITEM_CACHE);
 	tmp_cache = mysql_query(connHandle, query);
 
 	new rows, itemid, ORM:orm_id;
@@ -13794,6 +13776,7 @@ public LoadPlayerItems(playerid)
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iFavorite], "item_favorite");
 			
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iGroup], "item_group");
+			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iUsed], "item_used");
 
 			orm_setkey(orm_id, "item_uid");
 			orm_apply_cache(orm_id, row, 0);
@@ -13837,6 +13820,7 @@ public LoadPlayerItem(playerid, item_uid)
 	orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iFavorite], "item_favorite");
 	
 	orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iGroup], "item_group");
+	orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iUsed], "item_used");
 
 	orm_setkey(orm_id, "item_uid");
 	orm_select(orm_id);
@@ -13899,125 +13883,75 @@ public query_OnListPlayerNearItems(playerid, item_place)
 
 
 
-public CreateArea(Float:AreaMinX, Float:AreaMinY, Float:AreaMaxX, Float:AreaMaxY)
+public CreateArea(Float:AreaMinX, Float:AreaMinY, Float:AreaMaxX, Float:AreaMaxY, area_world)
 {
-	new areaid, area_uid;
-	mysql_query_format("INSERT INTO `"SQL_PREF"areas` (area_minx, area_miny, area_maxx, area_maxy) VALUES ('%f', '%f', '%f', '%f')", AreaMinX, AreaMinY, AreaMaxX, AreaMaxY);
+	new area_uid, query[128];
+	mysql_query_format("INSERT INTO `"SQL_PREF"areas` (area_point1, area_point2, area_vw) VALUES ('%f|%f|0.0', '%f|%f|0.0', '%d')", AreaMinX, AreaMinY, AreaMaxX, AreaMaxY, area_world);
 	
 	area_uid = cache_insert_id();
-	areaid = CreateDynamicRectangle(AreaMinX, AreaMinY, AreaMaxX, AreaMaxY);
 	
-	AreaCache[areaid][aUID] = area_uid;
+	mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"areas` WHERE area_uid = '%d' LIMIT 1", area_uid);
+	mysql_tquery(connHandle, query, "query_OnLoadAreas", "");
 	
-	AreaCache[areaid][aMinX] = AreaMinX;
-	AreaCache[areaid][aMinY] = AreaMinY;
-	
-	AreaCache[areaid][aMaxX] = AreaMaxX;
-	AreaCache[areaid][aMaxY] = AreaMaxY;
-	
-	AreaCache[areaid][aOwner] = 0;
-	AreaCache[areaid][aOwnerType] = OWNER_NONE;
-	
-	GangZoneCreate(AreaCache[areaid][aMinX], AreaCache[areaid][aMinY], AreaCache[areaid][aMaxX], AreaCache[areaid][aMaxY]);
-	Iter_Add(Area, areaid);
-	return areaid;
-}
-
-public LoadArea(area_uid)
-{
-	new areaid = Iter_Free(Area);
-	/*
-	mysql_query_format("SELECT * FROM `"SQL_PREF"areas` WHERE area_uid = '%d' LIMIT 1", area_uid);
-	
-	mysql_store_result();
-	if(mysql_fetch_row_format(data, "|"))
-	{
-	    sscanf(data, "p<|>dffffdd",
-	    AreaCache[areaid][aUID],
-	    
-	    AreaCache[areaid][aMinX],
-	    AreaCache[areaid][aMinY],
-	    
-	    AreaCache[areaid][aMaxX],
-	    AreaCache[areaid][aMaxY],
-	    
-	    AreaCache[areaid][aOwnerType],
-		AreaCache[areaid][aOwner]);
-	    
-	    CreateDynamicRectangle(AreaCache[areaid][aMinX], AreaCache[areaid][aMinY], AreaCache[areaid][aMaxX], AreaCache[areaid][aMaxY]);
-	    GangZoneCreate(AreaCache[areaid][aMinX], AreaCache[areaid][aMinY], AreaCache[areaid][aMaxX], AreaCache[areaid][aMaxY]);
-	    
-		Iter_Add(Area, areaid);
-	}
-	mysql_free_result();
-	*/
-	return areaid;
+	return area_uid;
 }
 
 public DeleteArea(areaid)
 {
-	mysql_query_format("DELETE FROM `"SQL_PREF"areas` WHERE area_uid = '%d' LIMIT 1", AreaCache[areaid][aUID]);
+	new area_uid = GetAreaUID(areaid);
+	mysql_query_format("DELETE FROM `"SQL_PREF"areas` WHERE area_uid = '%d' LIMIT 1", area_uid);
 
 	DestroyDynamicArea(areaid);
-	GangZoneDestroy(areaid);
-	
-	Iter_Remove(Area, areaid);
 	return 1;
 }
 
 public query_OnLoadAreas()
 {
+	new AreaData[sAreaData], area_id, area_world, rows,
+	    Float:point1[3], Float:point2[3], str[2][128], Float:pointes[8];
 
-//	new data[128], areaid;
-	
-	/*
-	GangZoneCreate(0.0, 0.0, 0.0, 0.0);
-	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"areas`");
-	
-	print("[load] Rozpoczynam proces wczytywania wszystkich stref...");
-	
-	mysql_store_result();
-	while(mysql_fetch_row_format(data, "|"))
+	cache_get_row_count(rows);
+	for(new row = 0; row != rows; row++)
 	{
-	    areaid ++;
-	
-	    sscanf(data, "p<|>dffffdd",
-		AreaCache[areaid][aUID],
+	    cache_get_value_index_int(row, 0, AreaData[aUID]);
+	    
+	    cache_get_value_index_int(row, 3, AreaData[aOwnerType]);
+	    cache_get_value_index_int(row, 4, AreaData[aOwner]);
+	    
+	    cache_get_value_index_int(row, 6, area_world);
+	    
+		cache_get_value_index(row, 8, str[0]);
+		sscanf(str[0], "p<|>a<f>[3]", point1);
 
-		AreaCache[areaid][aMinX],
-		AreaCache[areaid][aMinY],
-
-		AreaCache[areaid][aMaxX],
-		AreaCache[areaid][aMaxY],
+		cache_get_value_index(row, 9, str[1]);
+		sscanf(str[1], "p<|>a<f>[3]", point2);
 		
-		AreaCache[areaid][aOwnerType],
-		AreaCache[areaid][aOwner]);
-	    
-	    CreateDynamicRectangle(AreaCache[areaid][aMinX], AreaCache[areaid][aMinY], AreaCache[areaid][aMaxX], AreaCache[areaid][aMaxY]);
-	    GangZoneCreate(AreaCache[areaid][aMinX], AreaCache[areaid][aMinY], AreaCache[areaid][aMaxX], AreaCache[areaid][aMaxY]);
-	    
-		Iter_Add(Area, areaid);
+		cache_get_value_index_int(row, 10, AreaData[aFlags]);
+		cache_get_value_index(row, 11, AreaData[aAudioURL], 128);
+		
+		pointes[0] = point1[0];
+		pointes[1] = point1[1];
+		pointes[2] = point1[0];
+		pointes[3] = point2[1];
+		pointes[4] = point2[0];
+		pointes[5] = point2[1];
+		pointes[6] = point2[0];
+		pointes[7] = point1[1];
+		
+		area_id = CreateDynamicPolygon(pointes, -FLOAT_INFINITY, FLOAT_INFINITY, 8, area_world);
+		Streamer_SetArrayData(STREAMER_TYPE_AREA, area_id, E_STREAMER_EXTRA_ID, AreaData);
 	}
-	mysql_free_result();
 	
-	printf("[load] Proces wczytywania stref zosta³ zakoñczony (count: %d).", Iter_Count(Area));
-	*/
+	printf("CountDynamicAreas: %d", Streamer_GetUpperBound(STREAMER_TYPE_AREA));
 	return 1;
 }
 
 public SaveArea(areaid)
 {
-	mysql_query_format("UPDATE `"SQL_PREF"areas` SET area_minx = '%f', area_miny = '%f', area_maxx = '%f', area_maxy = '%f', area_ownertype = '%d', area_owner = '%d' WHERE area_uid = '%d' LIMIT 1",
-	AreaCache[areaid][aMinX],
-	AreaCache[areaid][aMinY],
-
-	AreaCache[areaid][aMaxX],
-	AreaCache[areaid][aMaxY],
-
-	AreaCache[areaid][aOwnerType],
-	AreaCache[areaid][aOwner],
-
-	AreaCache[areaid][aUID]);
+	new AreaData[sAreaData];
+	Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+	
+	mysql_query_format("UPDATE `"SQL_PREF"areas` SET area_ownertype = '%d', area_owner = '%d', area_flags = '%d', area_audio = '%s' WHERE area_uid = '%d' LIMIT 1", AreaData[aOwnerType], AreaData[aOwner], AreaData[aFlags], AreaData[aAudioURL], AreaData[aUID]);
 	return 1;
 }
 
@@ -14319,8 +14253,6 @@ public query_OnLoadObjects()
 		    {
       			sscanf(object_material, "'0''^'p<:>dxds[32]s[64]", index, color1, modelid, txdname, texturename);
         		SetDynamicObjectMaterial(object_id, index, modelid, txdname, texturename, color1);
-        		
-        		printf("MATERIAL: %s", object_material);
 	        }
 
 			if(strval(object_material[0]) == 1)
@@ -14329,8 +14261,6 @@ public query_OnLoadObjects()
 
    				format(text, sizeof(text), "%s", WordWrap(text, WRAP_MANUAL));
      			SetDynamicObjectMaterialText(object_id, index, text, matsize, fonttype, fontsize, bold, color1, color2, alignment);
-
-				printf("TEXT: %s", object_material);
 			}
 		}
 		object_material = "";
@@ -14340,46 +14270,51 @@ public query_OnLoadObjects()
 
 public Add3DTextLabel(LabelDesc[128], LabelColor, Float:LabelPosX, Float:LabelPosY, Float:LabelPosZ, Float:LabelDrawDistance, LabelWorld, LabelInteriorID)
 {
-	new Text3D:label_id, label_uid, label_desc[256];
-	mysql_escape_string(LabelDesc, label_desc);
+	new query[512],
+		Text3D:label_id, label_uid;
 
-	mysql_query_format("INSERT INTO `"SQL_PREF"3dlabels` (`label_desc`, `label_color`, `label_posx`, `label_posy`, `label_posz`, `label_drawdist`, `label_world`, `label_interior`) VALUES ('%s', '%d', '%f', '%f', '%f', '%f', '%d', '%d')", label_desc, LabelColor, LabelPosX, LabelPosY, LabelPosZ, LabelDrawDistance, LabelWorld, LabelInteriorID);
-	label_uid = cache_insert_id();
-
-	label_id = CreateDynamic3DTextLabel(WordWrap(LabelDesc, WRAP_MANUAL), LabelColor, LabelPosX, LabelPosY, LabelPosZ, LabelDrawDistance, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, LabelWorld, LabelInteriorID, -1, 80.0);
-	Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, label_id, E_STREAMER_EXTRA_ID, label_uid);
-
-	return _:label_id;
-}
-
-public Load3DTextLabels()
-{
-/*
-	new data[512];
-	mysql_query(connHandle, "SELECT * FROM `"SQL_PREF"3dlabels`");
-
-	new Text3D:label_id, label_uid, label_desc[128], label_color,
-		Float:label_posx, Float:label_posy, Float:label_posz,
-	    Float:label_drawdist, label_interior, label_world;
-
-    print("[load] Rozpoczynam proces wczytywania wszystkich 3D tekstów...");
-
-	mysql_store_result();
-	while(mysql_fetch_row_format(data, "|"))
-	{
-	    sscanf(data, "p<|>ds[128]dffffdd", label_uid, label_desc, label_color, label_posx, label_posy, label_posz, label_drawdist, label_world, label_interior);
-  		label_id = CreateDynamic3DTextLabel(WordWrap(label_desc, WRAP_MANUAL), label_color, label_posx, label_posy, label_posz, label_drawdist, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, label_world, label_interior, -1, 100.0);
-
-        Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, label_id, E_STREAMER_EXTRA_ID, label_uid);
-	}
-	mysql_free_result();
+	mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"3dlabels` (`label_desc`, `label_color`, `label_posx`, `label_posy`, `label_posz`, `label_drawdist`, `label_world`, `label_interior`) VALUES ('%e', '%d', '%f', '%f', '%f', '%f', '%d', '%d')", LabelDesc, LabelColor, LabelPosX, LabelPosY, LabelPosZ, LabelDrawDistance, LabelWorld, LabelInteriorID);
+	mysql_query(connHandle, query);
 	
-	printf("[load] Proces wczytywania 3D tekstów zosta³ zakoñczony (count: %d).", CountDynamic3DTextLabels());
-	*/
+	label_uid = cache_insert_id();
+	
+	mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"3dlabels` WHERE label_uid = '%d' LIMIT 1", label_uid);
+	mysql_tquery(connHandle, query, "query_OnLoad3DTextLabels", "");
+
+	return label_uid;
+}
+/*
+public query_OnLoad3DTextLabels()
+{
+	new rows, label_uid, Text3D:label_id, col[20],
+	    label_desc[128], label_color, Float:label_pos[3], Float:label_draw, label_world, label_interior;
+	
+	cache_get_row_count(rows);
+	for(new row = 0; row != rows; row++)
+	{
+	    cache_get_value_index_int(row, 0, label_uid);
+	    cache_get_value_index(row, 3, label_desc, 128);
+
+		cache_get_value_index(row, 4, col, 20);
+		sscanf(col, "x", label_color);
+		
+		cache_get_value_index_float(row, 5, label_pos[0]);
+		cache_get_value_index_float(row, 6, label_pos[1]);
+		cache_get_value_index_float(row, 7, label_pos[2]);
+		
+		cache_get_value_index_float(row, 8, label_draw);
+		
+		cache_get_value_index_int(row, 9, label_world);
+		cache_get_value_index_int(row, 10, label_interior);
+		
+		label_id = CreateDynamic3DTextLabel(WordWrap(label_desc, WRAP_MANUAL), label_color, label_pos[0], label_pos[1], label_pos[2], label_draw, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, label_world, label_interior, -1, 100.0);
+		Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, label_id, E_STREAMER_EXTRA_ID, label_uid);
+	}
 	return 1;
 }
+*/
 
-public Destroy3DTextLabel(label_id)
+public crp_Delete3DTextLabel(label_id)
 {
 	new label_uid = GetLabelUID(label_id);
 	mysql_query_format("DELETE FROM `"SQL_PREF"3dlabels` WHERE label_uid = '%d' LIMIT 1", label_uid);
@@ -14450,25 +14385,25 @@ public LoadAllAccess()
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
 	{
- 		cache_get_value_index_int(0, 0, AccessData[access_id][aUID]);
-	    cache_get_value_index_int(0, 2, AccessData[access_id][aModel]);
+ 		cache_get_value_index_int(row, 0, AccessData[access_id][aUID]);
+	    cache_get_value_index_int(row, 2, AccessData[access_id][aModel]);
 
-		cache_get_value_index_int(0, 3, AccessData[access_id][aBone]);
+		cache_get_value_index_int(row, 3, AccessData[access_id][aBone]);
 		
-		cache_get_value_index_float(0, 4, AccessData[access_id][aPosX]);
-		cache_get_value_index_float(0, 5, AccessData[access_id][aPosY]);
-		cache_get_value_index_float(0, 6, AccessData[access_id][aPosZ]);
+		cache_get_value_index_float(row, 4, AccessData[access_id][aPosX]);
+		cache_get_value_index_float(row, 5, AccessData[access_id][aPosY]);
+		cache_get_value_index_float(row, 6, AccessData[access_id][aPosZ]);
 		
-		cache_get_value_index_float(0, 7, AccessData[access_id][aRotX]);
-		cache_get_value_index_float(0, 8, AccessData[access_id][aRotY]);
-		cache_get_value_index_float(0, 9, AccessData[access_id][aRotZ]);
+		cache_get_value_index_float(row, 7, AccessData[access_id][aRotX]);
+		cache_get_value_index_float(row, 8, AccessData[access_id][aRotY]);
+		cache_get_value_index_float(row, 9, AccessData[access_id][aRotZ]);
 		
-		cache_get_value_index_float(0, 10, AccessData[access_id][aScaleX]);
-		cache_get_value_index_float(0, 11, AccessData[access_id][aScaleY]);
-		cache_get_value_index_float(0, 12, AccessData[access_id][aScaleZ]);
+		cache_get_value_index_float(row, 10, AccessData[access_id][aScaleX]);
+		cache_get_value_index_float(row, 11, AccessData[access_id][aScaleY]);
+		cache_get_value_index_float(row, 12, AccessData[access_id][aScaleZ]);
 		
-		cache_get_value_index(row, 13, AccessData[access_id][aName]);
-		cache_get_value_index_int(0, 14, AccessData[access_id][aPrice]);
+		cache_get_value_index(row, 13, AccessData[access_id][aName], 32);
+		cache_get_value_index_int(row, 14, AccessData[access_id][aPrice]);
 		
 		Iter_Add(Access, access_id);
 		access_id ++;
@@ -14492,7 +14427,7 @@ public LoadAllSkins()
 	for(new row = 0; row != rows; row++)
 	{
 	    cache_get_value_index_int(row, 0, SkinData[skin_id][sModel]);
-	    cache_get_value_index(row, 1, SkinData[skin_id][sName]);
+	    cache_get_value_index(row, 1, SkinData[skin_id][sName], 32);
 	    
 	    cache_get_value_index_int(row, 2, SkinData[skin_id][sPrice]);
 	    
@@ -15662,7 +15597,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 	{
 	    return 1;
 	}
-	if(!DoorCache[doorid][dObjectsLoaded])
+	if(DoorCache[doorid][dExitVW] != 0 && !DoorCache[doorid][dObjectsLoaded] && DoorCache[doorid][dExitVW] != DoorCache[doorid][dEnterVW])
 	{
  		new query[512];
 		mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorCache[doorid][dExitVW]);
@@ -15861,18 +15796,25 @@ public OnPlayerExitDoor(playerid, doorid)
 
 public OnPlayerEnterDynamicArea(playerid, areaid)
 {
+	new AreaData[sAreaData];
+	
     PlayerCache[playerid][pCurrentArea] = areaid;
-	if(strlen(AreaCache[areaid][aAudioURL]))
+	Streamer_GetArrayData(areaid, STREAMER_TYPE_AREA, E_STREAMER_EXTRA_ID, AreaData);
+    
+	if(strlen(AreaData[aAudioURL]) > 1)
 	{
 	    if(PlayerCache[playerid][pItemPlayer] != INVALID_ITEM_ID)	return 1;
-		//PlayerCache[playerid][pAudioHandle] = Audio_PlayStreamed(playerid, AreaCache[areaid][aAudioURL]);
+	    PlayStreamedAudioForPlayer(playerid, AreaData[aAudioURL]);
 	}
 	return 1;
 }
 
 public OnPlayerLeaveDynamicArea(playerid, areaid)
 {
+	new AreaData[sAreaData];
+	
     PlayerCache[playerid][pCurrentArea] = INVALID_AREA_ID;
+    Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
 
 	if(PlayerCache[playerid][pItemBoombox] != INVALID_ITEM_ID)
 	{
@@ -15883,12 +15825,11 @@ public OnPlayerLeaveDynamicArea(playerid, areaid)
    			{
 				if(PlayerCache[i][pCurrentArea] == areaid)
 				{
-    				//Audio_Stop(i, PlayerCache[playerid][pAudioHandle]);
-				    PlayerCache[i][pAudioHandle] = 0;
+					StopStreamedAudioForPlayer(i);
 				}
 			}
 		}
-		strmid(AreaCache[areaid][aAudioURL], "", 0, 0, 64);
+		strmid(AreaData[aAudioURL], "", 0, 0, 128);
 		StopStreamedAudioForPlayer(playerid);
 
 		PlayerCache[playerid][pItemBoombox] = INVALID_ITEM_ID;
@@ -15897,10 +15838,10 @@ public OnPlayerLeaveDynamicArea(playerid, areaid)
 		RemovePlayerAttachedObject(playerid, SLOT_BOOMBOX);
 		TD_ShowSmallInfo(playerid, 3, "Odtwarzanie muzyki zostalo ~r~zakonczone~w~.");
 	}
-	if(strlen(AreaCache[areaid][aAudioURL]))
+	if(strlen(AreaData[aAudioURL]) > 1)
 	{
  		if(PlayerCache[playerid][pItemPlayer] != INVALID_ITEM_ID)	return 1;
-		//Audio_Stop(playerid, PlayerCache[playerid][pAudioHandle]);
+		StopStreamedAudioForPlayer(playerid);
 	}
 	return 1;
 }
@@ -19076,7 +19017,7 @@ CMD:p(playerid, params[])
 	}
 	return 1;
 }
-
+/*
 CMD:strefa(playerid, params[])
 {
 	if(!(PlayerCache[playerid][pAdmin] & A_PERM_AREAS))
@@ -19092,12 +19033,10 @@ CMD:strefa(playerid, params[])
 	}
 	if(!strcmp(type, "stworz", true) || !strcmp(type, "create", true))
 	{
-		new areaid = Iter_Free(Area), Float:PosZ;
-		
-		Iter_Add(Area, areaid);
-		GetPlayerPos(playerid, AreaCache[areaid][aMinX], AreaCache[areaid][aMinY], PosZ);
-		
-		PlayerCache[playerid][pCreatingArea] = areaid;
+		new Float:PosZ;
+        PlayerCache[playerid][pCreatingArea] = true;
+        
+		GetPlayerPos(playerid, PlayerCache[playerid][pCreatingAreaPos][0], PlayerCache[playerid][pCreatingAreaPos][1], PosZ);
 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Udaj siê teraz po przek¹tnej strefy, a nastêpnie wciœnij w wybranym miejscu klawisz PPM.\nAby anulowaæ tworzenie strefy wciœnij klawisz ENTER.");
 	    return 1;
 	}
@@ -19134,6 +19073,9 @@ CMD:strefa(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wporowadzono b³êdne UID strefy.");
 		    return 1;
 		}
+		new AreaData[sAreaData];
+		Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+		
 		if(!strcmp(owner_type, "gracz", true) || !strcmp(owner_type, "player", true))
 		{
   			new giveplayer_id;
@@ -19152,11 +19094,13 @@ CMD:strefa(playerid, params[])
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Gracz o podanym ID nie jest zalogowany.");
 			    return 1;
 			}
-			AreaCache[areaid][aOwnerType] = OWNER_PLAYER;
-			AreaCache[areaid][aOwner] = PlayerCache[giveplayer_id][pUID];
+			AreaData[aOwnerType] = OWNER_PLAYER;
+			AreaData[aOwner] = PlayerCache[giveplayer_id][pUID];
 			
+			Streamer_SetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
 			SaveArea(areaid);
-			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Strefa (UID: %d) zosta³a przypisana pomyœlnie.\n\nTyp w³aœciciela: gracz\nW³aœciciel: %s (ID: %d, UID: %d).", AreaCache[areaid][aUID], PlayerName(giveplayer_id), giveplayer_id, PlayerCache[giveplayer_id][pUID]);
+			
+			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Strefa (UID: %d) zosta³a przypisana pomyœlnie.\n\nTyp w³aœciciela: gracz\nW³aœciciel: %s (ID: %d, UID: %d).", AreaData[aUID], PlayerName(giveplayer_id), giveplayer_id, PlayerCache[giveplayer_id][pUID]);
 		    return 1;
 		}
 		if(!strcmp(owner_type, "grupa", true) || !strcmp(owner_type, "group", true))
@@ -19173,11 +19117,13 @@ CMD:strefa(playerid, params[])
 		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID grupy.");
 		        return 1;
 		    }
-			AreaCache[areaid][aOwnerType] = OWNER_GROUP;
-			AreaCache[areaid][aOwner] = GroupData[group_id][gUID];
+			AreaData[aOwnerType] = OWNER_GROUP;
+			AreaData[aOwner] = GroupData[group_id][gUID];
 
+			Streamer_SetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
 			SaveArea(areaid);
-			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Strefa (UID: %d) zosta³a przypisana pomyœlnie.\n\nTyp w³aœciciela: grupa\nW³aœciciel: %s (UID: %d)", AreaCache[areaid][aUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
+			
+			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Strefa (UID: %d) zosta³a przypisana pomyœlnie.\n\nTyp w³aœciciela: grupa\nW³aœciciel: %s (UID: %d)", AreaData[aUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
 			return 1;
 		}
 	    return 1;
@@ -19196,12 +19142,18 @@ CMD:strefa(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wporowadzono b³êdne UID strefy.");
 	        return 1;
 	    }
-	    GangZoneShowForPlayer(playerid, areaid, COLOR_AREA);
+	    new Float:pointes[8];
+	    GetDynamicPolygonPoints(areaid, pointes, 8);
+	    
+	    new gang_zone = GangZoneCreate(pointes[0], pointes[1], pointes[4], pointes[3]);
+	    GangZoneShowForPlayer(playerid, gang_zone, COLOR_AREA);
+	    
 	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Strefa (UID: %d) zosta³a pomyœlnie pokazana na mapie.", area_uid);
 	    return 1;
 	}
 	return 1;
 }
+*/
 
 CMD:tel(playerid, params[])
 {
@@ -21802,22 +21754,25 @@ CMD:mc(playerid, params[])
 		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc stworzyæ obiekt, musisz znajdowaæ siê w budynku lub strefie.");
 		        return 1;
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_NONE)
+		    new AreaData[sAreaData];
+		    Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+		    
+		    if(AreaData[aOwnerType] == OWNER_NONE)
 		    {
 		        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		        return 1;
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_PLAYER)
+		    if(AreaData[aOwnerType] == OWNER_PLAYER)
 		    {
-		        if(AreaCache[areaid][aOwner] != PlayerCache[playerid][pUID])
+		        if(AreaData[aOwner] != PlayerCache[playerid][pUID])
 		        {
 		            ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		            return 1;
 		        }
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_GROUP)
+		    if(AreaData[aOwnerType] == OWNER_GROUP)
 		    {
-		        if(!HavePlayerGroupPerm(playerid, AreaCache[areaid][aOwner], G_PERM_LEADER))
+		        if(!HavePlayerGroupPerm(playerid, AreaData[aOwner], G_PERM_LEADER))
 		        {
 		            ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		            return 1;
@@ -21825,13 +21780,14 @@ CMD:mc(playerid, params[])
 		    }
 		    
     		new count_objects = Streamer_CountVisibleItems(playerid, STREAMER_TYPE_OBJECT),
-    		    Float:objX, Float:objY, Float:objZ;
+    		    object_id, Float:objX, Float:objY, Float:objZ;
     		    
 			for (new player_object = 0; player_object <= count_objects; player_object++)
 			{
 			    if(IsValidPlayerObject(playerid, player_object))
 			    {
-			        GetPlayerObjectPos(playerid, player_object, objX, objY, objZ);
+			        object_id = Streamer_GetItemStreamerID(playerid, STREAMER_TYPE_OBJECT, player_object);
+			        GetDynamicObjectPos(object_id, objX, objY, objZ);
 			    
 			    	if(!IsPointInDynamicArea(areaid, objX, objY, objZ))
 			    	{
@@ -21839,10 +21795,12 @@ CMD:mc(playerid, params[])
 			    	}
 				}
 			}
+			new Float:pointes[8];
+			GetDynamicPolygonPoints(areaid, pointes, 8);
 			
 			new AreaField, Side[2], ObjectLimit;
-  			Side[0] = floatround((AreaCache[areaid][aMinX] > AreaCache[areaid][aMaxX]) ? (AreaCache[areaid][aMinX] - AreaCache[areaid][aMaxX]) : (AreaCache[areaid][aMaxX] - AreaCache[areaid][aMinX]));
-		    Side[1] = floatround((AreaCache[areaid][aMinY] > AreaCache[areaid][aMaxY]) ? (AreaCache[areaid][aMinY] - AreaCache[areaid][aMaxY]) : (AreaCache[areaid][aMaxY] - AreaCache[areaid][aMinY]));
+  			Side[0] = floatround((pointes[0] > pointes[4]) ? (pointes[0] - pointes[4]) : (pointes[4] - pointes[0]));
+		    Side[1] = floatround((pointes[1] > pointes[3]) ? (pointes[1] - pointes[3]) : (pointes[3] - pointes[1]));
 
 		    AreaField = Side[0] * Side[1];
 		    ObjectLimit = (IsPlayerPremium(playerid)) ? (AreaField / (Side[0] + Side[1])) * 2 : (AreaField / (Side[0] + Side[1]));
@@ -21854,11 +21812,13 @@ CMD:mc(playerid, params[])
 			}
 		}
 	}
+	/*
 	if(!IsValidObjectModel(modelid))
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³owy model obiektu.");
 	    return 1;
 	}
+	*/
 	new Float:PosX, Float:PosY, Float:PosZ,
 	    interior_id = GetPlayerInterior(playerid), world_id = GetPlayerVirtualWorld(playerid);
 
@@ -21867,7 +21827,7 @@ CMD:mc(playerid, params[])
 	
 	new object_id = crp_AddObject(modelid, PosX, PosY, PosZ, 0.0, 0.0, 0.0, interior_id, world_id);
 
-	Streamer_Update(playerid);
+	Streamer_Update(playerid, STREAMER_TYPE_OBJECT);
 	ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Obiekt zosta³ stworzony pomyœlnie, pownien pojawiæ siê tu¿ przed Tob¹.\nAby zarz¹dzaæ stworzonym obiektem u¿yj komendy /msel w pobli¿u niego.\n\nModel obiektu: %d\nIdentyfikator: %d", modelid, GetObjectUID(object_id));
 	return 1;
 }
@@ -21916,22 +21876,25 @@ CMD:msel(playerid, params[])
 		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc edytowaæ obiekt, musisz znajdowaæ siê w budynku lub strefie.");
 		        return 1;
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_NONE)
+		    new AreaData[sAreaData];
+		    Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+		    
+		    if(AreaData[aOwnerType] == OWNER_NONE)
 		    {
 		        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		        return 1;
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_PLAYER)
+		    if(AreaData[aOwnerType] == OWNER_PLAYER)
 		    {
-		        if(AreaCache[areaid][aOwner] != PlayerCache[playerid][pUID])
+		        if(AreaData[aOwner] != PlayerCache[playerid][pUID])
 		        {
 		            ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		            return 1;
 		        }
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_GROUP)
+		    if(AreaData[aOwnerType] == OWNER_GROUP)
 		    {
-		        if(!HavePlayerGroupPerm(playerid, AreaCache[areaid][aOwner], G_PERM_LEADER))
+		        if(!HavePlayerGroupPerm(playerid, AreaData[aOwner], G_PERM_LEADER))
 		        {
 		            ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		            return 1;
@@ -22038,8 +22001,6 @@ CMD:mmat(playerid, params[])
 	    ShowTipForPlayer(playerid, "/mmat [Typ 0 - tekstura, 1 - tekst] [Pozosta³e]");
 	    return 1;
 	}
-	
-	
 
 	// Material
 	if(material_type == 0)
@@ -22063,7 +22024,6 @@ CMD:mmat(playerid, params[])
 		}
 	    
 	    SetDynamicObjectMaterial(object_id, index, modelid, txdname, texturename, color);
-	    print(query);
 	    return 1;
 	}
 
@@ -22088,8 +22048,6 @@ CMD:mmat(playerid, params[])
 		}
 	    format(text, sizeof(text), "%s", WordWrap(text, WRAP_MANUAL));
 	    SetDynamicObjectMaterialText(object_id, index, text, matsize, fonttype, fontsize, bold, fontcolor, backcolor, alignment);
-
-		print(query);
 	    return 1;
 	}
 	return 1;
@@ -22203,22 +22161,25 @@ CMD:brama(playerid, params[])
 		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc skorzystaæ z bramy, musisz znajdowaæ siê w budynku lub strefie.");
 		        return 1;
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_NONE)
+		    new AreaData[sAreaData];
+		    Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+		    
+		    if(AreaData[aOwnerType] == OWNER_NONE)
 		    {
 		        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		        return 1;
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_PLAYER)
+		    if(AreaData[aOwnerType] == OWNER_PLAYER)
 		    {
-		        if(AreaCache[areaid][aOwner] != PlayerCache[playerid][pUID])
+		        if(AreaData[aOwner] != PlayerCache[playerid][pUID])
 		        {
 		            ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		            return 1;
 		        }
 		    }
-		    if(AreaCache[areaid][aOwnerType] == OWNER_GROUP)
+		    if(AreaData[aOwnerType] == OWNER_GROUP)
 		    {
-		        if(!HavePlayerGroupPerm(playerid, AreaCache[areaid][aOwner], G_PERM_GATE))
+		        if(!HavePlayerGroupPerm(playerid, AreaData[aOwner], G_PERM_GATE))
 		        {
 		            ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		            return 1;
@@ -22334,7 +22295,7 @@ CMD:ec(playerid, params[])
 	GetXYInFrontOfPlayer(playerid, PosX, PosY, 2.0);
 
 	Add3DTextLabel(WordWrap(desc, WRAP_MANUAL), COLOR_WHITE, PosX, PosY, PosZ, distance, world_id, interior_id);
-	Streamer_Update(playerid);
+	Streamer_Update(playerid, STREAMER_TYPE_3D_TEXT_LABEL);
 	
 	ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Etykieta 3D zosta³a pomyœlnie stworzona, powinna pojawiæ siê tu¿ przed Tob¹.\nAby zarz¹dzaæ stworzon¹ etykiet¹ u¿yj komendy /esel w pobli¿u jej.");
 	return 1;
@@ -22447,7 +22408,7 @@ CMD:edel(playerid, params[])
 	OnPlayerFreeze(playerid, false, 0);
 	ResetPlayerCamera(playerid);
 
-	Destroy3DTextLabel(label_id);
+	crp_Delete3DTextLabel(label_id);
 	PlayerCache[playerid][pEdit3DText] = INVALID_3DTEXT_ID;
 
 	TD_ShowSmallInfo(playerid, 3, "Etykieta zostala ~r~calkowicie ~w~usunieta.");
@@ -23771,7 +23732,7 @@ CMD:blokada(playerid, params[])
 	
     GroupData[group_id][gExtraArray][blockade_id - 1] = object_id;
 
-	Streamer_Update(playerid);
+	Streamer_Update(playerid, STREAMER_TYPE_OBJECT);
 	TD_ShowSmallInfo(playerid, 3, "Blokada zostala ~y~postawiona~w~.");
 	return 1;
 }
@@ -24119,7 +24080,7 @@ CMD:kogut(playerid, params[])
 	object_id = CreateDynamicObject(18646, 0.0, 0.0, 0.0, 0.0, 0.00, 0.0, -1, -1, -1, MAX_DRAW_DISTANCE);
 	AttachDynamicObjectToVehicle(object_id, vehid, PosX, PosY, PosZ + 0.95, -2.0, 0.0, 4.0);
 		
-	Streamer_Update(playerid);
+	Streamer_Update(playerid, STREAMER_TYPE_OBJECT);
 	TD_ShowSmallInfo(playerid, 3, "Syrena ~b~policyjna ~w~zostala ~g~wyjeta~w~.");
 	return 1;
 }
@@ -26854,7 +26815,7 @@ CMD:limits(playerid, params[])
 	}
 	new string[256];
 	
-	format(string, sizeof(string), "Gracze:\t\t\t%d/%d\nPojazdy:\t\t%d/%d\nDrzwi:\t\t\t%d/%d\nStrefy:\t\t\t%d/%d\nProdukty:\t\t%d/%d\nGrupy:\t\t\t%d/%d", Iter_Count(Player), MAX_PLAYERS, Iter_Count(Vehicles), MAX_VEHICLES, Iter_Count(Door), MAX_DOORS, Iter_Count(Area), MAX_AREAS, Iter_Count(Product), MAX_PRODUCTS, Iter_Count(Groups), MAX_GROUPS);
+	format(string, sizeof(string), "Gracze:\t\t\t%d/%d\nPojazdy:\t\t%d/%d\nDrzwi:\t\t\t%d/%d\nStrefy:\t\t\t%d/UNLIMIT\nProdukty:\t\t%d/%d\nGrupy:\t\t\t%d/%d", Iter_Count(Player), MAX_PLAYERS, Iter_Count(Vehicles), MAX_VEHICLES, Iter_Count(Door), MAX_DOORS, Streamer_GetUpperBound(STREAMER_TYPE_AREA), Iter_Count(Product), MAX_PRODUCTS, Iter_Count(Groups), MAX_GROUPS);
 	ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_LIST, "Limity serwerowe", string, "OK", "");
 	return 1;
 }
@@ -28527,10 +28488,10 @@ stock IsPlayerAiming(playerid)
 
 stock GetAreaID(area_uid)
 {
-	new areaid = INVALID_AREA_ID;
-	foreach(new i : Area)
+	new areaid = INVALID_AREA_ID, areas = Streamer_GetUpperBound(STREAMER_TYPE_AREA);
+	for (new i = 0; i <= areas; i++)
 	{
-	    if(AreaCache[i][aUID] == area_uid)
+	    if(Streamer_IsInArrayData(STREAMER_TYPE_AREA, i, E_STREAMER_EXTRA_ID, area_uid))
 	    {
 	        areaid = i;
 	        break;
@@ -28539,18 +28500,23 @@ stock GetAreaID(area_uid)
 	return areaid;
 }
 
+stock GetAreaUID(areaid)
+{
+	new AreaData[sAreaData];
+	Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+	
+	return AreaData[aUID];
+}
+
 stock GetPlayerAreaID(playerid)
 {
-	new areaid = INVALID_AREA_ID;
-	foreach(new i : Area)
+	new areaid = INVALID_AREA_ID, areas = Streamer_GetUpperBound(STREAMER_TYPE_AREA);
+	for (new i = 0; i <= areas; i++)
 	{
-	    if(AreaCache[i][aUID])
-	    {
-	        if(IsPlayerInDynamicArea(playerid, i))
-	        {
-				areaid = i;
-				break;
-	        }
+ 		if(IsPlayerInDynamicArea(playerid, i))
+   		{
+			areaid = i;
+			break;
 	    }
 	}
 	return areaid;
@@ -29078,62 +29044,21 @@ stock IsValidObjectModel(model)
 
 stock PlayStreamedAudioForPlayer(playerid, streamString[])
 {
-	/*
-	// Jeœli klient w³¹czony
-	if(Audio_IsClientConnected(playerid))
-	{
-	    Audio_StopRadio(playerid);
-	
-		Audio_Stop(playerid, PlayerCache[playerid][pAudioHandle]);
- 		PlayerCache[playerid][pAudioHandle] = Audio_PlayStreamed(playerid, streamString);
-	}
-	else
-	{
-		StopAudioStreamForPlayer(playerid);
-		PlayAudioStreamForPlayer(playerid, streamString);
-	}
-	*/
+	StopAudioStreamForPlayer(playerid);
+	PlayAudioStreamForPlayer(playerid, streamString);
 	return 1;
 }
 
 stock PlayStreamedAudio3DForPlayer(playerid, streamString[], Float:PosX, Float:PosY, Float:PosZ)
 {
-/*
-	if(Audio_IsClientConnected(playerid))
-	{
-	    Audio_StopRadio(playerid);
-
-		Audio_Stop(playerid, PlayerCache[playerid][pAudioHandle]);
- 		PlayerCache[playerid][pAudioHandle] = Audio_PlayStreamed(playerid, streamString);
-
- 		Audio_Set3DPosition(playerid, PlayerCache[playerid][pAudioHandle], PosX, PosY, PosZ, 10.0);
-	}
-	else
-	{
-		StopAudioStreamForPlayer(playerid);
-		PlayAudioStreamForPlayer(playerid, streamString, PosX, PosY, PosZ, 10.0, true);
-	}
-*/
+	StopAudioStreamForPlayer(playerid);
+	PlayAudioStreamForPlayer(playerid, streamString, PosX, PosY, PosZ, 10.0, true);
 	return 1;
 }
 
 stock StopStreamedAudioForPlayer(playerid)
 {
-	/*
-	if(PlayerCache[playerid][pAudioHandle])
-	{
-	    if(Audio_IsClientConnected(playerid))
-	    {
-	        Audio_Stop(playerid, PlayerCache[playerid][pAudioHandle]);
-	    }
-	    
-	    PlayerCache[playerid][pAudioHandle] = 0;
-	}
-	else
-	{
-	    StopAudioStreamForPlayer(playerid);
-	}
-	*/
+	StopAudioStreamForPlayer(playerid);
 	return 1;
 }
 
