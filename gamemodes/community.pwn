@@ -14283,7 +14283,7 @@ public Add3DTextLabel(LabelDesc[128], LabelColor, Float:LabelPosX, Float:LabelPo
 
 	return label_uid;
 }
-/*
+
 public query_OnLoad3DTextLabels()
 {
 	new rows, label_uid, Text3D:label_id, col[20],
@@ -14312,7 +14312,6 @@ public query_OnLoad3DTextLabels()
 	}
 	return 1;
 }
-*/
 
 public crp_Delete3DTextLabel(label_id)
 {
