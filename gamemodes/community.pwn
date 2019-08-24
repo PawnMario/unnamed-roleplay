@@ -906,7 +906,7 @@ forward GivePlayerAchievement(playerid, achieve_type);
 
 // New's
 
-new baseurl[] = "http://m-rp.net/models";
+new baseurl[] = "https://m-rp.net/pornhub/models";
 new MySQL:connHandle;
 
 new Text:TextDrawServerLogo;
