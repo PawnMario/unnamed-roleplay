@@ -56,7 +56,6 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 // Limitations
 #define MAX_PLAYERS         20
 #define MAX_VEHICLES        500
-#define MAX_DOORS          	600
 #define MAX_ITEM_CACHE      100
 #define MAX_PRODUCTS        100
 #define MAX_ACCESS          200
@@ -71,6 +70,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 #define MAX_VIS_OBJECTS 	500
 #define MAX_VIS_LABELS      500
+#define MAX_VIS_DOORS       100
 
 #define ACTIVITY_LIMIT      1000
 
@@ -837,7 +837,7 @@ forward ShowPlayerVehicleInfo(playerid, vehid);
 forward OnVehicleEngineStarted(vehicleid);
 
 forward CreateDoor(Float:DoorEnterX, Float:DoorEnterY, Float:DoorEnterZ, Float:DoorEnterA, DoorEnterInt, DoorEnterVW, DoorName[]);
-forward LoadDoor(door_uid);
+forward SaveDoor(doorid);
 forward DeleteDoor(doorid);
 forward query_OnLoadDoors();
 forward ShowPlayerDoorInfo(playerid, doorid);
@@ -955,15 +955,12 @@ new PlayerText:TextDrawRadioCB[MAX_PLAYERS];
 new PlayerText:TextDrawDuty[MAX_PLAYERS];
 
 new PunishTime;
-new PickupWork;
 
 new Cache:external_items_cache[MAX_PLAYERS][5];
 
 // Iterators
 new Iterator:Groups<MAX_GROUPS>;
 new Iterator:Vehicles<MAX_VEHICLES>;
-
-new Iterator:Door<MAX_DOORS>;
 
 new Iterator:PlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
 new Iterator:CheckedPlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
@@ -1575,47 +1572,6 @@ new VehicleModelData[212][sVehicleModelData] =
 
 new FuelTypeName[3][12] = {"Benzyna", "Gaz", "Ropa"};
 
-enum sDoorData
-{
-	dUID,
-	dName[64],
-	
-	Float:dEnterX,
-	Float:dEnterY,
-	Float:dEnterZ,
-	Float:dEnterA,
-	
-	dEnterInt,
-	dEnterVW,
-	
-	Float:dExitX,
-	Float:dExitY,
-	Float:dExitZ,
-	Float:dExitA,
-	
-	dExitInt,
-	dExitVW,
-	
-	bool: dLocked,
-	dPickupID,
-	
-	bool: dGarage,
-	
-	dOwner,
-	dOwnerType,
-	
-	dAudioURL[128],
-	dEnterPay,
-	
-	dAccess,
-	dFireData[3],
-	
-	bool:dObjectsLoaded,
-	
-	ORM:dOrm
-}
-new DoorCache[MAX_DOORS][sDoorData];
-
 enum sInteriorData
 {
 	INTERIOR_ID,
@@ -2044,7 +2000,7 @@ enum sPackageData
 	pItemPrice,
 	
 	pType,
-	pDistance
+	Float:pDistance
 }
 new PackageCache[MAX_PACKAGES][sPackageData];
 
@@ -2180,6 +2136,33 @@ enum sActorData
 	aAnim
 };
 
+enum sDoorInfo
+{
+	dUID,
+	dName[64],
+
+	Float:dExitX,
+	Float:dExitY,
+	Float:dExitZ,
+	Float:dExitA,
+
+	dExitInt,
+	dExitVW,
+
+	bool: dLocked,
+	bool: dGarage,
+
+	dOwner,
+	dOwnerType,
+
+	dAudioURL[128],
+	dEnterPay,
+
+	dAccess,
+	dFireData[3],
+
+	bool:dObjectsLoaded
+};
 
 new BlockadeType[8] = {3578, 1228, 1237, 1425, 978, 979, 2892, 1437};
 
@@ -2201,8 +2184,10 @@ public OnGameModeInit()
 	
 	Iter_Add(Vehicles, 0);
 	
+	/*
 	new pickup_id = CreateDynamicPickup(1210, 2, 1464.1624, -1749.0228, 15.4453);
 	Streamer_SetIntData(STREAMER_TYPE_PICKUP, pickup_id, E_STREAMER_EXTRA_ID, PICKUP_WORK);
+	*/
 	
 	Streamer_SetVisibleItems(STREAMER_TYPE_OBJECT, 			MAX_VIS_OBJECTS);
 	Streamer_SetVisibleItems(STREAMER_TYPE_3D_TEXT_LABEL, 	MAX_VIS_LABELS);
@@ -2572,12 +2557,14 @@ task OnMinuteTask[60000]()
 	    }
 	}
 	
-	foreach(new doorid : Door)
+	new DoorData[sDoorInfo];
+	for (new doorid = 0; doorid < Streamer_CountItems(STREAMER_TYPE_PICKUP); doorid++)
 	{
-		if(DoorCache[doorid][dFireData][FIRE_TIME])
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		if(DoorData[dFireData][FIRE_TIME])
 	 	{
 			new string[128], group_id;
-			DoorCache[doorid][dFireData][FIRE_TIME] ++;
+			DoorData[dFireData][FIRE_TIME] ++;
 
 			foreach(new i : Player)
 			{
@@ -2594,7 +2581,8 @@ task OnMinuteTask[60000]()
 								{
 									if(GetPlayerWeapon(i) == 42)
 									{
-									    DoorCache[doorid][dFireData][FIRE_TIME] --;
+									    DoorData[dFireData][FIRE_TIME] --;
+									    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 									}
 								}
 							}
@@ -2602,19 +2590,22 @@ task OnMinuteTask[60000]()
 	     			}
 		    	}
 			}
-   			new color, Float:percent = (float(DoorCache[doorid][dFireData][FIRE_TIME]) / 15.0) * 100, fire_label = DoorCache[doorid][dFireData][FIRE_LABEL];
+   			new color, Float:percent = (float(DoorData[dFireData][FIRE_TIME]) / 15.0) * 100, fire_label = DoorData[dFireData][FIRE_LABEL],
+				Float:door_enter[3];
+				
+			Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, door_enter[0], door_enter[1], door_enter[2]);
       		format(string, sizeof(string), "Ten budynek stan¹³ w p³omieniach!\nSzacowane zniszczenia: %d%", floatround(percent));
       		
-      		if(DoorCache[doorid][dFireData][FIRE_TIME] < 5)			color = 0x33AA33FF;
-      		else if(DoorCache[doorid][dFireData][FIRE_TIME] >= 5 && DoorCache[doorid][dFireData][FIRE_TIME] < 10)
+      		if(DoorData[dFireData][FIRE_TIME] < 5)			color = 0x33AA33FF;
+      		else if(DoorData[dFireData][FIRE_TIME] >= 5 && DoorData[dFireData][FIRE_TIME] < 10)
       		{
 			  	color = 0xFF9900FF;
-                CreateExplosion(DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], 9, 5.0);
+                CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 9, 5.0);
 			}
       		else
 	  		{
 			  	color = 0xAA3333FF;
-			  	CreateExplosion(DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], 2, 8.0);
+			  	CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 2, 8.0);
 			}
 			
       		UpdateDynamic3DTextLabelText(Text3D:fire_label, color, string);
@@ -2622,30 +2613,30 @@ task OnMinuteTask[60000]()
       		// Po¿ar dobieg³ koñca
       		if(percent >= 100)
       		{
-      		    DoorCache[doorid][dExitX]   = 0.0;
-      		    DoorCache[doorid][dExitY]   = 0.0;
-      		    DoorCache[doorid][dExitZ]   = 0.0;
-      		    DoorCache[doorid][dExitA]   = 0.0;
+      		    DoorData[dExitX]   = 0.0;
+      		    DoorData[dExitY]   = 0.0;
+      		    DoorData[dExitZ]   = 0.0;
       		    
-      		    DoorCache[doorid][dExitInt] = 0;
-      		    DoorCache[doorid][dExitVW]  = 0;
+      		    DoorData[dExitInt] = 0;
+      		    DoorData[dExitVW]  = 0;
       		    
-      		    DestroyDynamicObject(DoorCache[doorid][dFireData][FIRE_OBJECT]);
-      		    DestroyDynamic3DTextLabel(Text3D:DoorCache[doorid][dFireData][FIRE_LABEL]);
+      		    DestroyDynamicObject(DoorData[dFireData][FIRE_OBJECT]);
+      		    DestroyDynamic3DTextLabel(Text3D:DoorData[dFireData][FIRE_LABEL]);
       		    
-      		    DoorCache[doorid][dFireData][FIRE_TIME] = 0;
-      		    CreateExplosion(DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], 6, 8.0);
+      		    DoorData[dFireData][FIRE_TIME] = 0;
+      		    CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 6, 8.0);
       		    
-      		    orm_update(DoorCache[doorid][dOrm]);
+      		    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+      		    SaveDoor(doorid);
       		}
       		else if(percent <= 0)
       		{
-  		    	DestroyDynamicObject(DoorCache[doorid][dFireData][FIRE_OBJECT]);
-      		    DestroyDynamic3DTextLabel(Text3D:DoorCache[doorid][dFireData][FIRE_LABEL]);
+  		    	DestroyDynamicObject(DoorData[dFireData][FIRE_OBJECT]);
+      		    DestroyDynamic3DTextLabel(Text3D:DoorData[dFireData][FIRE_LABEL]);
       		    
-      		    DoorCache[doorid][dFireData][FIRE_TIME] = 0;
+      		    DoorData[dFireData][FIRE_TIME] = 0;
+      		    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
       		}
-      		
 	  	}
 	}
 	return 1;
@@ -4024,34 +4015,35 @@ public OnPlayerDisconnect(playerid, reason)
 	if(doorid == INVALID_DOOR_ID)
 	{
 		new	Float:DoorDistance,
-			Float:LastDistance = 8000.0;
+			Float:LastDistance = 8000.0, DoorData[sDoorInfo];
 			
-		foreach(new d : Door)
+		for (new door = 0; door < Streamer_CountItems(STREAMER_TYPE_PICKUP); door++)
 		{
-		    if(DoorCache[d][dEnterVW] == 0)
+		    if(IsValidDynamicPickup(door))
 		    {
-	  			if((DoorCache[d][dOwnerType] == OWNER_PLAYER && DoorCache[d][dOwner] == PlayerCache[playerid][pUID]))
+		        Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
+	  			if((DoorData[dOwnerType] == OWNER_PLAYER && DoorData[dOwner] == PlayerCache[playerid][pUID]))
 	  			{
-	          		DoorDistance = GetPlayerDistanceToPoint(playerid, DoorCache[d][dEnterX], DoorCache[d][dEnterY]);
+	  			    Streamer_GetDistanceToItem(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, door, DoorDistance);
 
 					if((DoorDistance < LastDistance))
 					{
 						LastDistance = DoorDistance;
-						PlayerCache[playerid][pHouse] = DoorCache[d][dUID];
+						PlayerCache[playerid][pHouse] = DoorData[dUID];
 					}
 				}
-				else if(DoorCache[d][dOwnerType] == OWNER_GROUP)
+				else if(DoorData[dOwnerType] == OWNER_GROUP)
 				{
-				    if(IsPlayerInGroup(playerid, DoorCache[d][dOwner]))
+				    if(IsPlayerInGroup(playerid, DoorData[dOwner]))
 				    {
-				        if((GroupData[GetPlayerGroupID(playerid, DoorCache[d][dOwner])][gFlags] & G_FLAG_SPAWN) && (PlayerGroup[playerid][GetPlayerGroupSlot(playerid, DoorCache[d][dOwner])][gpPerm] & G_PERM_DOORS))
+				        if((GroupData[GetPlayerGroupID(playerid, DoorData[dOwner])][gFlags] & G_FLAG_SPAWN) && (PlayerGroup[playerid][GetPlayerGroupSlot(playerid, DoorData[dOwner])][gpPerm] & G_PERM_DOORS))
 						{
-			   				DoorDistance = GetPlayerDistanceToPoint(playerid, DoorCache[d][dEnterX], DoorCache[d][dEnterY]);
+			   				Streamer_GetDistanceToItem(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, door, DoorDistance);
 
 							if((DoorDistance < LastDistance))
 							{
 								LastDistance = DoorDistance;
-								PlayerCache[playerid][pHouse] = DoorCache[d][dUID];
+								PlayerCache[playerid][pHouse] = DoorData[dUID];
 							}
 						}
 				    }
@@ -4061,17 +4053,20 @@ public OnPlayerDisconnect(playerid, reason)
 	}
 	else
 	{
-		if((DoorCache[doorid][dOwnerType] == OWNER_PLAYER && DoorCache[doorid][dOwner] == PlayerCache[playerid][pUID]))
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
+		if((DoorData[dOwnerType] == OWNER_PLAYER && DoorData[dOwner] == PlayerCache[playerid][pUID]))
 		{
-			PlayerCache[playerid][pHouse] = DoorCache[doorid][dUID];
+			PlayerCache[playerid][pHouse] = DoorData[dUID];
 		}
-		else if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+		else if(DoorData[dOwnerType] == OWNER_GROUP)
 		{
-  			if(IsPlayerInGroup(playerid, DoorCache[doorid][dOwner]))
+  			if(IsPlayerInGroup(playerid, DoorData[dOwner]))
 	    	{
-				if((GroupData[GetPlayerGroupID(playerid, DoorCache[doorid][dOwner])][gFlags] & G_FLAG_SPAWN) && (PlayerGroup[playerid][GetPlayerGroupSlot(playerid, DoorCache[doorid][dOwner])][gpPerm] & G_PERM_DOORS))
+				if((GroupData[GetPlayerGroupID(playerid, DoorData[dOwner])][gFlags] & G_FLAG_SPAWN) && (PlayerGroup[playerid][GetPlayerGroupSlot(playerid, DoorData[dOwner])][gpPerm] & G_PERM_DOORS))
 				{
-    				PlayerCache[playerid][pHouse] = DoorCache[doorid][dUID];
+    				PlayerCache[playerid][pHouse] = DoorData[dUID];
 				}
     		}
 		}
@@ -4355,9 +4350,12 @@ public SetPlayerSpawn(playerid)
 	    new doorid = GetDoorID(PlayerCache[playerid][pHouse]);
 	    if(doorid != INVALID_DOOR_ID)
 	    {
-	        if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			
+	        if(DoorData[dOwnerType] == OWNER_GROUP)
 	        {
-	        	new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+	        	new group_id = GetGroupID(DoorData[dOwner]);
 		        if(GroupData[group_id][gType] == G_TYPE_HOTEL)
 		        {
           			crp_SetPlayerPos(playerid, PosInfo[HOTEL_SPAWN_POS][sPosX], PosInfo[HOTEL_SPAWN_POS][sPosY], PosInfo[HOTEL_SPAWN_POS][sPosZ]);
@@ -4371,7 +4369,7 @@ public SetPlayerSpawn(playerid)
           			return 1;
 		        }
 		        
-		        if(!IsPlayerInGroup(playerid, DoorCache[doorid][dOwner]) || !(GroupData[group_id][gFlags] & G_FLAG_SPAWN) || !(PlayerGroup[playerid][GetPlayerGroupSlot(playerid, DoorCache[doorid][dOwner])][gpPerm] & G_PERM_DOORS))
+		        if(!IsPlayerInGroup(playerid, DoorData[dOwner]) || !(GroupData[group_id][gFlags] & G_FLAG_SPAWN) || !(PlayerGroup[playerid][GetPlayerGroupSlot(playerid, DoorData[dOwner])][gpPerm] & G_PERM_DOORS))
 		        {
 		            PlayerCache[playerid][pHouse] = 0;
 		            SetPlayerSpawn(playerid);
@@ -4379,11 +4377,10 @@ public SetPlayerSpawn(playerid)
 		        }
 			}
 			
-			crp_SetPlayerPos(playerid, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]);
-			SetPlayerFacingAngle(playerid, DoorCache[doorid][dExitA]);
+			crp_SetPlayerPos(playerid, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ]);
 
-			SetPlayerVirtualWorld(playerid, DoorCache[doorid][dExitVW]);
-			SetPlayerInterior(playerid, DoorCache[doorid][dExitInt]);
+			SetPlayerVirtualWorld(playerid, DoorData[dExitVW]);
+			SetPlayerInterior(playerid, DoorData[dExitInt]);
 
 			OnPlayerFreeze(playerid, true, 3);
 			ResetPlayerCamera(playerid);
@@ -5363,13 +5360,18 @@ public OnPlayerEnterCheckpoint(playerid)
 		}
 	    case CHECKPOINT_PACKAGE:
 	    {
-	        new package_id = PlayerCache[playerid][pPackage], doorid = GetDoorID(PackageCache[package_id][pDoorUID]);
+	        new package_id = PlayerCache[playerid][pPackage], doorid = GetDoorID(PackageCache[package_id][pDoorUID]),
+	            Float:PosX, Float:PosY, Float:PosZ;
+	            
+	        GetPlayerPos(playerid, PosX, PosY, PosZ);
 	        
-	        PackageCache[package_id][pDistance] = GetDistanceToDoor(playerid, doorid);
-	        ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Wzi¹³eœ paczkê z hurtowni, szczegó³owe dane:\n\nNumer paczki: %d\nW³aœciciel: %s\n\nAdres: SA %d\nDystans do przebycia: %dm", PackageCache[package_id][pUID], DoorCache[doorid][dName], DoorCache[doorid][dUID], PackageCache[package_id][pDistance]);
+	        Streamer_GetDistanceToItem(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, doorid, PackageCache[package_id][pDistance]);
+	        ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Wzi¹³eœ paczkê z hurtowni, szczegó³owe dane:\n\nNumer paczki: %d\nW³aœciciel: %s\n\nAdres: SA %d\nDystans do przebycia: %dm", PackageCache[package_id][pUID], DoorName(doorid), GetDoorUID(doorid), floatround(PackageCache[package_id][pDistance]));
 	        
 			DisablePlayerCheckpoint(playerid);
-			SetPlayerCheckpoint(playerid, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], 5.0);
+			Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, PosX, PosY, PosZ);
+			
+			SetPlayerCheckpoint(playerid, PosX, PosY, PosZ, 5.0);
 			
 			PlayerCache[playerid][pCheckpoint] 	= CHECKPOINT_DOOR;
 			PlayerCache[playerid][pLastMileage] = floatround(PlayerCache[playerid][pMileage]);
@@ -5379,14 +5381,14 @@ public OnPlayerEnterCheckpoint(playerid)
 	    case CHECKPOINT_DOOR:
 		{
 		    new package_id = PlayerCache[playerid][pPackage], doorid = GetDoorID(PackageCache[package_id][pDoorUID]),
-		        price = PackageCache[package_id][pDistance] / 100;
+		        price = floatround(PackageCache[package_id][pDistance]) / 100;
 		        
 		    DisablePlayerCheckpoint(playerid);
 		    
    			PlayerCache[playerid][pCheckpoint] 	= CHECKPOINT_NONE;
 			PlayerCache[playerid][pPackage]	 	= INVALID_PACKAGE_ID;
 		    
-		    if(floatround(PlayerCache[playerid][pMileage] - PlayerCache[playerid][pLastMileage]) < float(PackageCache[package_id][pDistance] / 1000))
+		    if(floatround(PlayerCache[playerid][pMileage] - PlayerCache[playerid][pLastMileage]) < floatround(PackageCache[package_id][pDistance] / 1000))
 		    {
 				ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie przeby³eœ minimalnego dystansu, kurs nie zosta³ zaliczony.\nPamiêtaj, ¿e dostarczaæ paczki mo¿esz tylko pojazdem silnikowym!");
 				return 1;
@@ -5559,49 +5561,36 @@ public OnDynamicObjectMoved(objectid)
 
 public OnPlayerPickUpDynamicPickup(playerid, pickupid)
 {
-	new pickup_type = Streamer_GetIntData(STREAMER_TYPE_PICKUP, pickupid, E_STREAMER_EXTRA_ID);
+	new DoorData[sDoorInfo];
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, pickupid, E_STREAMER_EXTRA_ID, DoorData);
 	
-	switch(pickup_type)
-	{
-	    case PICKUP_WORK:
-	    {
-	    	ShowPlayerDialog(playerid, D_WORK_SELECT, DIALOG_STYLE_LIST, "Dostêpne prace dorywcze:", "1. Mechanik\n2. Kurier\n3. Sprzedawca", "Wybierz", "Anuluj");
-		}
-		case PICKUP_DOOR:
-		{
-			if(Iter_Contains(Door, pickupid))
-			{
-			    new doorid = pickupid,
-					string[256], lock_text[128], enter_pay[64];
+ 	new	string[256], lock_text[128], enter_pay[64];
 
-		    	if(DoorCache[doorid][dEnterPay])
-			  	{
-			   		format(enter_pay, sizeof(enter_pay), "~w~~n~Koszt wstepu: ~g~$%d~n~", DoorCache[doorid][dEnterPay]);
-			   	}
-			    else
-			    {
-			    	format(enter_pay, sizeof(enter_pay), "_");
-			    }
-			    if(DoorCache[doorid][dLocked])
-			    {
-			        format(lock_text, sizeof(lock_text), "~r~~h~Drzwi sa zamkniete");
-			    }
-			    else
-			    {
-			    	format(lock_text, sizeof(lock_text), "~y~Aby wejsc, wcisnij jednoczesnie~n~~w~[~b~~h~~h~~k~~SNEAK_ABOUT~ + ~k~~PED_SPRINT~~w~]");
-				}
-				if(PlayerCache[playerid][pAdmin] & A_PERM_DOORS)
-				{
-				    format(string, sizeof(string), "%s (%d)~n~%s~n~%s", DoorCache[doorid][dName], DoorCache[doorid][dUID], enter_pay, lock_text);
-				}
-				else
-				{
-		            format(string, sizeof(string), "%s~n~%s~n~%s", DoorCache[doorid][dName], enter_pay, lock_text);
-				}
-			    TD_ShowDoor(playerid, 5, string);
-			}
-		}
+	if(DoorData[dEnterPay])
+	{
+		format(enter_pay, sizeof(enter_pay), "~w~~n~Koszt wstepu: ~g~$%d~n~", DoorData[dEnterPay]);
+ 	}
+  	else
+  	{
+ 		format(enter_pay, sizeof(enter_pay), "_");
+  	}
+   	if(DoorData[dLocked])
+    {
+    	format(lock_text, sizeof(lock_text), "~r~~h~Drzwi sa zamkniete");
+    }
+    else
+    {
+   		format(lock_text, sizeof(lock_text), "~y~Aby wejsc, wcisnij jednoczesnie~n~~w~[~b~~h~~h~~k~~SNEAK_ABOUT~ + ~k~~PED_SPRINT~~w~]");
 	}
+	if(PlayerCache[playerid][pAdmin] & A_PERM_DOORS)
+	{
+ 		format(string, sizeof(string), "%s (%d)~n~%s~n~%s", DoorData[dName], DoorData[dUID], enter_pay, lock_text);
+	}
+	else
+	{
+ 		format(string, sizeof(string), "%s~n~%s~n~%s", DoorData[dName], enter_pay, lock_text);
+	}
+ 	TD_ShowDoor(playerid, 5, string);
 	return 1;
 }
 
@@ -5653,19 +5642,43 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 	{
 		if(newkeys == KEY_WALK + KEY_SPRINT)
 		{
-	        foreach(new doorid : Door)
-	        {
-				if(IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dEnterVW])
-          		{
-					OnPlayerEnterDoor(playerid, doorid);
-      				break;
-  		      	}
-     		   	else if(IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dExitVW])
-       		 	{
-					OnPlayerExitDoor(playerid, doorid);
+			new Float:PosX, Float:PosY, Float:PosZ,
+				virtual_world = GetPlayerVirtualWorld(playerid), interior_id = GetPlayerInterior(playerid);
+
+			GetPlayerPos(playerid, PosX, PosY, PosZ);
+
+			new NearDoor[MAX_VIS_DOORS],
+				count_doors = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, NearDoor, MAX_VIS_DOORS, 2.0, virtual_world);
+
+			if(count_doors > 0)
+			{
+				for (new door = 0; door < count_doors; door++)
+				{
+					OnPlayerEnterDoor(playerid, NearDoor[door]);
 					break;
-      		  	}
-	        }
+				}
+			}
+			else
+			{
+				new DoorData[sDoorInfo];
+				count_doors = Streamer_CountItems(STREAMER_TYPE_PICKUP);
+
+				for (new door = 0; door <= count_doors; door++)
+				{
+				    if(IsValidDynamicPickup(door))
+				    {
+					    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
+					    if(DoorData[dExitVW] == virtual_world && DoorData[dExitInt] == interior_id)
+					    {
+					        if(IsPlayerInRangeOfPoint(playerid, 2.0, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ]))
+					        {
+								OnPlayerExitDoor(playerid, door);
+								break;
+					        }
+					    }
+					}
+				}
+			}
 		}
 		/*
 		if(newkeys & KEY_YES)
@@ -5737,8 +5750,10 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 		        RemovePlayerAttachedObject(playerid, SLOT_TRYING);
 		        GameTextForPlayer(playerid, "_", 0, 6);
 		        
-		        new doorid = GetPlayerDoorID(playerid),
-					group_id = GetGroupID(DoorCache[doorid][dOwner]), group_activity = AccessData[access_id][aPrice];
+		        new doorid = GetPlayerDoorID(playerid), DoorData[sDoorInfo];
+		        Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		        
+		        new group_id = GetGroupID(DoorData[dOwner]), group_activity = AccessData[access_id][aPrice];
 		            
 				GroupData[group_id][gCash] += floatround(0.3 * AccessData[access_id][aPrice]);
 				GroupData[group_id][gActivity] += group_activity;
@@ -5784,8 +5799,10 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 
 		        GameTextForPlayer(playerid, "_", 0, 6);
 		        
-		        new doorid = GetPlayerDoorID(playerid),
-					group_id = GetGroupID(DoorCache[doorid][dOwner]), group_activity = SkinData[skin_id][sPrice];
+		        new doorid = GetPlayerDoorID(playerid), DoorData[sDoorInfo];
+		        Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		        
+				new group_id = GetGroupID(DoorData[dOwner]), group_activity = SkinData[skin_id][sPrice];
 
 				GroupData[group_id][gCash] += floatround(0.3 * SkinData[skin_id][sPrice]);
 				GroupData[group_id][gActivity] += group_activity;
@@ -7204,25 +7221,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-     		new doorid = PlayerCache[playerid][pMainTable], door_uid = DoorCache[doorid][dUID], door_name[64],
-     		    query[256];
-     		    
-     		strmid(door_name, DoorCache[doorid][dName], 0, 64);
+     		new doorid = PlayerCache[playerid][pMainTable], door_uid = GetDoorUID(doorid);
+     		Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_MODEL_ID, PickupID[listitem]);
      		
-			DoorCache[doorid][dPickupID] = PickupID[listitem];
-			orm_update(DoorCache[doorid][dOrm]);
-
-			DestroyDynamicPickup(doorid);
-			Iter_Remove(Door, doorid);
-			
-			orm_destroy(DoorCache[doorid][dOrm]);
-			
-			mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"doors` WHERE door_uid = '%d' LIMIT 1", door_uid);
-			mysql_tquery(connHandle, query, "query_OnLoadDoors", "");
-			
-			//doorid = LoadDoor(door_uid);
-			
-			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Model pickupa dla drzwi %s (UID: %d) zosta³ pomyœlnie zmieniony.", door_name, door_uid);
+     		SaveDoor(doorid);
+			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Model pickupa dla drzwi %s (UID: %d) zosta³ pomyœlnie zmieniony.", DoorName(doorid), door_uid);
 			return 1;
 	    }
 	    else
@@ -7249,6 +7252,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 		if(response)
 		{
+  			new doorid = PlayerCache[playerid][pMainTable], DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+				    
 		    switch(listitem)
 		    {
 		        case 0:
@@ -7261,8 +7267,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				}
 				case 2:
 				{
-				    new doorid = PlayerCache[playerid][pMainTable];
-				    if(DoorCache[doorid][dOwnerType] != OWNER_PLAYER)
+				    if(DoorData[dOwnerType] != OWNER_PLAYER)
 				    {
 				        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz przypisaæ tych drzwi.");
 				        return 1;
@@ -7284,8 +7289,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				}
 				case 3:
 				{
-    				new doorid = PlayerCache[playerid][pMainTable];
-				    if(!strlen(DoorCache[doorid][dAudioURL]))
+				    if(!strlen(DoorData[dAudioURL]))
 				    {
 				    	ShowPlayerDialog(playerid, D_DOOR_AUDIO, DIALOG_STYLE_INPUT, "Opcje drzwi » Muzyka spoza gry", "WprowadŸ link do muzyki lub radia, które us³ysz¹ wszyscy przebywaj¹cy w tym budynku.\nLink nie mo¿e przekroczyæ 128 znaków.\n\nUpewnij siê, ¿e link jest poprawny w innym wypadku muzyka mo¿e nie byæ s³yszalna.", "Graj", "Anuluj");
 					}
@@ -7302,79 +7306,73 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 								}
 							}
 						}
-					    strmid(DoorCache[doorid][dAudioURL], "", 0, 0);
-					    orm_update(DoorCache[doorid][dOrm]);
+					    strmid(DoorData[dAudioURL], "", 0, 0);
+					    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 					    
+					    SaveDoor(doorid);
 						ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Muzyka spoza gry dla tego budynku zosta³a wy³¹czona.\nAby w³¹czyæ muzykê spoza gry, wybierz tê opcjê ponownie.");
 					}
 				}
 				case 4:
 				{
-					new doorid = PlayerCache[playerid][pMainTable], group_id = GetGroupID(DoorCache[doorid][dOwner]);
+					new group_id = GetGroupID(DoorData[dOwner]);
 					ListGroupProductsForPlayer(group_id, playerid, PRODUCT_LIST_OPTIONS);
 				}
 				case 5:
 				{
-   					new doorid = PlayerCache[playerid][pMainTable];
-   					
 					// Usuñ stare obiekty z tego VW (jeœli s¹)
-					new object_counts = Streamer_GetUpperBound(STREAMER_TYPE_OBJECT);
-					for (new object_id = 0; object_id <= object_counts; object_id++)
+					new ObjectData[MAX_VIS_OBJECTS],
+						object_count = Streamer_GetNearbyItems(DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, MAX_DRAW_DISTANCE, DoorData[dUID]);
+
+					mysql_query_format("DELETE FROM `"SQL_PREF"objects` WHERE object_world = '%d'", DoorData[dUID]);
+
+					for (new object = 0; object < object_count; object++)
 					{
-						if(IsValidDynamicObject(object_id))
-						{
-							if(Streamer_IsInArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_WORLD_ID, DoorCache[doorid][dExitVW]))
-							{
-								DestroyDynamicObject(object_id);
-							}
-						}
+						DestroyDynamicObject(ObjectData[object]);
 					}
 
 					new query[512];
-					mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorCache[doorid][dExitVW]);
+					mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorData[dExitVW]);
 				    mysql_tquery(connHandle, query, "query_OnLoadObjects", "");
 
-					DoorCache[doorid][dObjectsLoaded] = true;
-			        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wnêtrze drzwi %s (UID: %d) zosta³o pomyœlnie prze³adowane.", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+					DoorData[dObjectsLoaded] = true;
+					Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+					
+			        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wnêtrze drzwi %s (UID: %d) zosta³o pomyœlnie prze³adowane.", DoorData[dName], DoorData[dUID]);
 				}
 				case 6:
 				{
-		  			new doorid = PlayerCache[playerid][pMainTable];
-					if(!DoorCache[doorid][dGarage])
+					if(!DoorData[dGarage])
 					{
-					    DoorCache[doorid][dGarage] = true;
-         				orm_update(DoorCache[doorid][dOrm]);
-
+					    DoorData[dGarage] = true;
 						ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Mo¿liwoœæ przejazdu samochodem przez drzwi zosta³a w³¹czona.\n\nOd tej pory bêdziesz móg³ wjechaæ dowolnym pojazdem do budynku.\nAby wjechaæ pojazdem do budynku skorzystaj z komendy /przejazd.");
 					}
 					else
 					{
-	    				DoorCache[doorid][dGarage] = false;
-                        orm_update(DoorCache[doorid][dOrm]);
-
+	    				DoorData[dGarage] = false;
 						ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Mo¿liwoœæ przejazdu samochodem przez drzwi zosta³a wy³¹czona.");
 					}
+					Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+					SaveDoor(doorid);
 				}
 				case 7:
 				{
-				    new doorid = PlayerCache[playerid][pMainTable];
+				    GetPlayerPos(playerid, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ]);
+				    DoorData[dExitInt] = GetPlayerInterior(playerid);
 				    
-				    GetPlayerPos(playerid, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]);
-				    GetPlayerFacingAngle(playerid, DoorCache[doorid][dExitA]);
+				    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+				    SaveDoor(doorid);
 				    
-				    DoorCache[doorid][dExitInt] = GetPlayerInterior(playerid);
-				    
-				    orm_update(DoorCache[doorid][dOrm]);
 				    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pozycja wyjœcia z drzwi zosta³a pomyœlnie ustalona.\nWyjœcie na zewn¹trz znajduje siê teraz w miejscu, którym w³aœnie stoisz.");
 				}
 				case 8:
 				{
-  					new doorid = PlayerCache[playerid][pMainTable], string[128],
+  					new string[128],
 					  	list_items[512], item_uid, item_name[32];
 					  	
 					new query[256], rows, Cache:tmp_cache;
 
-					mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_name` FROM `"SQL_PREF"items` WHERE item_ownertype = '%d' AND item_owner = '%d'", PLACE_CLOSET, DoorCache[doorid][dUID]);
+					mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_name` FROM `"SQL_PREF"items` WHERE item_ownertype = '%d' AND item_owner = '%d'", PLACE_CLOSET, DoorData[dUID]);
 					tmp_cache = mysql_query(connHandle, query);
 
 					DynamicGui_Init(playerid);
@@ -7392,7 +7390,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					
 					if(strlen(list_items))
 					{
-					    format(string, sizeof(string), "%s (UID: %d) » Schowek", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+					    format(string, sizeof(string), "%s (UID: %d) » Schowek", DoorData[dName], DoorData[dUID]);
 					    ShowPlayerDialog(playerid, D_ITEM_REMOVE_CLOSET, DIALOG_STYLE_LIST, string, list_items, "Wyjmij", "Anuluj");
 					}
 					else
@@ -7412,19 +7410,22 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 		if(response)
 		{
-  			new doorid = PlayerCache[playerid][pMainTable], door_name[32], esc_door_name[64];
+  			new doorid = PlayerCache[playerid][pMainTable], door_name[32],
+  			    DoorData[sDoorInfo];
+
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	        if(strlen(inputtext) > 32)
 	        {
 	            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Podana nazwa przekracza maksymaln¹ iloœæ znaków.\nSpróbuj ponownie, wpisuj¹c inn¹ nazwê.");
 	            return 1;
 	        }
        		strmid(door_name, FormatTextDrawColors(inputtext), 0, strlen(inputtext));
-            mysql_escape_string(door_name, esc_door_name);
-            
-			strmid(DoorCache[doorid][dName], esc_door_name, 0, strlen(esc_door_name), 32);
-			orm_update(DoorCache[doorid][dOrm]);
+			strmid(DoorData[dName], door_name, 0, strlen(door_name), 32);
+			
+			Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			SaveDoor(doorid);
 
-			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Nazwa drzwi (UID: %d) zosta³a zmieniona pomyœlnie.\nNowa nazwa drzwi: %s.", DoorCache[doorid][dUID], door_name);
+			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Nazwa drzwi (UID: %d) zosta³a zmieniona pomyœlnie.\nNowa nazwa drzwi: %s.", DoorData[dUID], door_name);
 			return 1;
 		}
 		else
@@ -7436,23 +7437,27 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new doorid = PlayerCache[playerid][pMainTable], price = strval(inputtext);
+	        new doorid = PlayerCache[playerid][pMainTable], price = strval(inputtext),
+	            DoorData[sDoorInfo];
+	            
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 			if(strlen(inputtext) > 3 || price > 100 || price < 0)
 	        {
 	            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³ow¹ kwotê.\nMaksymalny koszt wstêpu jaki mo¿esz ustaliæ: $100");
 	            return 1;
 	        }
-	        DoorCache[doorid][dEnterPay] = price;
-	        orm_update(DoorCache[doorid][dOrm]);
+	        DoorData[dEnterPay] = price;
 
-	        if(DoorCache[doorid][dEnterPay])
+	        if(DoorData[dEnterPay])
 	        {
-				ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS,  "Koszt wstêpu do budynku zosta³ zmieniony.\nOp³ata $%d bêdzie pobierana po wejœciu do œrodka.", DoorCache[doorid][dEnterPay]);
+				ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS,  "Koszt wstêpu do budynku zosta³ zmieniony.\nOp³ata $%d bêdzie pobierana po wejœciu do œrodka.", DoorData[dEnterPay]);
 			}
 			else
 			{
 			    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS,  "Op³ata za wstêp nie bêdzie ju¿ wiêcej pobierana.");
 			}
+			Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			SaveDoor(doorid);
 			return 1;
 	    }
 	    else
@@ -7472,8 +7477,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			}
     		new group_id = PlayerGroup[playerid][group_slot][gpID];
 			PlayerCache[playerid][pMainTable] = group_id;
+			
+			DynamicGui_Init(playerid);
+			DynamicGui_SetDialogValue(playerid, doorid);
 
-    		format(string, sizeof(string), "Czy chcesz przypisaæ budynek %s (UID: %d) pod grupê %s (UID: %d)?", DoorCache[doorid][dName], DoorCache[doorid][dUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
+    		format(string, sizeof(string), "Czy chcesz przypisaæ budynek %s (UID: %d) pod grupê %s (UID: %d)?", DoorName(doorid), GetDoorUID(doorid), GroupData[group_id][gName], GroupData[group_id][gUID]);
     		ShowPlayerDialog(playerid, D_DOOR_ASSIGN_ACCEPT, DIALOG_STYLE_MSGBOX, "Opcje drzwi » Przypisz pod grupê", string, "Tak", "Nie");
 	        return 1;
 	    }
@@ -7486,19 +7494,19 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 		if(response)
 		{
-		    new doorid = GetPlayerDoorID(playerid);
-      		if(doorid == INVALID_DOOR_ID)
-	        {
-	            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w budynku, który chcesz przypisaæ.");
-	            return 1;
-	        }
-			new group_id = PlayerCache[playerid][pMainTable];
+		    new doorid = DynamicGui_GetDialogValue(playerid),
+				group_id = PlayerCache[playerid][pMainTable];
+				
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-	        DoorCache[doorid][dOwnerType] = OWNER_GROUP;
-	        DoorCache[doorid][dOwner] = GroupData[group_id][gUID];
+	        DoorData[dOwnerType] = OWNER_GROUP;
+	        DoorData[dOwner] = GroupData[group_id][gUID];
 
-			orm_update(DoorCache[doorid][dOrm]);
-			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Budynek %s (UID: %d) zosta³ pomyœlnie przypisany pod grupê.\nBudynek przypisano dla grupy %s (UID: %d).", DoorCache[doorid][dName], DoorCache[doorid][dUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
+			Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+
+			SaveDoor(doorid);
+			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Budynek %s (UID: %d) zosta³ pomyœlnie przypisany pod grupê.\nBudynek przypisano dla grupy %s (UID: %d).", DoorData[dName], DoorData[dUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
 		    return 1;
 		}
 		else
@@ -7510,22 +7518,25 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        new doorid = PlayerCache[playerid][pMainTable], audio_url[128];
-	        mysql_escape_string(inputtext, audio_url);
+	        new doorid = PlayerCache[playerid][pMainTable];
 
-	        if(strfind(audio_url, "http://", true))
+	        if(strfind(inputtext, "http://", true))
 	        {
 	            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzony link nie jest poprawny.\nLink powinien rozpoczynaæ siê od \"http://\".");
 	            return 1;
 	        }
-	        if(strlen(audio_url) > 128)
+	        if(strlen(inputtext) > 128)
 	        {
 	            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzony link do muzyki jest za d³ugi.\nMaksymalnie dopuszczalne jest 128 znaków.");
 	            return 1;
 	        }
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			
+	        strmid(DoorData[dAudioURL], inputtext, 0, strlen(inputtext), 128);
+	        Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	        
-	        strmid(DoorCache[doorid][dAudioURL], audio_url, 0, strlen(audio_url), 128);
-	        orm_update(DoorCache[doorid][dOrm]);
+	        SaveDoor(doorid);
 
 	        // Za³¹cz muze dla wszystkich, którzy s¹ w pomieszczeniu
 	        foreach(new i : Player)
@@ -7535,7 +7546,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	                if(GetPlayerDoorID(i) == doorid)
 	                {
 	           	 		StopStreamedAudioForPlayer(i);
-	           	 		PlayStreamedAudioForPlayer(i, DoorCache[doorid][dAudioURL]);
+	           	 		PlayStreamedAudioForPlayer(i, DoorData[dAudioURL]);
 					}
 				}
 			}
@@ -7939,27 +7950,30 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku, aby móc schowaæ przedmiot.");
 					        return 1;
 						}
-				   		if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+						new DoorData[sDoorInfo];
+						Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+						
+				   		if(DoorData[dOwnerType] == OWNER_NONE)
 						{
 						    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie jesteœ w³aœcicielem tego budynku.");
 						    return 1;
 						}
-						if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER && DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+						if(DoorData[dOwnerType] == OWNER_PLAYER && DoorData[dOwner] != PlayerCache[playerid][pUID])
 						{
 						    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie jesteœ w³aœcicielem tego budynku.");
 						    return 1;
 						}
-						if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+						if(DoorData[dOwnerType] == OWNER_GROUP)
 						{
-							if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_LEADER))
+							if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
 							{
 							    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie jesteœ w³aœcicielem tego budynku.");
 							    return 1;
 							}
 						}
 						
-						format(main_query, sizeof(main_query), "UPDATE `"SQL_PREF"items` SET item_ownertype = '%d', item_owner = '%d' WHERE ", PLACE_CLOSET, DoorCache[doorid][dUID]);
-                        format(items_list_info, sizeof(items_list_info), "Przedmioty zosta³y schowane w schowku %s (UID: %d):\n", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+						format(main_query, sizeof(main_query), "UPDATE `"SQL_PREF"items` SET item_ownertype = '%d', item_owner = '%d' WHERE ", PLACE_CLOSET, DoorData[dUID]);
+                        format(items_list_info, sizeof(items_list_info), "Przedmioty zosta³y schowane w schowku %s (UID: %d):\n", DoorData[dName], DoorData[dUID]);
 					}
 					case 4:
 					{
@@ -8493,8 +8507,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 
 				crp_GivePlayerMoney(playerid, -product_price);
 				orm_update(PlayerCache[playerid][pOrm]);
+				
+				new DoorData[sDoorInfo];
+				Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-				new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+				new group_id = GetGroupID(DoorData[dOwner]);
 				
 				GroupData[group_id][gCash] += group_cash;
 				GroupData[group_id][gActivity] += group_activity;
@@ -9659,12 +9676,15 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		        return 1;
 		    }
-		    if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || !HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_LEADER))
+   			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			
+		    if(DoorData[dOwnerType] != OWNER_GROUP || !HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
 		    {
 		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz odpowiednich uprawnieñ do u¿ycia tej funkcji.");
 		        return 1;
 		    }
-		    new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+		    new group_id = GetGroupID(DoorData[dOwner]);
 
 			GroupData[group_id][gValue1] = price;
 			orm_update(GroupData[group_id][gOrm]);
@@ -9980,8 +10000,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	    {
 	        new doorid = PlayerCache[playerid][pMainTable],
 	            list_orders[1024], order_category = strval(inputtext), order_uid, order_name[32], order_price;
+
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 			
-			new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+			new group_id = GetGroupID(DoorData[dOwner]);
 			new rows, Cache:tmp_cache, query[512];
 			
 			mysql_format(connHandle, query, sizeof(query), "SELECT `order_uid`, `order_name`, `order_price` FROM `"SQL_PREF"orders` WHERE order_cat = '%d' AND order_owner = '%d' AND order_extraid = '0' OR order_cat = '%d' AND order_owner = '0' AND order_extraid = '%d'", order_category, GroupData[group_id][gType], order_category, GroupData[group_id][gUID]);
@@ -10120,7 +10143,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 
 			crp_GivePlayerMoney(playerid, -order_price);
-			CreatePackage(DoorCache[doorid][dUID], OrderCache[playerid][oName], order_item_type, order_item_value1, order_item_value2, OrderCache[playerid][oCount], price, order_type);
+			CreatePackage(GetDoorUID(doorid), OrderCache[playerid][oName], order_item_type, order_item_value1, order_item_value2, OrderCache[playerid][oCount], price, order_type);
 
 			PlayerCache[playerid][pMainTable] = 0;
 			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
@@ -11277,7 +11300,7 @@ public ShowPlayerStatsForPlayer(playerid, giveplayer_id)
 	new doorid = GetPlayerDoorID(playerid);
 	if(doorid != INVALID_DOOR_ID)
 	{
-		format(list_stats, sizeof(list_stats), "%sDrzwi\t\t\t\t%d\n", list_stats, DoorCache[doorid][dUID]);
+		format(list_stats, sizeof(list_stats), "%sDrzwi\t\t\t\t%d\n", list_stats, GetDoorUID(doorid));
 	}
 	else
 	{
@@ -11395,8 +11418,6 @@ public CreateGroup(GroupName[], group_type)
 
 public DeleteGroup(group_id)
 {
-	orm_delete(GroupData[group_id][gOrm]);
-
 	// Zwolnij cz³onków
 	mysql_query_format("DELETE FROM `"SQL_PREF"char_groups` WHERE group_belongs = '%d'", GroupData[group_id][gUID]);
 
@@ -11438,14 +11459,24 @@ public DeleteGroup(group_id)
 	    }
 	}
 
-	// Usuñ drzwi
-    for(new doorid = 0; doorid < MAX_DOORS; doorid++)
+	// Odpisz drzwi
+	new count_doors = Streamer_CountItems(STREAMER_TYPE_PICKUP),
+		DoorData[sDoorInfo], query[256];
+		
+	mysql_format(connHandle, query, sizeof(query), "UPDATE `"SQL_PREF"doors` SET door_ownertype = 0, door_owner = 0 WHERE door_owner = '%d' AND door_ownertype = '%d'", GroupData[group_id][gUID], OWNER_GROUP);
+	mysql_query(connHandle, query);
+	
+	for (new door = 0; door <= count_doors; door++)
 	{
-	    if(DoorCache[doorid][dUID])
-	    {
-	        if(DoorCache[doorid][dOwnerType] == OWNER_GROUP && DoorCache[doorid][dOwner] == GroupData[group_id][gUID])
+ 		if(IsValidDynamicPickup(door))
+   		{
+	    	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
+     		if(DoorData[dOwnerType] == OWNER_GROUP && DoorData[dOwner] == GroupData[group_id][gUID])
 	        {
-	            DeleteDoor(doorid);
+	            DoorData[dOwnerType] = OWNER_NONE;
+	            DoorData[dOwner] = 0;
+	            
+	            Streamer_SetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
 	        }
 	    }
 	}
@@ -11465,6 +11496,7 @@ public DeleteGroup(group_id)
 	    }
 	}
 	
+	orm_delete(GroupData[group_id][gOrm]);
 	Iter_Remove(Groups, group_id);
 	return 1;
 }
@@ -11838,114 +11870,94 @@ public CreateDoor(Float:DoorEnterX, Float:DoorEnterY, Float:DoorEnterZ, Float:Do
 	mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"doors` WHERE door_uid = '%d' LIMIT 1", door_uid);
 	mysql_tquery(connHandle, query, "query_OnLoadDoors", "");
 
-	//doorid = LoadDoor(door_uid);
-
 	return door_uid;
 }
 
-public LoadDoor(door_uid)
+
+public SaveDoor(doorid)
 {
-	new doorid = CreateDynamicPickup(1239, 2, 0.0, 0.0, 0.0, -1, -1, -1),
-	    ORM:orm_id = DoorCache[doorid][dOrm] = orm_create(""SQL_PREF"doors", connHandle);
-	    
-	DoorCache[doorid][dUID] = door_uid;
+	new DoorData[sDoorInfo], Float:door_enter[3], door_entervw, door_enterint, door_pickupid;
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	
-	orm_addvar_int(orm_id, DoorCache[doorid][dUID], "door_uid");
-	orm_addvar_string(orm_id, DoorCache[doorid][dName], 64, "door_name");
+	Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, door_enter[0], door_enter[1], door_enter[2]);
+	
+	door_entervw = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID);
+	door_enterint = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_INTERIOR_ID);
+	
+	door_pickupid = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_MODEL_ID);
+	
+	new query[1024];
+	mysql_format(connHandle, query, sizeof(query), "UPDATE `"SQL_PREF"doors` SET door_name = '%e', door_ownertype = '%d', door_owner = '%d',  door_enterx = '%f', door_entery = '%f', door_enterz = '%f', door_entervw = '%d', door_enterint = '%d', door_exitx = '%f', door_exity = '%f', door_exitz = '%f', door_exitvw = '%d', door_exitint = '%d', door_pickupid = '%d', door_lock = '%d', door_garage = '%d', door_enterpay = '%d', door_audiourl = '%e', door_access = '%d' WHERE door_uid = '%d' LIMIT 1",
+	DoorData[dName],
+	
+	DoorData[dOwnerType],
+	DoorData[dOwner],
 
-	orm_addvar_int(orm_id, DoorCache[doorid][dOwnerType], "door_ownertype");
-	orm_addvar_int(orm_id, DoorCache[doorid][dOwner], "door_owner");
+	door_enter[0],
+	door_enter[1],
+	door_enter[2],
+	
+	door_entervw,
+	door_enterint,
+	
+	DoorData[dExitX],
+	DoorData[dExitY],
+	DoorData[dExitZ],
+	
+	DoorData[dExitVW],
+	DoorData[dExitInt],
+	
+	door_pickupid,
 
-	orm_addvar_float(orm_id, DoorCache[doorid][dEnterX], "door_enterx");
-	orm_addvar_float(orm_id, DoorCache[doorid][dEnterY], "door_entery");
-	orm_addvar_float(orm_id, DoorCache[doorid][dEnterZ], "door_enterz");
-	orm_addvar_float(orm_id, DoorCache[doorid][dEnterA], "door_entera");
+	DoorData[dLocked],
+	DoorData[dGarage],
 
-	orm_addvar_int(orm_id, DoorCache[doorid][dEnterVW], "door_entervw");
-	orm_addvar_int(orm_id, DoorCache[doorid][dEnterInt], "door_enterint");
-
-	orm_addvar_float(orm_id, DoorCache[doorid][dExitX], "door_exitx");
-	orm_addvar_float(orm_id, DoorCache[doorid][dExitY], "door_exity");
-	orm_addvar_float(orm_id, DoorCache[doorid][dExitZ], "door_exitz");
-	orm_addvar_float(orm_id, DoorCache[doorid][dExitA], "door_exita");
-
-	orm_addvar_int(orm_id, DoorCache[doorid][dExitVW], "door_exitvw");
-	orm_addvar_int(orm_id, DoorCache[doorid][dExitInt], "door_exitint");
-
-	orm_addvar_int(orm_id, DoorCache[doorid][dPickupID], "door_pickupid");
-	orm_addvar_int(orm_id, DoorCache[doorid][dLocked], "door_lock");
-
-	orm_addvar_int(orm_id, DoorCache[doorid][dGarage], "door_garage");
-
-	orm_addvar_int(orm_id, DoorCache[doorid][dEnterPay], "door_enterpay");
-	orm_addvar_string(orm_id, DoorCache[doorid][dAudioURL], 128, "door_audiourl");
-
-	orm_setkey(orm_id, "door_uid");
-	orm_select(orm_id);
-
-	Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_MODEL_ID, DoorCache[doorid][dPickupID]);
-	Streamer_SetItemPos(STREAMER_TYPE_PICKUP, doorid, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]);
-
-	Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID, DoorCache[doorid][dEnterVW]);
-	Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_INTERIOR_ID, DoorCache[doorid][dEnterInt]);
-
-	Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, PICKUP_DOOR);
-	Iter_Add(Door, doorid);
-	return doorid;
+	DoorData[dEnterPay],
+	DoorData[dAudioURL],
+	
+	DoorData[dAccess],
+	DoorData[dUID]);
+	return 1;
 }
 
 public DeleteDoor(doorid)
 {
-	// Usuñ stare obiekty z tego VW (jeœli s¹)
-	new object_counts = Streamer_GetUpperBound(STREAMER_TYPE_OBJECT);
-	mysql_query_format("DELETE FROM `"SQL_PREF"objects` WHERE object_world = '%d'", DoorCache[doorid][dUID]);
+	new DoorData[sDoorInfo];
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-	for (new object_id = 0; object_id <= object_counts; object_id++)
+	// Usuñ stare obiekty z tego VW (jeœli s¹)
+	new ObjectData[MAX_VIS_OBJECTS],
+		object_count = Streamer_GetNearbyItems(DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, MAX_DRAW_DISTANCE, DoorData[dUID]);
+
+	mysql_query_format("DELETE FROM `"SQL_PREF"objects` WHERE object_world = '%d'", DoorData[dUID]);
+
+	for (new object = 0; object < object_count; object++)
 	{
- 		if(IsValidDynamicObject(object_id))
-   		{
-			if(Streamer_IsInArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_WORLD_ID, DoorCache[doorid][dUID]))
-			{
-				DestroyDynamicObject(object_id);
-	  		}
-		}
+		DestroyDynamicObject(ObjectData[object]);
 	}
 	
 	// Usuñ 3d teksty z tych drzwi
-	new label_counts = CountDynamic3DTextLabels();
-	mysql_query_format("DELETE FROM `"SQL_PREF"3dlabels` WHERE label_world = '%d'", DoorCache[doorid][dUID]);
+	new LabelData[MAX_VIS_LABELS],
+		label_count = Streamer_GetNearbyItems(DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], STREAMER_TYPE_3D_TEXT_LABEL, LabelData, MAX_VIS_LABELS, MAX_DRAW_DISTANCE, DoorData[dUID]);
 
-	for (new label_id = 0; label_id <= label_counts; label_id++)
+	mysql_query_format("DELETE FROM `"SQL_PREF"3dlabels` WHERE label_world = '%d'", DoorData[dUID]);
+
+	for (new label = 0; label < label_count; label++)
 	{
-	    if(IsValidDynamic3DTextLabel(Text3D:label_id))
-	    {
-			if(Streamer_IsInArrayData(STREAMER_TYPE_3D_TEXT_LABEL, label_id, E_STREAMER_WORLD_ID, DoorCache[doorid][dUID]))
-			{
-				DestroyDynamic3DTextLabel(Text3D:label_id);
-	  		}
-		}
+		DestroyDynamic3DTextLabel(Text3D:LabelData[label]);
 	}
 	
 	// Wyczyœæ magazyn drzwi
 	new product_next;
-	mysql_query_format("DELETE FROM `"SQL_PREF"products` WHERE product_owner = '%d'", DoorCache[doorid][dUID]);
+	mysql_query_format("DELETE FROM `"SQL_PREF"products` WHERE product_owner = '%d'", DoorData[dUID]);
 
 	foreach(new product_id : Product)
 	{
 	    if(ProductData[product_id][pUID])
 	    {
-	        if(ProductData[product_id][pOwner] == DoorCache[doorid][dUID])
+	        if(ProductData[product_id][pOwner] == DoorData[dUID])
 	        {
-        		ProductData[product_id][pUID] 		= 0;
-				ProductData[product_id][pType] 		= 0;
-
-				ProductData[product_id][pValue1] 	= 0;
-				ProductData[product_id][pValue2] 	= 0;
-
-				ProductData[product_id][pPrice] 	= 0;
-				ProductData[product_id][pCount] 	= 0;
-
-				ProductData[product_id][pOwner] 	= 0;
+        		for(new sProductData:e; e < sProductData; ++e)	ProductData[product_id][e] = 0;
 				
 				Iter_SafeRemove(Product, product_id, product_next);
 				product_id = product_next;
@@ -11955,107 +11967,86 @@ public DeleteDoor(doorid)
 	
 	// Usuñ zamówienia do tych drzwi
 	new package_next;
-	mysql_query_format("DELETE FROM `"SQL_PREF"packages` WHERE package_dooruid = '%d'", DoorCache[doorid][dUID]);
+	mysql_query_format("DELETE FROM `"SQL_PREF"packages` WHERE package_dooruid = '%d'", DoorData[dUID]);
 
 	foreach(new package_id : Package)
 	{
 	    if(PackageCache[package_id][pUID])
 	    {
-	        if(PackageCache[package_id][pDoorUID] == DoorCache[doorid][dUID])
+	        if(PackageCache[package_id][pDoorUID] == DoorData[dUID])
 	        {
-				PackageCache[package_id][pUID]      	= 0;
-				PackageCache[package_id][pDoorUID]  	= 0;
-
-				PackageCache[package_id][pItemType] 	= 0;
-
-				PackageCache[package_id][pItemValue1]   = 0;
-				PackageCache[package_id][pItemValue2]   = 0;
-
-				PackageCache[package_id][pItemCount]    = 0;
-				PackageCache[package_id][pItemPrice]    = 0;
-
-				PackageCache[package_id][pType]         = 0;
+	            for(new sPackageData:e; e < sPackageData; ++e)	PackageCache[package_id][e] = 0;
 
 				Iter_SafeRemove(Package, package_id, package_next);
 				package_id = package_next;
 	        }
 	    }
 	}
-	
-	orm_delete(DoorCache[doorid][dOrm]);
-	
-	DoorCache[doorid][dFireData][FIRE_TIME] 	= 0;
-	DoorCache[doorid][dFireData][FIRE_OBJECT]   = _:INVALID_OBJECT_ID;
-	DoorCache[doorid][dFireData][FIRE_LABEL]    = _:INVALID_3DTEXT_ID;
-	
-	DoorCache[doorid][dObjectsLoaded] = false;
 
 	DestroyDynamicPickup(doorid);
-	Iter_Remove(Door, doorid);
 	return 1;
 }
 
 public query_OnLoadDoors()
 {
-	new rows, doorid, ORM:orm_id;
+	new rows, doorid,
+	    DoorData[sDoorInfo];
 	
+	new Float:door_enter[4], door_entervw, door_enterint,
+	    door_pickupid;
+
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
 	{
-	    doorid = CreateDynamicPickup(1239, 2, 0.0, 0.0, 0.0, -1, -1, -1);
-   		orm_id = DoorCache[doorid][dOrm] = orm_create(""SQL_PREF"doors", connHandle);
-   		
-   		orm_addvar_int(orm_id, DoorCache[doorid][dUID], "door_uid");
-		orm_addvar_string(orm_id, DoorCache[doorid][dName], 64, "door_name");
+	    cache_get_value_index_int(row, 0, DoorData[dUID]);
+	    cache_get_value_index(row, 2, DoorData[dName], 64);
+	    
+	    cache_get_value_index_int(row, 3, DoorData[dOwnerType]);
+	    cache_get_value_index_int(row, 4, DoorData[dOwner]);
+
+		cache_get_value_index_float(row, 5, door_enter[0]);
+		cache_get_value_index_float(row, 6, door_enter[1]);
+		cache_get_value_index_float(row, 7, door_enter[2]);
+		cache_get_value_index_float(row, 8, door_enter[3]);
 		
-		orm_addvar_int(orm_id, DoorCache[doorid][dOwnerType], "door_ownertype");
-		orm_addvar_int(orm_id, DoorCache[doorid][dOwner], "door_owner");
+		cache_get_value_index_int(row, 9, door_entervw);
+		cache_get_value_index_int(row, 10, door_enterint);
 		
-		orm_addvar_float(orm_id, DoorCache[doorid][dEnterX], "door_enterx");
-		orm_addvar_float(orm_id, DoorCache[doorid][dEnterY], "door_entery");
-		orm_addvar_float(orm_id, DoorCache[doorid][dEnterZ], "door_enterz");
-		orm_addvar_float(orm_id, DoorCache[doorid][dEnterA], "door_entera");
-
-        orm_addvar_int(orm_id, DoorCache[doorid][dEnterVW], "door_entervw");
-        orm_addvar_int(orm_id, DoorCache[doorid][dEnterInt], "door_enterint");
-        
-		orm_addvar_float(orm_id, DoorCache[doorid][dExitX], "door_exitx");
-		orm_addvar_float(orm_id, DoorCache[doorid][dExitY], "door_exity");
-		orm_addvar_float(orm_id, DoorCache[doorid][dExitZ], "door_exitz");
-		orm_addvar_float(orm_id, DoorCache[doorid][dExitA], "door_exita");
-
-        orm_addvar_int(orm_id, DoorCache[doorid][dExitVW], "door_exitvw");
-        orm_addvar_int(orm_id, DoorCache[doorid][dExitInt], "door_exitint");
-        
-        orm_addvar_int(orm_id, DoorCache[doorid][dPickupID], "door_pickupid");
-        orm_addvar_int(orm_id, DoorCache[doorid][dLocked], "door_lock");
-        
-        orm_addvar_int(orm_id, DoorCache[doorid][dGarage], "door_garage");
-        
-        orm_addvar_int(orm_id, DoorCache[doorid][dEnterPay], "door_enterpay");
-        orm_addvar_string(orm_id, DoorCache[doorid][dAudioURL], 128, "door_audiourl");
-        
-		orm_setkey(orm_id, "door_uid");
-		orm_apply_cache(orm_id, row);
+		cache_get_value_index_float(row, 11, DoorData[dExitX]);
+		cache_get_value_index_float(row, 12, DoorData[dExitY]);
+		cache_get_value_index_float(row, 13, DoorData[dExitZ]);
+		cache_get_value_index_float(row, 14, DoorData[dExitA]);
 		
-		Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_MODEL_ID, DoorCache[doorid][dPickupID]);
-		Streamer_SetItemPos(STREAMER_TYPE_PICKUP, doorid, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]);
-
-		Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID, DoorCache[doorid][dEnterVW]);
-		Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_INTERIOR_ID, DoorCache[doorid][dEnterInt]);
-
-		Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, PICKUP_DOOR);
-		Iter_Add(Door, doorid);
+		cache_get_value_index_int(row, 15, DoorData[dExitVW]);
+		cache_get_value_index_int(row, 16, DoorData[dExitInt]);
+		
+		cache_get_value_index_int(row, 17, door_pickupid);
+		
+		cache_get_value_index_int(row, 19, DoorData[dLocked]);
+		cache_get_value_index_int(row, 20, DoorData[dGarage]);
+		
+		cache_get_value_index_int(row, 21, DoorData[dEnterPay]);
+		cache_get_value_index(row, 23, DoorData[dAudioURL], 128);
+		
+		cache_get_value_index(row, 29, DoorData[dAccess]);
+		
+		doorid = CreateDynamicPickup(door_pickupid, 2, door_enter[0], door_enter[1], door_enter[2], door_entervw, door_enterint);
+		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	}
 	return 1;
 }
 
 public ShowPlayerDoorInfo(playerid, doorid)
 {
-    new list_stats[512], string[128];
-	format(list_stats, sizeof(list_stats), "PickupID:\t\t%d\n", DoorCache[doorid][dPickupID]);
+	new DoorData[sDoorInfo];
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	
+	new door_pickupid = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_MODEL_ID);
 
-	if(DoorCache[doorid][dLocked])
+    new list_stats[512], string[128];
+	format(list_stats, sizeof(list_stats), "PickupID:\t\t%d\n", door_pickupid);
+
+	if(DoorData[dLocked])
 	{
 		format(list_stats, sizeof(list_stats), "%sDrzwi:\t\t\t{FB5006}Zamkniête{FFFFFF}\n", list_stats);
 	}
@@ -12064,32 +12055,32 @@ public ShowPlayerDoorInfo(playerid, doorid)
 	    format(list_stats, sizeof(list_stats), "%sDrzwi:\t\t\tOtwarte\n", list_stats);
 	}
 
-	if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+	if(DoorData[dOwnerType] == OWNER_NONE)
 	{
  		format(list_stats, sizeof(list_stats), "%sTyp w³aœciciela:\t\tBrak\n", list_stats);
 	}
-	if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
+	if(DoorData[dOwnerType] == OWNER_PLAYER)
 	{
 		format(list_stats, sizeof(list_stats), "%sTyp w³aœciciela:\t\tGracz\n", list_stats);
-		format(list_stats, sizeof(list_stats), "%sUID gracza:\t\t%d\n", list_stats, DoorCache[doorid][dOwner]);
+		format(list_stats, sizeof(list_stats), "%sUID gracza:\t\t%d\n", list_stats, DoorData[dOwner]);
 	}
-	if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+	if(DoorData[dOwnerType] == OWNER_GROUP)
 	{
 		format(list_stats, sizeof(list_stats), "%sTyp w³aœciciela:\t\tGrupa\n", list_stats);
-		format(list_stats, sizeof(list_stats), "%sUID grupy:\t\t%d\n", list_stats, DoorCache[doorid][dOwner]);
+		format(list_stats, sizeof(list_stats), "%sUID grupy:\t\t%d\n", list_stats, DoorData[dOwner]);
 	}
 	
-	if(DoorCache[doorid][dEnterPay])
+	if(DoorData[dEnterPay])
 	{
-	    format(list_stats, sizeof(list_stats), "%sKoszt wstêpu:\t\t$%d\n", list_stats, DoorCache[doorid][dEnterPay]);
+	    format(list_stats, sizeof(list_stats), "%sKoszt wstêpu:\t\t$%d\n", list_stats, DoorData[dEnterPay]);
 	}
 
-	if(strlen(DoorCache[doorid][dAudioURL]))
+	if(strlen(DoorData[dAudioURL]))
 	{
-	    format(list_stats, sizeof(list_stats), "%s \nMuzyka:\n\t\t%s\n", list_stats, DoorCache[doorid][dAudioURL]);
+	    format(list_stats, sizeof(list_stats), "%s \nMuzyka:\n\t\t%s\n", list_stats, DoorData[dAudioURL]);
 	}
 
-	format(string, sizeof(string), "%s (UID: %d) » Informacje", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	format(string, sizeof(string), "%s (UID: %d) » Informacje", DoorData[dName], DoorData[dUID]);
 	ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_LIST, string, list_stats, "OK", "");
 	return 1;
 }
@@ -12885,12 +12876,15 @@ public OnPlayerUseItem(playerid, itemid)
       		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby zrealizowaæ czek, musisz znajdowaæ siê w banku.");
 		    return 0;
 		}
-	 	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+		new DoorData[sDoorInfo];
+		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		
+	 	if(DoorData[dOwnerType] != OWNER_GROUP)
 	  	{
 	   		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby zrealizowaæ czek, musisz znajdowaæ siê w banku.");
 	   		return 0;
 	   	}
-	   	new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+	   	new group_id = GetGroupID(DoorData[dOwner]);
 	   	if(GroupData[group_id][gType] != G_TYPE_BANK)
 	   	{
 	   	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby zrealizowaæ czek, musisz znajdowaæ siê w banku.");
@@ -13168,13 +13162,16 @@ public OnPlayerUseItem(playerid, itemid)
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby skorzystaæ z karnetu musisz znajdowaæ siê w si³owni.");
 			    return 0;
 			}
-			if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			
+			if(DoorData[dOwnerType] != OWNER_GROUP)
 			{
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby skorzystaæ z karnetu musisz znajdowaæ siê w si³owni.");
 			    return 0;
 			}
-			new group_id = GetGroupID(DoorCache[doorid][dOwner]);
-			if(GroupData[group_id][gType] != G_TYPE_GYM || DoorCache[doorid][dOwner] != PlayerItemCache[playerid][itemid][iValue][1])
+			new group_id = GetGroupID(DoorData[dOwner]);
+			if(GroupData[group_id][gType] != G_TYPE_GYM || DoorData[dOwner] != PlayerItemCache[playerid][itemid][iValue][1])
 			{
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby skorzystaæ z karnetu musisz znajdowaæ siê w si³owni.");
 				return 0;
@@ -13559,7 +13556,10 @@ public OnPlayerUseItem(playerid, itemid)
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc u¿yæ tego przedmiotu, musisz znajdowaæ siê w budynku.");
 		    return 0;
 		}
-		if(DoorCache[doorid][dFireData][FIRE_TIME])
+		new DoorData[sDoorInfo];
+		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		
+		if(DoorData[dFireData][FIRE_TIME])
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten budynek ju¿ p³onie!");
 		    return 0;
@@ -13588,11 +13588,16 @@ public OnPlayerUseItem(playerid, itemid)
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mozesz u¿yæ tego przedmiotu teraz.");
    			return 1;
  		}
-		new Float:PosX, Float:PosY, Float:PosZ;
-		GetPlayerPos(playerid, PosX, PosY, PosZ);
+		new Float:PosX, Float:PosY, Float:PosZ,
+			virtual_world, interior_id;
+			
+		Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, PosX, PosY, PosZ);
 
-		DoorCache[doorid][dFireData][FIRE_OBJECT] = CreateDynamicObject(18690, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ] - 2.0, 0.0, 0.0, 0.0, DoorCache[doorid][dEnterVW], DoorCache[doorid][dEnterInt], -1, MAX_DRAW_DISTANCE);
-		DoorCache[doorid][dFireData][FIRE_LABEL] = _:CreateDynamic3DTextLabel("Ten budynek stan¹³ w p³omieniach!\nSzacowane zniszczenia: 0%", 0x33AA33FF, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ] + 0.3, 15.0);
+		virtual_world = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID);
+		interior_id = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_INTERIOR_ID);
+
+		DoorData[dFireData][FIRE_OBJECT] = CreateDynamicObject(18690, PosX, PosY, PosZ - 2.0, 0.0, 0.0, 0.0, virtual_world, interior_id, -1, MAX_DRAW_DISTANCE);
+		DoorData[dFireData][FIRE_LABEL] = _:CreateDynamic3DTextLabel("Ten budynek stan¹³ w p³omieniach!\nSzacowane zniszczenia: 0%", 0x33AA33FF, PosX, PosY, PosZ + 0.3, 15.0);
 
 		foreach(new i : Player)
 		{
@@ -13604,10 +13609,14 @@ public OnPlayerUseItem(playerid, itemid)
 		        }
 		    }
 		}
+		GetPlayerPos(playerid, PosX, PosY, PosZ);
+		
 		GetXYInFrontOfPlayer(playerid, PosX, PosY, 8.0);
 		CreateExplosion(PosX, PosY, PosZ, 12, 5.0);
 
-		DoorCache[doorid][dFireData][FIRE_TIME] = 1;
+		DoorData[dFireData][FIRE_TIME] = 1;
+		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		
 		DeletePlayerItem(playerid, itemid);
 	    return 1;
 	}
@@ -14127,7 +14136,7 @@ public CreateDoorProduct(doorid, ProductName[], ProductType, ProductValue1, Prod
 	{
 	    if(ProductData[product][pUID])
 	    {
-	        if(ProductData[product][pOwner] == DoorCache[doorid][dUID])
+	        if(ProductData[product][pOwner] == GetDoorUID(doorid))
 	        {
 	            if(ProductData[product][pType] == ProductType && ProductData[product][pPrice] == ProductPrice)
 	            {
@@ -14141,9 +14150,11 @@ public CreateDoorProduct(doorid, ProductName[], ProductType, ProductValue1, Prod
 	        }
 	    }
 	}
+	new DoorData[sDoorInfo];
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
     new product_id, product_uid;
-	mysql_query_format("INSERT INTO `"SQL_PREF"products` (product_name, product_type, product_value1, product_value2, product_price, product_count, product_owner, product_maxprice) VALUES ('%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d')", ProductName, ProductType, ProductValue1, ProductValue2, ProductPrice, ProductCount, DoorCache[doorid][dOwner], (ProductPrice + floatround(ProductPrice * 0.8)));
+	mysql_query_format("INSERT INTO `"SQL_PREF"products` (product_name, product_type, product_value1, product_value2, product_price, product_count, product_owner, product_maxprice) VALUES ('%s', '%d', '%d', '%d', '%d', '%d', '%d', '%d')", ProductName, ProductType, ProductValue1, ProductValue2, ProductPrice, ProductCount, DoorData[dOwner], (ProductPrice + floatround(ProductPrice * 0.8)));
 	
 	product_uid = cache_insert_id();
 	product_id = Iter_Free(Product);
@@ -14159,7 +14170,7 @@ public CreateDoorProduct(doorid, ProductName[], ProductType, ProductValue1, Prod
 	ProductData[product_id][pPrice] = ProductPrice;
 
 	ProductData[product_id][pCount] = ProductCount;
-	ProductData[product_id][pOwner] = DoorCache[doorid][dOwner];
+	ProductData[product_id][pOwner] = DoorData[dOwner];
 	
 	ProductData[product_id][pMaxPrice] = ProductPrice + floatround(ProductPrice * 0.8);
 	Iter_Add(Product, product_id);
@@ -14858,8 +14869,12 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			}
 			else
 			{
-			    new doorid = GetDoorID(OfferData[offererid][oValue2]),
-					group_id = GetGroupID(DoorCache[doorid][dOwner]);
+			    new doorid = GetDoorID(OfferData[offererid][oValue2]);
+			    
+			    new DoorData[sDoorInfo];
+			    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+
+				new group_id = GetGroupID(DoorData[dOwner]);
 					
 				GroupData[group_id][gCash] += group_cash;
 				orm_update(GroupData[group_id][gOrm]);
@@ -14910,12 +14925,17 @@ public OnPlayerAcceptOffer(playerid, offererid)
 		}
 		
 	    new doorid = OfferData[offererid][oValue1];
+	    
+	    new DoorData[sDoorInfo];
+		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-	    DoorCache[doorid][dOwnerType] = OWNER_PLAYER;
-	    DoorCache[doorid][dOwner] = PlayerCache[playerid][pUID];
+	    DoorData[dOwnerType] = OWNER_PLAYER;
+	    DoorData[dOwner] = PlayerCache[playerid][pUID];
+	    
+	    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-	    orm_update(DoorCache[doorid][dOrm]);
-	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Gratulacje, zakupi³eœ now¹ nieruchomoœæ %s (UID: %d).\nNieruchomoœci¹ mo¿esz zarz¹dzaæ poprzez komendê /drzwi.", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	    SaveDoor(doorid);
+	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Gratulacje, zakupi³eœ now¹ nieruchomoœæ %s (UID: %d).\nNieruchomoœci¹ mo¿esz zarz¹dzaæ poprzez komendê /drzwi.", DoorData[dName], DoorData[dUID]);
 	}
 	
 	if(offer_type == OFFER_TOWING)
@@ -15726,18 +15746,22 @@ public OnPlayerRejectOffer(playerid, offererid)
 
 public OnPlayerEnterDoor(playerid, doorid)
 {
-	new freeze_time = 3;
-   	if(DoorCache[doorid][dLocked])
+	new DoorData[sDoorInfo],
+		freeze_time = 3;
+		
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	
+   	if(DoorData[dLocked])
     {
     	GameTextForPlayer(playerid, "~n~~n~~n~~n~~n~~r~Drzwi sa zamkniete", 4000, 3);
      	return 1;
     }
-    if(PlayerCache[playerid][pCash] < DoorCache[doorid][dEnterPay])
+    if(PlayerCache[playerid][pCash] < DoorData[dEnterPay])
     {
     	GameTextForPlayer(playerid, "~n~~n~~n~~n~~n~~r~Brak gotowki na wstep", 4000, 3);
     	return 1;
     }
-    if(!DoorCache[doorid][dExitX])
+    if(!DoorData[dExitX])
     {
     	GameTextForPlayer(playerid, "~n~~n~~n~~n~~n~~w~Wnetrze jest w trakcie ~p~~h~remontu", 4000, 3);
      	return 1;
@@ -15747,7 +15771,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz wejœæ do budynku maj¹c rolki na nogach.");
 	    return 1;
 	}
-	if(DoorCache[doorid][dFireData][FIRE_TIME])
+	if(DoorData[dFireData][FIRE_TIME])
 	{
 	    if(!IsPlayerInGroupType(playerid, G_TYPE_FIREDEPT))
 		{
@@ -15760,49 +15784,51 @@ public OnPlayerEnterDoor(playerid, doorid)
 	{
 	    return 1;
 	}
-	if(DoorCache[doorid][dExitVW] != 0 && !DoorCache[doorid][dObjectsLoaded] && DoorCache[doorid][dExitVW] != DoorCache[doorid][dEnterVW])
+	if(DoorData[dExitVW] != 0 && !DoorData[dObjectsLoaded] && DoorData[dExitVW] != Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID))
 	{
  		new query[512];
-		mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorCache[doorid][dExitVW]);
+		mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorData[dExitVW]);
  		mysql_tquery(connHandle, query, "query_OnLoadObjects", "");
 
-	    DoorCache[doorid][dObjectsLoaded] = true;
+	    DoorData[dObjectsLoaded] = true;
+		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
 	    freeze_time = 5;
 
-	    printf("Wczytywanie obiektów drzwi %s (%d).", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	    printf("Wczytywanie obiektów drzwi %s (%d).", DoorData[dName], DoorData[dUID]);
 	}
-   	if(strlen(DoorCache[doorid][dAudioURL]))
+   	if(strlen(DoorData[dAudioURL]))
 	{
 	    if(PlayerCache[playerid][pItemPlayer] != INVALID_ITEM_ID)
 	    {
 	        new itemid = PlayerCache[playerid][pItemPlayer];
 	        PlayerItemCache[playerid][itemid][iUsed] = false;
 	    }
-	    PlayStreamedAudioForPlayer(playerid, DoorCache[doorid][dAudioURL]);
+	    PlayStreamedAudioForPlayer(playerid, DoorData[dAudioURL]);
 	}
-	Streamer_UpdateEx(playerid, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ], DoorCache[doorid][dExitVW], DoorCache[doorid][dExitInt]);
+	Streamer_UpdateEx(playerid, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], DoorData[dExitVW], DoorData[dExitInt]);
 
 	if(!IsPlayerInAnyVehicle(playerid))
 	{
-	    crp_SetPlayerPos(playerid, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]);
-	    SetPlayerFacingAngle(playerid, DoorCache[doorid][dExitA]);
+	    crp_SetPlayerPos(playerid, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ]);
+	    SetPlayerFacingAngle(playerid, DoorData[dExitA]);
 
-		SetPlayerInterior(playerid, DoorCache[doorid][dExitInt]);
-		SetPlayerVirtualWorld(playerid, DoorCache[doorid][dExitVW]);
+		SetPlayerInterior(playerid, DoorData[dExitInt]);
+		SetPlayerVirtualWorld(playerid, DoorData[dExitVW]);
 	}
 	else
 	{
 	    new vehid = GetPlayerVehicleID(playerid);
 
-		PlayerCache[playerid][pPosX] = DoorCache[doorid][dExitX];
-		PlayerCache[playerid][pPosY] = DoorCache[doorid][dExitY];
-		PlayerCache[playerid][pPosZ] = DoorCache[doorid][dExitZ];
+		PlayerCache[playerid][pPosX] = DoorData[dExitX];
+		PlayerCache[playerid][pPosY] = DoorData[dExitY];
+		PlayerCache[playerid][pPosZ] = DoorData[dExitZ];
 
-		SetVehicleVirtualWorld(vehid, DoorCache[doorid][dExitVW]);
+		SetVehicleVirtualWorld(vehid, DoorData[dExitVW]);
 		SetVehiclePos(vehid, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]);
 
-		SetVehicleZAngle(vehid, DoorCache[doorid][dExitA]);
-		LinkVehicleToInterior(vehid, DoorCache[doorid][dExitInt]);
+		SetVehicleZAngle(vehid, DoorData[dExitA]);
+		LinkVehicleToInterior(vehid, DoorData[dExitInt]);
 
 		foreach(new i : Player)
 		{
@@ -15810,8 +15836,8 @@ public OnPlayerEnterDoor(playerid, doorid)
 		    {
 	  			if(GetPlayerVehicleID(i) == GetPlayerVehicleID(playerid))
 	    		{
-					SetPlayerVirtualWorld(i, DoorCache[doorid][dExitVW]);
-					SetPlayerInterior(i, DoorCache[doorid][dExitInt]);
+					SetPlayerVirtualWorld(i, DoorData[dExitVW]);
+					SetPlayerInterior(i, DoorData[dExitInt]);
 				}
 			}
 		}
@@ -15824,42 +15850,42 @@ public OnPlayerEnterDoor(playerid, doorid)
 	ResetPlayerCamera(playerid);
 
 	// Zabierz graczowi kasê za wstêp i przelej j¹ na konto w³aœciciela
- 	if(DoorCache[doorid][dEnterPay])
+ 	if(DoorData[dEnterPay])
     {
         if(PlayerCache[playerid][pHours] > 5)
         {
-			crp_GivePlayerMoney(playerid, -DoorCache[doorid][dEnterPay]);
+			crp_GivePlayerMoney(playerid, -DoorData[dEnterPay]);
 			orm_update(PlayerCache[playerid][pOrm]);
 			
-	        if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
+	        if(DoorData[dOwnerType] == OWNER_PLAYER)
 	        {
-				new owner_id = GetPlayerID(DoorCache[doorid][dOwner]);
+				new owner_id = GetPlayerID(DoorData[dOwner]);
 				if(owner_id != INVALID_PLAYER_ID && PlayerCache[owner_id][pLogged] && PlayerCache[owner_id][pSpawned])
 				{
-					PlayerCache[owner_id][pBankCash] += DoorCache[doorid][dEnterPay];
+					PlayerCache[owner_id][pBankCash] += DoorData[dEnterPay];
 					orm_update(PlayerCache[owner_id][pOrm]);
 				}
 				else
 				{
-				    mysql_query_format("UPDATE `"SQL_PREF"characters` SET char_bankcash = char_bankcash + %d WHERE char_uid = '%d' LIMIT 1", DoorCache[doorid][dEnterPay], DoorCache[doorid][dOwner]);
+				    mysql_query_format("UPDATE `"SQL_PREF"characters` SET char_bankcash = char_bankcash + %d WHERE char_uid = '%d' LIMIT 1", DoorData[dEnterPay], DoorData[dOwner]);
 				}
 	        }
-	        if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+	        if(DoorData[dOwnerType] == OWNER_GROUP)
 	        {
-	            new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+	            new group_id = GetGroupID(DoorData[dOwner]);
 	            
-	            GroupData[group_id][gCash] += DoorCache[doorid][dEnterPay];
+	            GroupData[group_id][gCash] += DoorData[dEnterPay];
 	            orm_update(GroupData[group_id][gOrm]);
 	        }
 		}
     }
     
     // Podatek
-    if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+    if(DoorData[dOwnerType] == OWNER_GROUP)
     {
-		if(IsPlayerInGroup(playerid, DoorCache[doorid][dOwner]))
+		if(IsPlayerInGroup(playerid, DoorData[dOwner]))
 		{
-			new group_id = GetPlayerGroupID(playerid, DoorCache[doorid][dOwner]);
+			new group_id = GetPlayerGroupID(playerid, DoorData[dOwner]);
 
 			if(GroupData[group_id][gFlags] & G_FLAG_TAX)
 			{
@@ -15874,13 +15900,22 @@ public OnPlayerEnterDoor(playerid, doorid)
 		}
 	}
 	
-	printf("[door] %s (UID: %d, GID: %d) wszed³ przez drzwi %s (UID: %d). Koszt: $%d", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], DoorCache[doorid][dName], DoorCache[doorid][dUID], DoorCache[doorid][dEnterPay]);
+	printf("[door] %s (UID: %d, GID: %d) wszed³ przez drzwi %s (UID: %d). Koszt: $%d", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], DoorData[dName], DoorData[dUID], DoorData[dEnterPay]);
 	return 1;
 }
 
 public OnPlayerExitDoor(playerid, doorid)
 {
-	if(DoorCache[doorid][dLocked])
+	new DoorData[sDoorInfo];
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	
+	new Float:door_enter[3], door_entervw, door_enterint;
+	Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, door_enter[0], door_enter[1], door_enter[2]);
+	
+	door_entervw = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID);
+	door_enterint = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_INTERIOR_ID);
+	
+	if(DoorData[dLocked])
  	{
   		GameTextForPlayer(playerid, "~n~~n~~n~~n~~n~~r~Drzwi sa zamkniete.", 4000, 3);
   		return 1;
@@ -15889,7 +15924,7 @@ public OnPlayerExitDoor(playerid, doorid)
 	{
 	    return 1;
 	}
- 	if(strlen(DoorCache[doorid][dAudioURL]))
+ 	if(strlen(DoorData[dAudioURL]))
  	{
   		if(PlayerCache[playerid][pItemPlayer] != INVALID_ITEM_ID)
 	    {
@@ -15912,29 +15947,29 @@ public OnPlayerExitDoor(playerid, doorid)
 		PlayerCache[playerid][pGymTime]     = 0;
 	}
 	
-	Streamer_UpdateEx(playerid, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ], DoorCache[doorid][dEnterVW], DoorCache[doorid][dEnterInt]);
+	Streamer_UpdateEx(playerid, door_enter[0], door_enter[1], door_enter[2], door_entervw, door_enterint);
 
   	if(!IsPlayerInAnyVehicle(playerid))
   	{
-		crp_SetPlayerPos(playerid, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]);
-	  	SetPlayerFacingAngle(playerid, DoorCache[doorid][dEnterA]);
+		crp_SetPlayerPos(playerid, door_enter[0], door_enter[1], door_enter[2]);
+	  	SetPlayerFacingAngle(playerid, 0.0);
 
-		SetPlayerInterior(playerid, DoorCache[doorid][dEnterInt]);
-	 	SetPlayerVirtualWorld(playerid, DoorCache[doorid][dEnterVW]);
+		SetPlayerInterior(playerid, door_enterint);
+	 	SetPlayerVirtualWorld(playerid, door_entervw);
 	}
 	else
 	{
 	    new vehid = GetPlayerVehicleID(playerid);
 
-		PlayerCache[playerid][pPosX] = DoorCache[doorid][dEnterX];
-		PlayerCache[playerid][pPosY] = DoorCache[doorid][dEnterY];
-		PlayerCache[playerid][pPosZ] = DoorCache[doorid][dEnterZ];
+		PlayerCache[playerid][pPosX] = door_enter[0];
+		PlayerCache[playerid][pPosY] = door_enter[1];
+		PlayerCache[playerid][pPosZ] = door_enter[2];
 
-		SetVehicleVirtualWorld(vehid, DoorCache[doorid][dEnterVW]);
+		SetVehicleVirtualWorld(vehid, door_entervw);
 		SetVehiclePos(vehid, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]);
 
-		SetVehicleZAngle(vehid, DoorCache[doorid][dEnterA]);
-		LinkVehicleToInterior(vehid, DoorCache[doorid][dEnterInt]);
+		SetVehicleZAngle(vehid, 0.0);
+		LinkVehicleToInterior(vehid, door_enterint);
 
 		foreach(new i : Player)
 		{
@@ -15942,8 +15977,8 @@ public OnPlayerExitDoor(playerid, doorid)
 			{
 	  			if(GetPlayerVehicleID(i) == GetPlayerVehicleID(playerid))
 		    	{
-					SetPlayerVirtualWorld(i, DoorCache[doorid][dEnterVW]);
-					SetPlayerInterior(i, DoorCache[doorid][dEnterInt]);
+					SetPlayerVirtualWorld(i, door_entervw);
+					SetPlayerInterior(i, door_enterint);
 				}
 			}
 		}
@@ -15953,7 +15988,7 @@ public OnPlayerExitDoor(playerid, doorid)
     OnPlayerFreeze(playerid, true, 3);
     
 	ResetPlayerCamera(playerid);
-	printf("[door] %s (UID: %d, GID: %d) wyszed³ przez drzwi %s (UID: %d).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	printf("[door] %s (UID: %d, GID: %d) wyszed³ przez drzwi %s (UID: %d).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], DoorData[dName], DoorData[dUID]);
 	return 1;
 }
 
@@ -16615,7 +16650,7 @@ public OnPlayerFinishedDownloading(playerid, virtualworld)
 
 public OnDynamicActorStreamIn(actorid, forplayerid)
 {
-	if(Streamer_IsItemVisible(forplayerid, actorid, STREAMER_TYPE_ACTOR))  return 1;
+	if(Streamer_IsItemVisible(forplayerid, STREAMER_TYPE_ACTOR, actorid))  return 1;
 	
 	new ActorData[sActorData];
 	Streamer_GetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
@@ -16976,9 +17011,19 @@ CMD:ag(playerid, params[])
 CMD:g(playerid, params[])
 {
 	new group_slot = INVALID_SLOT_ID, type[32], varchar[64];
-	// if(isnull(params))	SendClientMessage(playerid, COLOR_GREY, "Je¿eli jesteœ na s³u¿bie jednej z grup, nie musisz podawaæ jej slotu - skrypt automatycznie go wyszuka.");
+	if(isnull(params))	SendClientMessage(playerid, COLOR_GREY, "Je¿eli jesteœ na s³u¿bie jednej z grup, nie musisz podawaæ jej slotu - skrypt automatycznie go wyszuka.");
 
-	if(sscanf(params, "ds[32]S()[64]", group_slot, type, varchar))
+	new string2[64];
+	if(PlayerCache[playerid][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
+	{
+		format(string2, sizeof(string2), "D(%d)s[32]S()[64]", GetPlayerGroupSlot(playerid, GroupData[PlayerCache[playerid][pDuty][DUTY_GROUP]][gUID]));
+	}
+	else
+	{
+	    format(string2, sizeof(string2), "ds[32]S()[64]");
+	}
+
+	if(sscanf(params, string2, group_slot, type, varchar))
 	{
 		ShowTipForPlayer(playerid, "/g {slot (1-%d)} [info, online, duty, przebierz, zapros, wypros, wplac, wyplac, pojazdy, respawn, magazyn]", MAX_GROUP_SLOTS);
 		
@@ -17236,12 +17281,15 @@ CMD:g(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
 		    return 1;
 		}
-	 	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+  		new DoorData[sDoorInfo];
+  		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+  		
+	 	if(DoorData[dOwnerType] != OWNER_GROUP)
 	  	{
 	   		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
 	   		return 1;
 	   	}
-	   	new at_group_id = GetGroupID(DoorCache[doorid][dOwner]);
+	   	new at_group_id = GetGroupID(DoorData[dOwner]);
 	   	if(GroupData[at_group_id][gType] != G_TYPE_BANK)
 	   	{
 	   	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
@@ -17293,12 +17341,15 @@ CMD:g(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
 		    return 1;
 		}
-	 	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+  		new DoorData[sDoorInfo];
+    	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+    	
+	 	if(DoorData[dOwnerType] != OWNER_GROUP)
 	  	{
 	   		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
 	   		return 1;
 	   	}
-	   	new at_group_id = GetGroupID(DoorCache[doorid][dOwner]);
+	   	new at_group_id = GetGroupID(DoorData[dOwner]);
 	   	if(GroupData[at_group_id][gType] != G_TYPE_BANK)
 	   	{
 	   	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
@@ -17389,13 +17440,16 @@ CMD:g(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w budynku nale¿¹cym do grupy.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+  		new DoorData[sDoorInfo];
+  		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+  		
+		if(DoorData[dOwnerType] != OWNER_GROUP)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w budynku nale¿¹cym do grupy.");
 			return 1;
 		}
 		new group_id = PlayerGroup[playerid][group_slot][gpID];
-		if(DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		if(DoorData[dOwner] != GroupData[group_id][gUID])
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek nie nale¿y do tej grupy.");
 		    return 1;
@@ -18524,7 +18578,7 @@ CMD:adrzwi(playerid, params[])
 	}
 	if(!strcmp(type, "nazwa", true) || !strcmp(type, "name", true))
 	{
-	    new door_uid, door_name[32], door_real_name[64];
+	    new door_uid, door_name[32];
 	    if(sscanf(varchar, "ds[32]", door_uid, door_name))
 	    {
 	        ShowTipForPlayer(playerid, "/adrzwi nazwa [UID drzwi] [Nowa nazwa]");
@@ -18536,12 +18590,13 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
-	    mysql_escape_string(door_name, door_real_name);
-        strmid(DoorCache[doorid][dName], door_real_name, 0, strlen(door_real_name), 32);
-        
-        orm_update(DoorCache[doorid][dOrm]);
+		new DoorData[sDoorInfo];
+		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Nazwa drzwi (UID: %d) zosta³a pomyœlnie zmieniona.\nNowa nazwa: %s", DoorCache[doorid][dUID], door_name);
+        strmid(DoorData[dName], door_name, 0, strlen(door_name), 32);
+        Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+
+		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Nazwa drzwi (UID: %d) zosta³a pomyœlnie zmieniona.\nNowa nazwa: %s", DoorData[dUID], door_name);
 		return 1;
 	}
 	if(!strcmp(type, "pickup", true))
@@ -18558,9 +18613,12 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
 	    PlayerCache[playerid][pMainTable] = doorid;
 
-	    format(string, sizeof(string), "%s (UID: %d) » Pickup", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	    format(string, sizeof(string), "%s (UID: %d) » Pickup", DoorData[dName], DoorData[dUID]);
 	    ShowPlayerDialog(playerid, D_DOOR_PICKUP, DIALOG_STYLE_LIST, string, "1. Informacja\n2. Banknot\n3. Zielony domek\n4. Niebieski domek\n5. Serduszko\n6. Gwiazdka\n7. Dyskietka\n8. Koszulka\n9. Bia³a strza³ka", "Wybierz", "Anuluj");
 		return 1;
 	}
@@ -18578,11 +18636,17 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
-	    crp_SetPlayerPos(playerid, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]);
-	    SetPlayerInterior(playerid, DoorCache[doorid][dEnterInt]);
+		new Float:door_pos[3], door_enterint, door_entervw;
+		Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, door_pos[0], door_pos[1], door_pos[2]);
+		
+		door_enterint = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_INTERIOR_ID);
+		door_entervw = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID);
+	    
+	    crp_SetPlayerPos(playerid, door_pos[0], door_pos[1], door_pos[2]);
+	    SetPlayerInterior(playerid, door_enterint);
 
-	    SetPlayerVirtualWorld(playerid, DoorCache[doorid][dEnterVW]);
-		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Zosta³eœ przeteleportowany do drzwi %s (UID: %d).", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	    SetPlayerVirtualWorld(playerid, door_entervw);
+		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Zosta³eœ przeteleportowany do drzwi %s (UID: %d).", DoorName(doorid), GetDoorUID(doorid));
 		return 1;
 	}
 	if(!strcmp(type, "przypisz", true) || !strcmp(type, "assign", true))
@@ -18599,6 +18663,10 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
+	    
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
 	    if(!strcmp(owner_type, "gracz", true) || !strcmp(owner_type, "player", true))
 	    {
 	        new giveplayer_id;
@@ -18617,11 +18685,13 @@ CMD:adrzwi(playerid, params[])
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Gracz o podanym ID nie jest zalogowany.");
 			    return 1;
 			}
-			DoorCache[doorid][dOwnerType] = OWNER_PLAYER;
-			DoorCache[doorid][dOwner] = PlayerCache[giveplayer_id][pUID];
+			DoorData[dOwnerType] = OWNER_PLAYER;
+			DoorData[dOwner] = PlayerCache[giveplayer_id][pUID];
+			
+			Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-			orm_update(DoorCache[doorid][dOrm]);
-			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (UID: %d) zosta³y przypisane pomyœlnie.\n\nTyp w³aœciciela: gracz\nW³aœciciel: %s (ID: %d, UID: %d)", DoorCache[doorid][dName], DoorCache[doorid][dUID], PlayerName(giveplayer_id), giveplayer_id, PlayerCache[giveplayer_id][pUID]);
+			SaveDoor(doorid);
+			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (UID: %d) zosta³y przypisane pomyœlnie.\n\nTyp w³aœciciela: gracz\nW³aœciciel: %s (ID: %d, UID: %d)", DoorData[dName], DoorData[dUID], PlayerName(giveplayer_id), giveplayer_id, PlayerCache[giveplayer_id][pUID]);
 			return 1;
 		}
 		if(!strcmp(owner_type, "grupa", true) || !strcmp(owner_type, "group", true))
@@ -18638,11 +18708,13 @@ CMD:adrzwi(playerid, params[])
 		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID grupy.");
 		        return 1;
 			}
-		    DoorCache[doorid][dOwnerType] = OWNER_GROUP;
-		    DoorCache[doorid][dOwner] = GroupData[group_id][gUID];
+		    DoorData[dOwnerType] = OWNER_GROUP;
+		    DoorData[dOwner] = GroupData[group_id][gUID];
+		    
+		    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-		    orm_update(DoorCache[doorid][dOrm]);
-   			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (UID: %d) zosta³y przypisane pomyœlnie.\n\nTyp w³aœciciela: grupa\nW³aœciciel: %s (UID: %d)", DoorCache[doorid][dName], DoorCache[doorid][dUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
+		    SaveDoor(doorid);
+   			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (UID: %d) zosta³y przypisane pomyœlnie.\n\nTyp w³aœciciela: grupa\nW³aœciciel: %s (UID: %d)", DoorData[dName], DoorData[dUID], GroupData[group_id][gName], GroupData[group_id][gUID]);
 			return 1;
 		}
 	    return 1;
@@ -18686,17 +18758,21 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
-	    if(DoorCache[doorid][dLocked])
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
+	    if(DoorData[dLocked])
 	    {
-	        DoorCache[doorid][dLocked] = false;
-	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (UID: %d) zosta³y otwarte.", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	        DoorData[dLocked] = false;
+	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (UID: %d) zosta³y otwarte.", DoorData[dName], DoorData[dUID]);
 	    }
 	    else
 	    {
-	        DoorCache[doorid][dLocked] = true;
-	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (UID: %d) zosta³y zamkniête.", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	        DoorData[dLocked] = true;
+	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Drzwi %s (UID: %d) zosta³y zamkniête.", DoorData[dName], DoorData[dUID]);
 	    }
-		orm_update(DoorCache[doorid][dOrm]);
+	    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    SaveDoor(doorid);
  		return 1;
 	}
 	if(!strcmp(type, "wejscie", true) || !strcmp(type, "enter", true))
@@ -18713,22 +18789,14 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
-	    new door_name[64], query[256];
-	    strmid(door_name, DoorCache[doorid][dName], 0, 64);
+	    new Float:PosX, Float:PosY, Float:PosZ;
+	    GetPlayerPos(playerid, PosX, PosY, PosZ);
 	    
-		GetPlayerPos(playerid, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]);
-		GetPlayerFacingAngle(playerid, DoorCache[doorid][dEnterA]);
-
-		DoorCache[doorid][dEnterInt] = GetPlayerInterior(playerid);
-		orm_update(DoorCache[doorid][dOrm]);
-
-		DestroyPickup(doorid);
-		Iter_Remove(Door, doorid);
-		
-		mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"doors` WHERE door_uid = '%d' LIMIT 1", door_uid);
-		mysql_tquery(connHandle, query, "query_OnLoadDoors", "");
-		
-		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pozycja wejœcia dla drzwi %s (UID: %d) zosta³a ustalona.", door_name, door_uid);
+	    Streamer_SetItemPos(STREAMER_TYPE_PICKUP, doorid, PosX, PosY, PosZ);
+	    Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_INTERIOR_ID, GetPlayerInterior(playerid));
+	    
+		SaveDoor(doorid);
+		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pozycja wejœcia dla drzwi %s (UID: %d) zosta³a ustalona.", DoorName(doorid), door_uid);
 		return 1;
 	}
 	if(!strcmp(type, "wyjscie", true) || !strcmp(type, "exit", true))
@@ -18736,7 +18804,7 @@ CMD:adrzwi(playerid, params[])
 	    new door_uid;
 	    if(sscanf(varchar, "d", door_uid))
 	    {
-	        ShowTipForPlayer(playerid, "/adrzwi wyjscie [ID drzwi]");
+	        ShowTipForPlayer(playerid, "/adrzwi wyjscie [UID drzwi]");
 	        return 1;
 	    }
 	    new doorid = GetDoorID(door_uid);
@@ -18745,13 +18813,16 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
-		GetPlayerPos(playerid, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]);
-		GetPlayerFacingAngle(playerid, DoorCache[doorid][dExitA]);
-
-		DoorCache[doorid][dExitInt] = GetPlayerInterior(playerid);
-		orm_update(DoorCache[doorid][dOrm]);
-
-		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pozycja wyjœcia dla drzwi %s (UID: %d) zosta³a ustalona.", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
+		GetPlayerPos(playerid, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ]);
+		DoorData[dExitInt] = GetPlayerInterior(playerid);
+		
+		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    SaveDoor(doorid);
+	    
+		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pozycja wyjœcia dla drzwi %s (UID: %d) zosta³a ustalona.", DoorData[dName], DoorData[dUID]);
 		return 1;
 	}
 	if(!strcmp(type, "entervw", true))
@@ -18768,10 +18839,10 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
-	    DoorCache[doorid][dEnterVW] = entervw;
-	    orm_update(DoorCache[doorid][dOrm]);
+	    Streamer_SetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID, entervw);
+		SaveDoor(doorid);
 
-	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "VirtualWorld wejœcia dla drzwi %s (UID: %d) zosta³ ustalony (VW: %d).", DoorCache[doorid][dName], DoorCache[doorid][dUID], entervw);
+	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "VirtualWorld wejœcia dla drzwi %s (UID: %d) zosta³ ustalony (VW: %d).", DoorName(doorid), GetDoorUID(doorid), entervw);
 		return 1;
 	}
 	if(!strcmp(type, "exitvw", true))
@@ -18788,10 +18859,14 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID drzwi.");
 			return 1;
 	    }
-	    DoorCache[doorid][dExitVW] = exitvw;
-	    orm_update(DoorCache[doorid][dOrm]);
-
-	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "VirtualWorld wyjœcia dla drzwi %s (UID: %d) zosta³ ustalony (VW: %d).", DoorCache[doorid][dName], DoorCache[doorid][dUID], exitvw);
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
+	    DoorData[dExitVW] = exitvw;
+		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		
+		SaveDoor(doorid);
+	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "VirtualWorld wyjœcia dla drzwi %s (UID: %d) zosta³ ustalony (VW: %d).", DoorName(doorid), DoorData[dUID], exitvw);
 		return 1;
 	}
 	if(!strcmp(type, "info", true))
@@ -18819,7 +18894,7 @@ CMD:adrzwi(playerid, params[])
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znaleziono ¿adnych drzwi w pobli¿u.");
   			return 1;
 		}
-		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Najbli¿ej znajduj¹ce siê drzwi to \"%s\" (UID: %d).", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Najbli¿ej znajduj¹ce siê drzwi to \"%s\" (UID: %d).", DoorName(doorid), GetDoorUID(doorid));
 		return 1;
 	}
 	if(!strcmp(type, "przeladuj", true) || !strcmp(type, "reload", true))
@@ -18841,26 +18916,26 @@ CMD:adrzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz znajdowaæ siê w tych drzwiach podczas prze³adowywania.");
 	        return 1;
 	    }
+		new DoorData[sDoorInfo];
+		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	    
 		// Usuñ stare obiekty z tego VW (jeœli s¹)
-		new object_counts = Streamer_GetUpperBound(STREAMER_TYPE_OBJECT);
-		for (new object_id = 0; object_id <= object_counts; object_id++)
+		new ObjectData[MAX_VIS_OBJECTS],
+			object_count = Streamer_GetNearbyItems(DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, MAX_DRAW_DISTANCE, DoorData[dUID]);
+
+		for (new object = 0; object < object_count; object++)
 		{
-			if(IsValidDynamicObject(object_id))
-			{
-				if(Streamer_IsInArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_WORLD_ID, DoorCache[doorid][dExitVW]))
-				{
-					DestroyDynamicObject(object_id);
-				}
-			}
+		    DestroyDynamicObject(ObjectData[object]);
 		}
 		
   		new query[512];
-		mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorCache[doorid][dExitVW]);
+		mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorData[dExitVW]);
   		mysql_tquery(connHandle, query, "query_OnLoadObjects", "");
 
-		DoorCache[doorid][dObjectsLoaded] = true;
-        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wnêtrze drzwi %s (UID: %d) zosta³o pomyœlnie prze³adowane.", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+		DoorData[dObjectsLoaded] = true;
+		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		
+        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wnêtrze drzwi %s (UID: %d) zosta³o pomyœlnie prze³adowane.", DoorData[dName], DoorData[dUID]);
 	    return 1;
 	}
 	return 1;
@@ -18883,19 +18958,22 @@ CMD:drzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w drzwiach.");
 	        return 1;
 	    }
-   		if(DoorCache[doorid][dOwnerType] == OWNER_NONE && !(PlayerCache[playerid][pAdmin] & A_PERM_DOORS))
+ 		new DoorData[sDoorInfo];
+    	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+    	
+   		if(DoorData[dOwnerType] == OWNER_NONE && !(PlayerCache[playerid][pAdmin] & A_PERM_DOORS))
 		{
 			ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie jesteœ w³aœcicielem tego budynku.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER && DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+		if(DoorData[dOwnerType] == OWNER_PLAYER && DoorData[dOwner] != PlayerCache[playerid][pUID])
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie jesteœ w³aœcicielem tego budynku.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+		if(DoorData[dOwnerType] == OWNER_GROUP)
 		{
-		    if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_DOORS))
+		    if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_DOORS))
 		    {
 		        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz uprawnieñ dla drzwi, w grupie dla której s¹ one przypisane.");
 		        return 1;
@@ -18906,55 +18984,90 @@ CMD:drzwi(playerid, params[])
 	}
 	if(!strcmp(type, "zamknij", true))
 	{
-		foreach(new d : Door)
+		new Float:PosX, Float:PosY, Float:PosZ,
+			virtual_world = GetPlayerVirtualWorld(playerid), interior_id = GetPlayerInterior(playerid);
+
+		GetPlayerPos(playerid, PosX, PosY, PosZ);
+
+		new NearDoor[MAX_VIS_DOORS],
+			count_doors = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, NearDoor, MAX_VIS_DOORS, 2.0, virtual_world);
+
+		if(count_doors > 0)
 		{
-		    doorid = d;
-  			if((IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dEnterVW]) || (IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dExitVW]))
-	    	{
-   				if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+			for (new door = 0; door < count_doors; door++)
+			{
+			    doorid = NearDoor[door];
+				break;
+			}
+		}
+		else
+		{
+			new DoorData[sDoorInfo];
+			count_doors = Streamer_CountItems(STREAMER_TYPE_PICKUP);
+
+			for (new door = 0; door <= count_doors; door++)
+			{
+				if(IsValidDynamicPickup(door))
 				{
-				    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz kluczy do tych drzwi.");
-				    return 1;
-				}
-    			if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
-				{
-				    if(DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID] && PlayerCache[playerid][pHouse] != DoorCache[doorid][dUID])
-				    {
-    					ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz kluczy do tych drzwi.");
-						return 1;
+					Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
+					if(DoorData[dExitVW] == virtual_world && DoorData[dExitInt] == interior_id)
+					{
+						if(IsPlayerInRangeOfPoint(playerid, 2.0, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ]))
+						{
+							doorid = door;
+							break;
+						}
 					}
 				}
-				if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
-				{
-    				if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_DOORS))
-				    {
-        				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz kluczy do tych drzwi.");
-	       				return 1;
-				    }
-				}
-				if(DoorCache[doorid][dLocked])
-				{
-    				GameTextForPlayer(playerid, "~w~Drzwi ~g~otwarte", 4000, 6);
-
-					ApplyAnimation(playerid,"INT_HOUSE", "wash_up", 4.1, 0, 0, 0, 0, 0, 1);
-					PlayerPlaySound(playerid, 1145, 0.0, 0.0, 0.0);
-
-					DoorCache[doorid][dLocked] = false;
-					orm_update(DoorCache[doorid][dOrm]);
-				}
-				else
-				{
-    				GameTextForPlayer(playerid, "~w~Drzwi ~r~zamkniete", 4000, 6);
-
-					ApplyAnimation(playerid,"INT_HOUSE", "wash_up", 4.1, 0, 0, 0, 0, 0, 1);
-					PlayerPlaySound(playerid, 1145, 0.0, 0.0, 0.0);
-
-					DoorCache[doorid][dLocked] = true;
-					orm_update(DoorCache[doorid][dOrm]);
-				}
-				break;
-    		}
+			}
 		}
+		
+		if(doorid == INVALID_DOOR_ID)   return 1;
+	
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	
+		if(DoorData[dOwnerType] == OWNER_NONE)
+		{
+ 			ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz kluczy do tych drzwi.");
+ 			return 1;
+		}
+		if(DoorData[dOwnerType] == OWNER_PLAYER)
+		{
+  			if(DoorData[dOwner] != PlayerCache[playerid][pUID] && PlayerCache[playerid][pHouse] != DoorData[dUID])
+  			{
+				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz kluczy do tych drzwi.");
+				return 1;
+			}
+		}
+		if(DoorData[dOwnerType] == OWNER_GROUP)
+		{
+			if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_DOORS))
+  			{
+				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie posiadasz kluczy do tych drzwi.");
+				return 1;
+  			}
+		}
+		if(DoorData[dLocked])
+		{
+			GameTextForPlayer(playerid, "~w~Drzwi ~g~otwarte", 4000, 6);
+
+			ApplyAnimation(playerid,"INT_HOUSE", "wash_up", 4.1, 0, 0, 0, 0, 0, 1);
+			PlayerPlaySound(playerid, 1145, 0.0, 0.0, 0.0);
+
+			DoorData[dLocked] = false;
+		}
+		else
+		{
+			GameTextForPlayer(playerid, "~w~Drzwi ~r~zamkniete", 4000, 6);
+
+			ApplyAnimation(playerid,"INT_HOUSE", "wash_up", 4.1, 0, 0, 0, 0, 0, 1);
+			PlayerPlaySound(playerid, 1145, 0.0, 0.0, 0.0);
+
+			DoorData[dLocked] = true;
+		}
+		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		SaveDoor(doorid);
 	    return 1;
 	}
 	if(!strcmp(type, "opcje", true))
@@ -18965,19 +19078,22 @@ CMD:drzwi(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w drzwiach.");
 	        return 1;
 	    }
-   		if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
+   		if(DoorData[dOwnerType] == OWNER_NONE)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie jesteœ w³aœcicielem tego budynku.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER && DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+		if(DoorData[dOwnerType] == OWNER_PLAYER && DoorData[dOwner] != PlayerCache[playerid][pUID])
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie jesteœ w³aœcicielem tego budynku.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+		if(DoorData[dOwnerType] == OWNER_GROUP)
 		{
-		    if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_LEADER))
+		    if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
 		    {
 		        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie jesteœ w³aœcicielem tego budynku.");
 		        return 1;
@@ -18985,7 +19101,7 @@ CMD:drzwi(playerid, params[])
 		}
 		PlayerCache[playerid][pMainTable] = doorid;
 		
-		format(string, sizeof(string), "%s (UID: %d) » Opcje", DoorCache[doorid][dName], DoorCache[doorid][dUID]);
+		format(string, sizeof(string), "%s (UID: %d) » Opcje", DoorData[dName], DoorData[dUID]);
 		ShowPlayerDialog(playerid, D_DOOR_OPTIONS, DIALOG_STYLE_LIST, string, "1. Edytuj nazwê drzwi\n2. Ustal koszt wstêpu\n3. Przypisz drzwi\n4. Muzyka spoza gry\n5. Poka¿ magazyn\n6. Za³aduj wnêtrze\n7. Mo¿liwoœæ przejazdu\n8. Ustal pozycjê wyjœciow¹\n9. Przedmioty w schowku", "Wybierz", "Anuluj");
 	    return 1;
 	}
@@ -19507,14 +19623,17 @@ CMD:tel(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc zamówiæ produkty, musisz znajdowaæ siê w budynku grupowym.");
 	        return 1;
 	    }
-	    if(DoorCache[doorid][dOwnerType] == OWNER_NONE || DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
+	    new DoorData[sDoorInfo];
+	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
+	    if(DoorData[dOwnerType] == OWNER_NONE || DoorData[dOwnerType] == OWNER_PLAYER)
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc zamówiæ produkty, musisz znajdowaæ siê w budynku grupowym.");
 	        return 1;
 	    }
-	    if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+	    if(DoorData[dOwnerType] == OWNER_GROUP)
 	    {
-	        if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_ORDER))
+	        if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_ORDER))
 	        {
 	            ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie mo¿esz zamawiaæ produktów.");
 	            return 1;
@@ -19725,7 +19844,10 @@ CMD:dom(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w swoim domu.");
 	    return 1;
 	}
-	if(DoorCache[doorid][dOwnerType] != OWNER_PLAYER || DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+ 	new DoorData[sDoorInfo];
+ 	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+ 	
+	if(DoorData[dOwnerType] != OWNER_PLAYER || DoorData[dOwner] != PlayerCache[playerid][pUID])
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w swoim domu.");
 	    return 1;
@@ -19771,7 +19893,7 @@ CMD:dom(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten gracz posiada ju¿ jakiœ dom, b¹dŸ jest gdzieœ zameldowany.");
 		    return 1;
 		}
-		PlayerCache[giveplayer_id][pHouse] = DoorCache[doorid][dUID];
+		PlayerCache[giveplayer_id][pHouse] = DoorData[dUID];
 		orm_update(PlayerCache[giveplayer_id][pOrm]);
 
 		SendClientFormatMessage(giveplayer_id, COLOR_LIGHTBLUE, "%s zaprosi³ Ciê do swojego domu.", PlayerName(playerid));
@@ -19801,7 +19923,7 @@ CMD:dom(playerid, params[])
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Gracz o podanym ID nie jest zalogowany.");
 	    	return 1;
 		}
-		if(PlayerCache[giveplayer_id][pHouse] != DoorCache[doorid][dUID])
+		if(PlayerCache[giveplayer_id][pHouse] != DoorData[dUID])
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten gracz nie jest zameldowany w Twoim domu.");
 		    return 1;
@@ -19824,12 +19946,15 @@ CMD:kup(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
 	    return 1;
 	}
-	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+ 	new DoorData[sDoorInfo];
+ 	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+ 	
+	if(DoorData[dOwnerType] != OWNER_GROUP)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
 	    return 1;
 	}
-	new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+	new group_id = GetGroupID(DoorData[dOwner]);
 	if(GroupData[group_id][gType] != G_TYPE_24/7)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
@@ -19850,12 +19975,15 @@ CMD:ubranie(playerid, params[])
 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
 	    return 1;
 	}
-	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+ 	new DoorData[sDoorInfo];
+  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+  	
+	if(DoorData[dOwnerType] != OWNER_GROUP)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
 	    return 1;
 	}
-	new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+	new group_id = GetGroupID(DoorData[dOwner]);
 	if(GroupData[group_id][gType] != G_TYPE_CLOTHES)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
@@ -20241,31 +20369,25 @@ CMD:oferuj(playerid, params[])
 		                ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz pracy dorywczej jako sprzedawca.");
 		                return 1;
 		            }
+		            new Float:PosX, Float:PosY, Float:PosZ,
+		                virtual_world = GetPlayerVirtualWorld(playerid);
+		                
+		            GetPlayerPos(playerid, PosX, PosY, PosZ);
 		            
-      	     		new	group_id,
-					   	Float:DoorDistance,
-						Float:LastDistance = 1000.0;
-		            
-				    foreach(new d : Door)
-				    {
-					    if(DoorCache[d][dEnterVW] == 0)
-					    {
-				  			if(DoorCache[d][dOwnerType] == OWNER_GROUP)
-				  			{
-				  			    if(IsPlayerInRangeOfPoint(playerid, LastDistance, DoorCache[d][dEnterX], DoorCache[d][dEnterY], DoorCache[d][dEnterZ]))
-				  			    {
-									group_id = GetGroupID(DoorCache[d][dOwner]);
-									if(GroupData[group_id][gType] == G_TYPE_BAR)
-									{
-						          		DoorDistance = GetPlayerDistanceToPoint(playerid, DoorCache[d][dEnterX], DoorCache[d][dEnterY]);
+           			new NearDoor[MAX_VIS_DOORS], DoorData[sDoorInfo], group_id,
+						count_doors = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, NearDoor, MAX_VIS_DOORS, 250.0, virtual_world);
 
-										if((DoorDistance < LastDistance))
-										{
-											LastDistance = DoorDistance;
-											product_owner = DoorCache[d][dOwner];
-										}
-									}
-								}
+					if(count_doors > 0)
+					{
+						for (new door = 0; door < count_doors; door++)
+						{
+							Streamer_GetArrayData(STREAMER_TYPE_PICKUP, NearDoor[door], E_STREAMER_EXTRA_ID, DoorData);
+							group_id = GetGroupID(DoorData[dOwner]);
+							
+							if(GroupData[group_id][gType] == G_TYPE_BAR)
+							{
+							    product_owner = DoorData[dOwner];
+							    break;
 							}
 						}
 					}
@@ -20306,13 +20428,16 @@ CMD:oferuj(playerid, params[])
 				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie mo¿esz oferowaæ produktów.");
 				return 1;
 			}
-			if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[PlayerCache[playerid][pDuty][DUTY_GROUP]][gUID])
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			
+			if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[PlayerCache[playerid][pDuty][DUTY_GROUP]][gUID])
 			{
                 ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz zaoferowaæ produktu z magazynu w tym miejscu.");
 			    return 1;
 			}
 			
-			product_owner = DoorCache[doorid][dOwner];
+			product_owner = DoorData[dOwner];
 		}
 		PlayerCache[playerid][pMainTable] = giveplayer_id;
 		new group_id = GetGroupID(product_owner);
@@ -20381,7 +20506,10 @@ CMD:oferuj(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku, który zamierzasz sprzedaæ.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] != OWNER_PLAYER || DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+		new DoorData[sDoorInfo];
+		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		
+		if(DoorData[dOwnerType] != OWNER_PLAYER || DoorData[dOwner] != PlayerCache[playerid][pUID])
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie jesteœ w³aœcicielem tego budynku.");
 		    return 1;
@@ -20416,7 +20544,7 @@ CMD:oferuj(playerid, params[])
   			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³ow¹ kwotê.");
   			return 1;
 		}
-		OnPlayerSendOffer(playerid, giveplayer_id, DoorCache[doorid][dName], OFFER_DOOR, doorid, 0, price);
+		OnPlayerSendOffer(playerid, giveplayer_id, DoorData[dName], OFFER_DOOR, doorid, 0, price);
 	    return 1;
 	}
 	
@@ -21070,7 +21198,10 @@ CMD:oferuj(playerid, params[])
         	ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[PlayerCache[playerid][pDuty][DUTY_GROUP]][gUID])
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[PlayerCache[playerid][pDuty][DUTY_GROUP]][gUID])
 	  	{
             ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21188,8 +21319,11 @@ CMD:oferuj(playerid, params[])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
-	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		}
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21262,7 +21396,10 @@ CMD:oferuj(playerid, params[])
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21328,7 +21465,10 @@ CMD:oferuj(playerid, params[])
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21411,7 +21551,10 @@ CMD:oferuj(playerid, params[])
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21539,7 +21682,10 @@ CMD:oferuj(playerid, params[])
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+  		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21599,7 +21745,10 @@ CMD:oferuj(playerid, params[])
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21673,7 +21822,10 @@ CMD:oferuj(playerid, params[])
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21752,7 +21904,10 @@ CMD:oferuj(playerid, params[])
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21867,7 +22022,10 @@ CMD:oferuj(playerid, params[])
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
 	  	}
-	  	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	  	if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	  	{
 	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku grupy, by móc oferowaæ.");
 	  	    return 1;
@@ -21924,12 +22082,15 @@ CMD:bank(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
 	    return 1;
 	}
-	if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+	new DoorData[sDoorInfo];
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	
+	if(DoorData[dOwnerType] != OWNER_GROUP)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
 	    return 1;
 	}
-	new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+	new group_id = GetGroupID(DoorData[dOwner]);
 	if(GroupData[group_id][gType] != G_TYPE_BANK)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znajdujesz siê w banku.");
@@ -21982,22 +22143,25 @@ CMD:mc(playerid, params[])
 		new doorid = GetPlayerDoorID(playerid);
 		if(doorid != INVALID_DOOR_ID)
 		{
-			if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+			new DoorData[sDoorInfo];
+	  		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  		
+			if(DoorData[dOwnerType] == OWNER_NONE)
 			{
 				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 				return 1;
 			}
-			if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
+			if(DoorData[dOwnerType] == OWNER_PLAYER)
 			{
-		 		if(DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+		 		if(DoorData[dOwner] != PlayerCache[playerid][pUID])
 		   		{
 					ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		   			return 1;
 				}
 			}
-			if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+			if(DoorData[dOwnerType] == OWNER_GROUP)
 			{
-			    if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_LEADER))
+			    if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
 			    {
 			        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 			        return 1;
@@ -22107,22 +22271,25 @@ CMD:msel(playerid, params[])
 		new doorid = GetPlayerDoorID(playerid);
 		if(doorid != INVALID_DOOR_ID)
 		{
-			if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+			new DoorData[sDoorInfo];
+	  		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  		
+			if(DoorData[dOwnerType] == OWNER_NONE)
 			{
 				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 				return 1;
 			}
-			if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
+			if(DoorData[dOwnerType] == OWNER_PLAYER)
 			{
-		 		if(DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+		 		if(DoorData[dOwner] != PlayerCache[playerid][pUID])
 		   		{
 					ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		   			return 1;
 				}
 			}
-			if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+			if(DoorData[dOwnerType] == OWNER_GROUP)
 			{
-			    if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_LEADER))
+			    if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
 			    {
 			        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 			        return 1;
@@ -22407,22 +22574,25 @@ CMD:brama(playerid, params[])
 		new doorid = GetPlayerDoorID(playerid);
 		if(doorid != INVALID_DOOR_ID)
 		{
-			if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+			new DoorData[sDoorInfo];
+	  		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  		
+			if(DoorData[dOwnerType] == OWNER_NONE)
 			{
 				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 				return 1;
 			}
-			if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
+			if(DoorData[dOwnerType] == OWNER_PLAYER)
 			{
-		 		if(DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID] && PlayerCache[playerid][pHouse] != DoorCache[doorid][dUID])
+		 		if(DoorData[dOwner] != PlayerCache[playerid][pUID] && PlayerCache[playerid][pHouse] != DoorData[dUID])
 		   		{
 					ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 		   			return 1;
 				}
 			}
-			if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+			if(DoorData[dOwnerType] == OWNER_GROUP)
 			{
-			    if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_GATE))
+			    if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_GATE))
 			    {
 			        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
 			        return 1;
@@ -22544,22 +22714,25 @@ CMD:ec(playerid, params[])
 	 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc stworzyæ obiekt, musisz znajdowaæ siê w budynku.");
 	   		return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+		if(DoorData[dOwnerType] == OWNER_NONE)
 		{
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten budynek nie nale¿y do Ciebie.");
 			return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
+		if(DoorData[dOwnerType] == OWNER_PLAYER)
 		{
-	 		if(DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+	 		if(DoorData[dOwner] != PlayerCache[playerid][pUID])
 	   		{
 				ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten budynek nie nale¿y do Ciebie.");
 	   			return 1;
 			}
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+		if(DoorData[dOwnerType] == OWNER_GROUP)
 		{
-			if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_LEADER))
+			if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
 			{
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten budynek nie nale¿y do Ciebie.");
 			    return 1;
@@ -22596,22 +22769,25 @@ CMD:esel(playerid, params[])
 	 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Edytowaæ etykiety mo¿esz tylko bêd¹c w budynku, którego w³aœcicielem jesteœ.");
 	   		return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_NONE)
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+		if(DoorData[dOwnerType] == OWNER_NONE)
 		{
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Edytowaæ etykiety mo¿esz tylko bêd¹c w budynku, którego w³aœcicielem jesteœ.");
 			return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_PLAYER)
+		if(DoorData[dOwnerType] == OWNER_PLAYER)
 		{
-	 		if(DoorCache[doorid][dOwner] != PlayerCache[playerid][pUID])
+	 		if(DoorData[dOwner] != PlayerCache[playerid][pUID])
 	   		{
 				ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Edytowaæ etykiety mo¿esz tylko bêd¹c w budynku, którego w³aœcicielem jesteœ.");
 	   			return 1;
 			}
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+		if(DoorData[dOwnerType] == OWNER_GROUP)
 		{
-			if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_LEADER))
+			if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
 			{
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Edytowaæ etykiety mo¿esz tylko bêd¹c w budynku, którego w³aœcicielem jesteœ.");
 			    return 1;
@@ -22795,24 +22971,27 @@ CMD:pokoj(playerid, params[])
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+		if(DoorData[dOwnerType] != OWNER_GROUP)
 		{
       		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+		new group_id = GetGroupID(DoorData[dOwner]);
 		if(GroupData[group_id][gType] != G_TYPE_HOTEL)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-	    if(PlayerCache[playerid][pHouse] == DoorCache[doorid][dOwner])
+	    if(PlayerCache[playerid][pHouse] == DoorData[dOwner])
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Jesteœ ju¿ zameldowany w tym hotelu.");
 	        return 1;
 	    }
-	    PlayerCache[playerid][pHouse] = DoorCache[doorid][dUID];
-	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wynaj¹³eœ pokój w hotelu \"%s\".\nOp³ata bêdzie pobierana przy ka¿dej wyp³acie.\n\nTwój numer pokoju to: %d", DoorCache[doorid][dName], PlayerCache[playerid][pUID]);
+	    PlayerCache[playerid][pHouse] = DoorData[dUID];
+	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wynaj¹³eœ pokój w hotelu \"%s\".\nOp³ata bêdzie pobierana przy ka¿dej wyp³acie.\n\nTwój numer pokoju to: %d", DoorData[dName], PlayerCache[playerid][pUID]);
 	    return 1;
 	}
 	if(!strcmp(type, "wymelduj", true))
@@ -22822,18 +23001,21 @@ CMD:pokoj(playerid, params[])
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+		if(DoorData[dOwnerType] != OWNER_GROUP)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+		new group_id = GetGroupID(DoorData[dOwner]);
 		if(GroupData[group_id][gType] != G_TYPE_HOTEL)
 		{
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-	    if(PlayerCache[playerid][pHouse] != DoorCache[doorid][dUID])
+	    if(PlayerCache[playerid][pHouse] != DoorData[dUID])
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu, którym jesteœ zameldowany.");
 	        return 1;
@@ -22849,12 +23031,15 @@ CMD:pokoj(playerid, params[])
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+		if(DoorData[dOwnerType] != OWNER_GROUP)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+		new group_id = GetGroupID(DoorData[dOwner]);
 		if(GroupData[group_id][gType] != G_TYPE_HOTEL)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
@@ -22870,7 +23055,7 @@ CMD:pokoj(playerid, params[])
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
-		        if(PlayerCache[i][pHouse] == DoorCache[doorid][dUID])
+		        if(PlayerCache[i][pHouse] == DoorData[dUID])
 		        {
 		            if(PlayerCache[i][pUID] == room)
 		            {
@@ -22906,12 +23091,14 @@ CMD:pokoj(playerid, params[])
 	      			if(PlayerCache[i][pUID] == GetPlayerVirtualWorld(playerid))
 	      			{
 	              		new hotel_doorid = GetDoorID(PlayerCache[i][pHouse]);
+	              		
+      					new DoorData[sDoorInfo];
+	  					Streamer_GetArrayData(STREAMER_TYPE_PICKUP, hotel_doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-						crp_SetPlayerPos(playerid, DoorCache[hotel_doorid][dExitX], DoorCache[hotel_doorid][dExitY], DoorCache[hotel_doorid][dExitZ]);
-						SetPlayerFacingAngle(playerid, DoorCache[hotel_doorid][dExitA]);
+						crp_SetPlayerPos(playerid, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ]);
 
-						SetPlayerInterior(playerid, DoorCache[hotel_doorid][dExitInt]);
-						SetPlayerVirtualWorld(playerid, DoorCache[hotel_doorid][dExitVW]);
+						SetPlayerInterior(playerid, DoorData[dExitInt]);
+						SetPlayerVirtualWorld(playerid, DoorData[dExitVW]);
 
 						OnPlayerFreeze(playerid, true, 3);
 						return 1;
@@ -22930,18 +23117,21 @@ CMD:pokoj(playerid, params[])
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] != OWNER_GROUP)
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+		if(DoorData[dOwnerType] != OWNER_GROUP)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		new group_id = GetGroupID(DoorCache[doorid][dOwner]);
+		new group_id = GetGroupID(DoorData[dOwner]);
 		if(GroupData[group_id][gType] != G_TYPE_HOTEL)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w hotelu.");
 		    return 1;
 		}
-		if(HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_LEADER))
+		if(HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
 		{
   			format(string, sizeof(string), "WprowadŸ kwotê, jak¹ chcesz pobieraæ za wynajem pokoju.\nObecny koszt wynajmu pokoju wynosi $%d.\n\nOp³ata za pokój pobierana jest raz dziennie, razem z wydaniem wyp³at.", GroupData[group_id][gValue1]);
 		    ShowPlayerDialog(playerid, D_ROOM_PRICE, DIALOG_STYLE_INPUT, "Zmieñ koszt wynajmu", string, "Zmieñ", "Anuluj");
@@ -23798,7 +23988,10 @@ CMD:kartoteka(playerid, params[])
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w pojeŸdzie lub budynku nale¿¹cym do grupy.");
 	        return 1;
 	    }
-	    if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+   		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	    if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w pojeŸdzie lub budynku nale¿¹cym do grupy.");
 	        return 1;
@@ -24472,7 +24665,10 @@ CMD:reklama(playerid, params[])
      		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w pojeŸdzie lub budynku nale¿¹cym do grupy.");
        		return 1;
 	    }
-	    if(DoorCache[doorid][dOwnerType] != OWNER_GROUP || DoorCache[doorid][dOwner] != GroupData[group_id][gUID])
+   		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+	    if(DoorData[dOwnerType] != OWNER_GROUP || DoorData[dOwner] != GroupData[group_id][gUID])
 	    {
      		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w pojeŸdzie lub budynku nale¿¹cym do grupy.");
        		return 1;
@@ -25391,15 +25587,18 @@ CMD:pokaz(playerid, params[])
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku firmy, aby móc pokazaæ cennik.");
 		    return 1;
 		}
-		if(DoorCache[doorid][dOwnerType] == OWNER_GROUP)
+		new DoorData[sDoorInfo];
+	  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	  	
+		if(DoorData[dOwnerType] == OWNER_GROUP)
 		{
-		    if(!HavePlayerGroupPerm(playerid, DoorCache[doorid][dOwner], G_PERM_OFFER))
+		    if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_OFFER))
 		    {
 		        ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie mo¿esz pokazaæ cennika.");
 		        return 1;
 		    }
 		}
-		new group_id = GetGroupID(DoorCache[doorid][dOwner]), string[128];
+		new group_id = GetGroupID(DoorData[dOwner]), string[128];
 		if(GroupData[group_id][gType] == G_TYPE_CARDEALER)
 		{
 			new cat_list[256],
@@ -25668,28 +25867,34 @@ CMD:wyrzuc(playerid, params[])
 CMD:zapukaj(playerid, params[])
 {
 	new string[128];
-	foreach(new doorid : Door)
-	{
- 		if(DoorCache[doorid][dUID])
-   		{
-	    	if(IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]) || IsPlayerInRangeOfPoint(playerid, 2.0, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dExitVW])
-		    {
-				foreach(new i : Player)
-				{
-				    if(i != playerid)
-				    {
-					    if(GetPlayerDoorID(i) == doorid)
-					    {
-							SendClientMessage(i, COLOR_DO, "** S³ychaæ dŸwiêk pukania dobiegaj¹cy od drzwi wejœciowych. **");
-					    }
-					}
-				}
-				ApplyAnimation(playerid, "HEIST9", "Use_SwipeCard", 4.1, 0, 0, 0, 0, 0, true);
+	
+	new Float:PosX, Float:PosY, Float:PosZ,
+		virtual_world = GetPlayerVirtualWorld(playerid);
 
-				format(string, sizeof(string), "* %s puka do drzwi.", PlayerName(playerid));
-    			ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
-		        break;
+	GetPlayerPos(playerid, PosX, PosY, PosZ);
+
+	new NearDoor[MAX_VIS_DOORS],
+		count_doors = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, NearDoor, MAX_VIS_DOORS, 2.0, virtual_world);
+
+	if(count_doors > 0)
+	{
+		for (new door = 0; door < count_doors; door++)
+		{
+			foreach(new i : Player)
+			{
+			    if(i != playerid)
+			    {
+			    	if(GetPlayerDoorID(i) == NearDoor[door])
+			    	{
+						SendClientMessage(i, COLOR_DO, "** S³ychaæ dŸwiêk pukania dobiegaj¹cy od drzwi wejœciowych. **");
+			    	}
+				}
 			}
+			ApplyAnimation(playerid, "HEIST9", "Use_SwipeCard", 4.1, 0, 0, 0, 0, 0, true);
+
+			format(string, sizeof(string), "* %s puka do drzwi.", PlayerName(playerid));
+			ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
+			break;
 		}
 	}
 	return 1;
@@ -26052,19 +26257,22 @@ CMD:paczka(playerid, params[])
 	    return 1;
 	}
 
-	new list_packages[1024], doorid;
+	new list_packages[1024], doorid,
+	    DoorData[sDoorInfo];
+	    
 	foreach(new package_id : Package)
 	{
 	    if(PackageCache[package_id][pUID])
 	    {
 	        doorid = GetDoorID(PackageCache[package_id][pDoorUID]);
+	        Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	        
 	        switch(PackageCache[package_id][pType])
 	        {
 	            case PACKAGE_PRODUCT:					if(PlayerCache[playerid][pJob] != JOB_COURIER)  			continue;
-	            case PACKAGE_DRUGS, PACKAGE_WEAPON:		if(!IsPlayerInGroup(playerid, DoorCache[doorid][dOwner]))	continue;
+	            case PACKAGE_DRUGS, PACKAGE_WEAPON:		if(!IsPlayerInGroup(playerid, DoorData[dOwner]))			continue;
 	        }
-	        format(list_packages, sizeof(list_packages), "%s\n%d\t\t%s", list_packages, PackageCache[package_id][pUID], DoorCache[doorid][dName]);
+	        format(list_packages, sizeof(list_packages), "%s\n%d\t\t%s", list_packages, PackageCache[package_id][pUID], DoorData[dName]);
 	    }
 	}
 	
@@ -26088,21 +26296,50 @@ CMD:przejazd(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w pojeŸdzie.");
 	    return 1;
 	}
-	foreach(new doorid : Door)
+	new Float:PosX, Float:PosY, Float:PosZ,
+		virtual_world = GetPlayerVirtualWorld(playerid), interior_id = GetPlayerInterior(playerid);
+
+	GetPlayerPos(playerid, PosX, PosY, PosZ);
+
+	new DoorData[sDoorInfo], NearDoor[MAX_VIS_DOORS], doorid,
+		count_doors = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, NearDoor, MAX_VIS_DOORS, 5.0, virtual_world);
+
+	if(count_doors > 0)
 	{
-	    if(DoorCache[doorid][dGarage])
-	    {
-	 		if(IsPlayerInRangeOfPoint(playerid, 5.0, DoorCache[doorid][dEnterX], DoorCache[doorid][dEnterY], DoorCache[doorid][dEnterZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dEnterVW])
-	   		{
-	   		    OnPlayerEnterDoor(playerid, doorid);
-	   		    break;
-	   		}
-	     	else if(IsPlayerInRangeOfPoint(playerid, 5.0, DoorCache[doorid][dExitX], DoorCache[doorid][dExitY], DoorCache[doorid][dExitZ]) && GetPlayerVirtualWorld(playerid) == DoorCache[doorid][dExitVW])
-	        {
-	            OnPlayerExitDoor(playerid, doorid);
-	            break;
-	        }
-	   }
+		for (new door = 0; door < count_doors; door++)
+		{
+		    doorid = NearDoor[door];
+		    
+		    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		    if(DoorData[dGarage])
+		    {
+				OnPlayerEnterDoor(playerid, doorid);
+				break;
+			}
+		}
+	}
+	else
+	{
+		count_doors = Streamer_CountItems(STREAMER_TYPE_PICKUP);
+
+		for (new door = 0; door <= count_doors; door++)
+		{
+  			if(IsValidDynamicPickup(door))
+	    	{
+		    	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
+			    if(DoorData[dExitVW] == virtual_world && DoorData[dExitInt] == interior_id)
+			    {
+			        if(DoorData[dGarage])
+			        {
+			        	if(IsPlayerInRangeOfPoint(playerid, 5.0, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ]))
+				        {
+							OnPlayerExitDoor(playerid, door);
+							break;
+       					}
+					}
+				}
+			}
+		}
 	}
 	return 1;
 }
@@ -27185,7 +27422,7 @@ CMD:limits(playerid, params[])
 	}
 	new string[256];
 	
-	format(string, sizeof(string), "Gracze:\t\t\t%d/%d\nPojazdy:\t\t%d/%d\nDrzwi:\t\t\t%d/%d\nStrefy:\t\t\t%d/UNLIMIT\nProdukty:\t\t%d/%d\nGrupy:\t\t\t%d/%d", Iter_Count(Player), MAX_PLAYERS, Iter_Count(Vehicles), MAX_VEHICLES, Iter_Count(Door), MAX_DOORS, Streamer_GetUpperBound(STREAMER_TYPE_AREA), Iter_Count(Product), MAX_PRODUCTS, Iter_Count(Groups), MAX_GROUPS);
+	format(string, sizeof(string), "Gracze:\t\t\t%d/%d\nPojazdy:\t\t%d/%d\nDrzwi:\t\t\t%d/UNLIMIT\nStrefy:\t\t\t%d/UNLIMIT\nProdukty:\t\t%d/%d\nGrupy:\t\t\t%d/%d", Iter_Count(Player), MAX_PLAYERS, Iter_Count(Vehicles), MAX_VEHICLES, Streamer_CountItems(STREAMER_TYPE_PICKUP), Streamer_CountItems(STREAMER_TYPE_AREA), Iter_Count(Product), MAX_PRODUCTS, Iter_Count(Groups), MAX_GROUPS);
 	ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_LIST, "Limity serwerowe", string, "OK", "");
 	return 1;
 }
@@ -28381,57 +28618,76 @@ stock IsVehicleBike(vehid)
 
 stock GetDoorID(door_uid)
 {
-	new doorid = INVALID_DOOR_ID;
-	foreach(new d : Door)
+	new doorid = INVALID_DOOR_ID, DoorData[sDoorInfo],
+		count_doors = Streamer_CountItems(STREAMER_TYPE_PICKUP);
+
+	for (new door = 0; door <= count_doors; door++)
 	{
-	    if(DoorCache[d][dUID] == door_uid)
-	    {
-	        doorid = d;
-			break;
+ 		if(IsValidDynamicPickup(door))
+   		{
+   			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
+   			if(DoorData[dUID] == door_uid)
+   			{
+   			    doorid = door;
+			   	break;
+       		}
 	    }
 	}
 	return doorid;
 }
 
-stock GetClosestDoor(playerid)
+stock GetDoorUID(doorid)
 {
-	new Float:prevdist = 5.000, prevdoor = INVALID_DOOR_ID;
-	foreach(new doorid : Door)
-	{
-		new Float:dist = GetDistanceToDoor(playerid, doorid);
-		if ((dist < prevdist))
-		{
-			prevdist = dist;
-			prevdoor = doorid;
-		}
-	}
-	return prevdoor;
+	new DoorData[sDoorInfo];
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	
+	return DoorData[dUID];
 }
 
-stock GetDistanceToDoor(playerid, doorid)
+stock DoorName(doorid)
 {
-	new Float:x1, Float:y1, Float:z1,
-		Float:x2, Float:y2, Float:z2, Float:dis;
-
-	GetPlayerPos(playerid, x1, y1, z1);
+	new DoorData[sDoorInfo], door_name[64];
+	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	
-	x2 = DoorCache[doorid][dEnterX];
-	y2 = DoorCache[doorid][dEnterY];
-	z2 = DoorCache[doorid][dEnterZ];
+	strmid(door_name, DoorData[dName], 0, 64);
+	return door_name;
+}
 
-	dis = floatsqroot(floatpower(floatabs(floatsub(x2,x1)),2)+floatpower(floatabs(floatsub(y2,y1)),2)+floatpower(floatabs(floatsub(z2,z1)),2));
-	return floatround(dis);
+stock GetClosestDoor(playerid)
+{
+	new DoorID = INVALID_DOOR_ID, Float:PosX, Float:PosY, Float:PosZ,
+		virtual_world = GetPlayerVirtualWorld(playerid);
+
+	GetPlayerPos(playerid, PosX, PosY, PosZ);
+
+	new DoorData[MAX_VIS_DOORS],
+		count_doors = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, DoorData, MAX_VIS_DOORS, 5.0, virtual_world);
+
+	for (new door = 0; door < count_doors; door++)
+	{
+		DoorID = DoorData[door];
+		break;
+	}
+	return DoorID;
 }
 
 stock GetPlayerDoorID(playerid)
 {
-	new doorid = INVALID_DOOR_ID;
-	foreach(new d : Door)
+	new doorid = INVALID_DOOR_ID, DoorData[sDoorInfo],
+		count_doors = Streamer_CountItems(STREAMER_TYPE_PICKUP);
+		
+	new virtual_world = GetPlayerVirtualWorld(playerid), interior_id = GetPlayerInterior(playerid);
+
+	for (new door = 0; door <= count_doors; door++)
 	{
-		if(GetPlayerVirtualWorld(playerid) != 0 && GetPlayerVirtualWorld(playerid) == DoorCache[d][dExitVW])
-		{
-			doorid = d;
-			break;
+ 		if(IsValidDynamicPickup(door))
+	    {
+	    	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
+		    if(DoorData[dExitVW] == virtual_world && DoorData[dExitInt] == interior_id)
+		    {
+				doorid = door;
+				break;
+    		}
 		}
 	}
 	return doorid;
