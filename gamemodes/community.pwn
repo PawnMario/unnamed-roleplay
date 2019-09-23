@@ -14,7 +14,6 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 #include <a_mysql>
 #include <Pawn.CMD>
-#include <md5>
 #include <sscanf2>
 #include <streamer>
 #include <dynamicgui>
@@ -459,12 +458,13 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 // Rodzaje audio
 #define AUDIO_NONE              0
-#define AUDIO_CALLING           1
-#define AUDIO_SMS               2
-#define AUDIO_ALARM             3
-#define AUDIO_LSPD              4
-#define AUDIO_MESSAGE           5
-#define AUDIO_ACHIEVE           6
+#define AUDIO_CALLING_TO        1
+#define AUDIO_CALLING           2
+#define AUDIO_SMS               3
+#define AUDIO_ALARM             4
+#define AUDIO_LSPD              5
+#define AUDIO_MESSAGE           6
+#define AUDIO_ACHIEVE           7
 
 // Sloty obiektów
 #define SLOT_PHONE              0
@@ -557,6 +557,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define CHECKPOINT_VEHICLE  1
 #define CHECKPOINT_PACKAGE  2
 #define CHECKPOINT_DOOR     3
+#define CHECKPOINT_ACTOR    4
 
 // Typy narkotyków
 #define DRUG_NONE           0
@@ -579,6 +580,9 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define STATUS_TYPE_BELTS       128
 #define STATUS_TYPE_STONED      256
 #define STATUS_TYPE_GLOVES      512
+#define STATUS_TYPE_DEFEATED    1024
+#define STATUS_TYPE_SHOT        2048
+#define STATUS_TYPE_INJURED     4096
 
 // Rodzaje zgonu
 #define DEATH_NONE              0
@@ -812,8 +816,9 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define D_ACTOR_TYPE            102
 #define D_ACTOR_WORKSHOP        103
 #define D_ACTOR_GOV             104
+#define D_ACTOR_CORPSE          105
 
-#define D_OBJECT_PRIORITY       105
+#define D_OBJECT_PRIORITY       106
 
 // Forward's
 forward OnPlayerLogin(playerid);
@@ -897,7 +902,6 @@ forward OnPlayerExitDoor(playerid, doorid);
 forward LoadAllAccess();
 forward LoadAllSkins();
 forward LoadAllAnims();
-forward LoadAllCorpses();
 
 forward LoadPlayerAccess(playerid);
 forward LoadPlayerGroups(playerid);
@@ -926,12 +930,77 @@ forward DeleteActor(actorid);
 forward SaveActor(actorid);
 forward OnPlayerInteractActor(playerid, actorid);
 
+/* TYMCZASOWA EDYCJA */
+new bool:CamEditing[MAX_PLAYERS];
+new CamTime[MAX_PLAYERS];
+new Float:CamPos[MAX_PLAYERS][3];
+
+cmd:cam(playerid, params[])
+{
+	new sub[24];
+	if(sscanf(params, "s[24]",  sub))
+	{
+	    ShowTipForPlayer(playerid, "/cam [ustaw, czas, start, exit]");
+	    return 1;
+	}
+	if(!strcmp(sub, "ustaw", true))
+	{
+		new Float:pos[6];
+		GetPlayerPos(playerid, pos[0], pos[1], pos[2]);
+		GetXYInFrontOfPlayer(playerid, pos[3], pos[4], 1.0);
+
+		SetPlayerCameraPos(playerid, pos[3], pos[4], pos[2]);
+		SetPlayerCameraLookAt(playerid, pos[0], pos[1], pos[2]);
+		
+		CamPos[playerid][1] = pos[2];
+
+		OnPlayerFreeze(playerid, true, 0);
+		CamEditing[playerid] = true;
+		return 1;
+	}
+	if(!strcmp(sub, "czas", true))
+	{
+	    new time;
+	    if(sscanf(sub, "d", time))
+	    {
+	        ShowTipForPlayer(playerid, "/cam czas [czas w milisekundach]");
+			return 1;
+		}
+	    CamTime[playerid] = time;
+		return 1;
+	}
+	if(!strcmp(sub, "start", true))
+	{
+	    new Float:pos[3], Float:PosX, Float:PosY;
+	    
+	    GetPlayerPos(playerid, pos[0], pos[1], pos[2]);
+	    GetXYInFrontOfPlayer(playerid, PosX, PosY, CamPos[playerid][0]);
+	    
+	    InterpolateCameraPos(playerid, PosX, PosY, CamPos[playerid][1], pos[0], pos[1], pos[2], CamTime[playerid], CAMERA_MOVE);
+	    InterpolateCameraLookAt(playerid, PosX, PosY, CamPos[playerid][1], pos[0], pos[1], pos[2], CamTime[playerid], CAMERA_MOVE);
+	    return 1;
+	}
+	if(!strcmp(sub, "exit", true))
+	{
+	    SetCameraBehindPlayer(playerid);
+		OnPlayerFreeze(playerid, false, 0);
+		
+		CamEditing[playerid] = false;
+		CamTime[playerid] = 0;
+		return 1;
+	}
+	return 1;
+}
+
 // New's
 
-new baseurl[] = "https://m-rp.net/models";
+new models_url[] = "https://m-rp.net/models";
+new audio_url[] = "https://m-rp.net/audio";
+
 new MySQL:connHandle;
 
 new Text:TextDrawServerLogo;
+new Text:TextDrawMainLogo;
 new Text:TextDrawNews;
 new Text:TD_GroupOption[6][MAX_GROUP_SLOTS];
 
@@ -985,6 +1054,8 @@ enum sAttachEdit
 	aName[32]
 }
 new AttachEdit[MAX_PLAYERS][sAttachEdit];
+
+
 
 // Enums
 enum sPlayer
@@ -1132,7 +1203,7 @@ enum sPlayer
 	
 	bool: pPuttingBag,
 	
-	bool: pCheckWeapon,
+	pCheckWeapon,
 	bool: pCheckPos,
 	
 	pSearches,
@@ -2058,7 +2129,10 @@ new StatusInfo[][sStatusData] =
 	{"AFK od:",         STATUS_TYPE_AFK},
 	{"zapiête pasy",    STATUS_TYPE_BELTS},
 	{"naæpany",         STATUS_TYPE_STONED},
-	{"rêkawice",        STATUS_TYPE_GLOVES}
+	{"rêkawice",        STATUS_TYPE_GLOVES},
+	{"pobity",          STATUS_TYPE_DEFEATED},
+	{"postrzelony",     STATUS_TYPE_SHOT},
+	{"ranny",           STATUS_TYPE_INJURED}
 };
 
 new DeathTypeData[5][32] =
@@ -2117,6 +2191,18 @@ new AchieveInfo[18][sAchieveData] =
 	{"Szybka jazda",            ACHIEVE_FAST,       200}
 };
 
+new AudioData[][32] =
+{
+	{"-"},
+	{"calling_to.mp3"},
+	{"calling.mp3"},
+	{"sms.mp3"},
+	{"alarm.mp3"},
+	{"lspd.mp3"},
+	{"message.mp3"},
+	{"achieve.mp3"}
+};
+
 enum sRaceData
 {
 	rOwner,
@@ -2168,8 +2254,9 @@ enum sActorData
 	aAnim,
 	
 	aText[128],
+	aExtraID,
 	
-	aExtraArray[32]
+	Text3D:aLabel
 };
 
 enum sDoorInfo
@@ -2248,7 +2335,6 @@ public OnGameModeInit()
 		LoadAllAnims();
 		LoadAllAccess();
 		LoadAllSkins();
-		LoadAllCorpses();
 		
 		// Wczytywanie
 		/*
@@ -2287,6 +2373,28 @@ public OnGameModeInit()
 	TextDrawSetOutline(TextDrawServerLogo, 0);
 	TextDrawSetProportional(TextDrawServerLogo, 1);
 	TextDrawSetShadow(TextDrawServerLogo, 1);
+/*
+	TextDrawMainLogo = TextDrawCreate(270.000000, 70.000000, "library:logomajty");
+	TextDrawBackgroundColor(TextDrawMainLogo, 255);
+	TextDrawFont(TextDrawMainLogo, TEXT_DRAW_FONT_MODEL_PREVIEW);
+	TextDrawLetterSize(TextDrawMainLogo, 0.500000, 0.500000);
+	TextDrawColor(TextDrawMainLogo, -1);
+	TextDrawSetOutline(TextDrawMainLogo, 0);
+	TextDrawSetProportional(TextDrawMainLogo, 1);
+	TextDrawSetShadow(TextDrawMainLogo, 1);
+	*/
+	TextDrawMainLogo = TextDrawCreate(-10.000000, -10.000000, "logomajty:logomajty");
+	TextDrawLetterSize(TextDrawMainLogo, -0.231199, 0.60479);
+	TextDrawTextSize(TextDrawMainLogo, 650.000000, 180.000000);
+	TextDrawAlignment(TextDrawMainLogo, 1);
+	TextDrawColor(TextDrawMainLogo, -1);
+	TextDrawUseBox(TextDrawMainLogo, true);
+	TextDrawBoxColor(TextDrawMainLogo, 102);
+	TextDrawSetShadow(TextDrawMainLogo, 0);
+	TextDrawSetOutline(TextDrawMainLogo, 0);
+	TextDrawFont(TextDrawMainLogo, 5);
+	TextDrawSetPreviewModel(TextDrawMainLogo, -2018);
+	TextDrawSetPreviewRot(TextDrawMainLogo, 90.000000, 180.000000, 0.000000, 2.000000);
 
     TextDrawNews = TextDrawCreate(1.000000, 437.000000, "~y~~h~LSN ~w~~>~ Brak sygnalu nadawania.");
 	TextDrawBackgroundColor(TextDrawNews, 255);
@@ -3482,9 +3590,9 @@ task OnSecondTask[1000]()
 			    }
 			}
 			
-   			if(PlayerCache[i][pCheckWeapon])
+   			if(PlayerCache[i][pCheckWeapon] && time > PlayerCache[i][pCheckWeapon])
       		{
-			    // Zapis amunicji
+			    // Anty AmmoCheat
         		if(PlayerCache[i][pItemWeapon] != INVALID_ITEM_ID)
 		        {
        				new itemid = PlayerCache[i][pItemWeapon],
@@ -3498,28 +3606,6 @@ task OnSecondTask[1000]()
 						    format(string, sizeof(string), "AmmoCheat (%d/%d).", weapon_ammo, PlayerItemCache[i][itemid][iValue][1]);
 							GivePlayerPunish(i, INVALID_PLAYER_ID, PUNISH_BAN, string, 30, 0);
 							continue;
-						}
-
-						if(weapon_ammo < PlayerItemCache[i][itemid][iValue][1])
-						{
-							PlayerItemCache[i][itemid][iValue][1] = weapon_ammo;
-						}
-
-						if(GetPlayerWeaponState(i) == WEAPONSTATE_NO_BULLETS)
-						{
-						    if(PlayerItemCache[i][itemid][iValue][1] <= 0)
-						    {
-								ResetPlayerWeaponsEx(i);
-								PlayerCache[i][pCheckWeapon] = false;
-
-								PlayerItemCache[i][itemid][iValue][1] = 0;
-								PlayerItemCache[i][itemid][iUsed] = false;
-
-								orm_update(PlayerItemCache[i][itemid][iOrm]);
-
-								PlayerCache[i][pItemWeapon] = INVALID_ITEM_ID;
-								RemovePlayerAttachedObject(i, SLOT_WEAPON);
-							}
 						}
 					}
 				}
@@ -3536,17 +3622,17 @@ task OnSecondTask[1000]()
 	   					{
 							if(PlayerCache[playerid][pCurrentArea] == PlayerCache[i][pCurrentArea])
 							{
-								//Audio_Set3DPosition(playerid, PlayerCache[playerid][pAudioHandle], PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 15.0);
+                                //PlayStreamedAudio3DForPlayer(playerid, format_url, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ]);
 							}
 						}
 					}
 			    }
 			}
 			
-			if(!(PlayerCache[i][pAdmin] & A_PERM_BASIC))
-			{
+			//if(!(PlayerCache[i][pAdmin] & A_PERM_BASIC))
+			//{
 				// Anty WeaponHack
-				if(PlayerCache[i][pCheckWeapon])
+				if(PlayerCache[i][pCheckWeapon] && time > PlayerCache[i][pCheckWeapon])
 				{
 				    if(!PlayerCache[i][pBW])
 				    {
@@ -3629,13 +3715,13 @@ task OnSecondTask[1000]()
 				    GivePlayerPunish(i, INVALID_PLAYER_ID, PUNISH_KICK, "SpectateHack.", 0, 0);
 					continue;
 				}
-			}
+			//}
 	        
 	        PlayerCache[i][pPosX] = PosX;
 	        PlayerCache[i][pPosY] = PosY;
 	        PlayerCache[i][pPosZ] = PosZ;
 	        
-	        if(!PlayerCache[i][pCheckWeapon])	PlayerCache[i][pCheckWeapon] = true;
+	        if(PlayerCache[i][pCheckWeapon] < time)   PlayerCache[i][pCheckWeapon] = time;
 	        if(!PlayerCache[i][pCheckPos])   	PlayerCache[i][pCheckPos] = true;
 	        
 			PlayerCache[i][pStatus] = GetPlayerStatus(i);
@@ -4186,6 +4272,8 @@ public OnPlayerDisconnect(playerid, reason)
  	if(PlayerCache[playerid][pItemWeapon] != INVALID_ITEM_ID)
  	{
 		new itemid = PlayerCache[playerid][pItemWeapon];
+		PlayerItemCache[playerid][itemid][iUsed] = false;
+		
 		orm_update(PlayerItemCache[playerid][itemid][iOrm]);
  	}
  	
@@ -4274,7 +4362,7 @@ public OnPlayerSpawn(playerid)
 	    return 1;
 	}
 	SetPlayerSpawn(playerid);
-	//LoadPlayerAccess(playerid);
+	LoadPlayerAccess(playerid);
 
 	ResetPlayerWeaponsEx(playerid);
 	PreloadPlayerAnimLib(playerid);
@@ -4484,11 +4572,11 @@ public OnPlayerDeath(playerid, killerid, reason)
 		PlayerItemCache[playerid][itemid][iUsed] = false;
 		orm_update(PlayerItemCache[playerid][itemid][iOrm]);
 		
+		PlayerCache[playerid][pCheckWeapon] = (gettime() + 5);
+		RemovePlayerAttachedObject(playerid, SLOT_WEAPON);
+		
 		ResetPlayerWeaponsEx(playerid);
 		PlayerCache[playerid][pItemWeapon] = INVALID_ITEM_ID;
-
-		PlayerCache[playerid][pCheckWeapon] = false;
-		RemovePlayerAttachedObject(playerid, SLOT_WEAPON);
 	}
 	
 	PlayerCache[playerid][pInteriorID] = GetPlayerInterior(playerid);
@@ -4913,7 +5001,8 @@ public OnPlayerText(playerid, text[])
 					    Streamer_SetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
 					    
 						ClearDynamicActorAnimations(actorid);
-            			ApplyDynamicActorAnimation(actorid, AnimCache[anim_id][aLib], AnimCache[anim_id][aName], AnimCache[anim_id][aSpeed], AnimCache[anim_id][aOpt1], AnimCache[anim_id][aOpt2], AnimCache[anim_id][aOpt3], AnimCache[anim_id][aOpt4], AnimCache[anim_id][aOpt5]);						break;
+            			ApplyDynamicActorAnimation(actorid, AnimCache[anim_id][aLib], AnimCache[anim_id][aName], AnimCache[anim_id][aSpeed], AnimCache[anim_id][aOpt1], AnimCache[anim_id][aOpt2], AnimCache[anim_id][aOpt3], AnimCache[anim_id][aOpt4], AnimCache[anim_id][aOpt5]);
+						break;
 					}
 				}
 				else
@@ -5408,7 +5497,7 @@ public OnPlayerEnterCheckpoint(playerid)
 			DisablePlayerCheckpoint(playerid);
 			Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, PosX, PosY, PosZ);
 			
-			SetPlayerCheckpoint(playerid, PosX, PosY, PosZ, 5.0);
+   			SetPlayerCheckpoint(playerid, PosX, PosY, PosZ, 5.0);
 			
 			PlayerCache[playerid][pCheckpoint] 	= CHECKPOINT_DOOR;
 			PlayerCache[playerid][pLastMileage] = floatround(PlayerCache[playerid][pMileage]);
@@ -5436,6 +5525,13 @@ public OnPlayerEnterCheckpoint(playerid)
             
 			DeletePackage(package_id);
 			TD_ShowSmallInfo(playerid, 3, "Paczka zostala ~g~dostarczona ~w~pomyslnie.~n~Otrzymales ~y~$%d ~w~do swojego portfela.", price);
+		}
+		case CHECKPOINT_ACTOR:
+		{
+		    DisablePlayerCheckpoint(playerid);
+		    PlayerCache[playerid][pCheckpoint] = CHECKPOINT_NONE;
+		    
+		    TD_ShowSmallInfo(playerid, 5, "Dotarles na ~r~miejsce ~w~napadu. Dokonaj ~y~interakcji ~w~z aktorem, by go przesluchac.");
 		}
 	}
 	return 1;
@@ -5549,7 +5645,7 @@ public OnPlayerRequestSpawn(playerid)
 {
 	return 1;
 }
-
+/*
 public OnObjectMoved(objectid)
 {
 	return 1;
@@ -5559,6 +5655,7 @@ public OnPlayerObjectMoved(playerid, objectid)
 {
 	return 1;
 }
+*/
 
 public OnDynamicObjectMoved(objectid)
 {
@@ -5576,6 +5673,8 @@ public OnDynamicObjectMoved(objectid)
 	            
 	            GetDynamicObjectPos(basket_object_id, oPosX, oPosY, oPosZ);
             	GetXYBehindOfObject(basket_object_id, tPosX, tPosY, 0.5);
+            	
+            	StopDynamicObject(objectid);
             	
 				if((tPosX < oPosX + 0.5) && (tPosX > oPosX - 0.5) && (tPosY < oPosY + 0.5) && (tPosY > oPosY - 0.5) && (tPosZ < (oPosZ + 2) + 0.5) && (tPosZ > (oPosZ + 2) - 0.5))
 				{
@@ -6137,6 +6236,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 			}
 	    }
 	    
+	    /*
 	    // Celowanie z broni
 	    if(PlayerCache[playerid][pItemWeapon] != INVALID_ITEM_ID)
 	    {
@@ -6160,7 +6260,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 					}
 				}
 			}
-	    }
+	    }*/
 	    
 		// Rzuty do kosza
 		if(PlayerCache[playerid][pBasketObject] != INVALID_OBJECT_ID)
@@ -6564,6 +6664,35 @@ public OnPlayerUpdate(playerid)
 		}
 	}
 	
+	if(CamEditing[playerid])
+	{
+		new keysa, uda, lra,
+		    Float:PosX, Float:PosY, Float:PosZ;
+		    
+		GetPlayerKeys(playerid, keysa, uda, lra);
+
+		if(lra != 0 || uda != 0)
+		{
+			// Strza³ka w lewo
+			if(lra < 0)	CamPos[playerid][1] -= 0.1;
+
+			// Strza³ka w prawo
+ 			if(lra > 0)	CamPos[playerid][1] += 0.1;
+
+			// Strza³ka w górê
+			if(uda > 0)	CamPos[playerid][0] += 0.1;
+
+			// Strza³ka w dó³
+			if(uda < 0)	CamPos[playerid][0] -= 0.1;
+
+			GetXYInFrontOfPlayer(playerid, PosX, PosY, CamPos[playerid][0]);
+			SetPlayerCameraPos(playerid, PosX, PosY, CamPos[playerid][1]);
+			
+			GetPlayerPos(playerid, PosX, PosY, PosZ);
+			SetPlayerCameraLookAt(playerid, PosX, PosY, CamPos[playerid][1], CAMERA_CUT);
+		}
+	}
+	
 	// Pozycja 3D Tekstu & Aktora
 	if(PlayerCache[playerid][pEdit3DText] != INVALID_3DTEXT_ID || PlayerCache[playerid][pEditActor] != INVALID_ACTOR_ID)
 	{
@@ -6769,10 +6898,39 @@ public OnPlayerGiveDamage(playerid, damagedid, Float:amount, weaponid, bodypart)
 	return 1;
 }
 
+public OnPlayerWeaponShot(playerid, weaponid, hittype, hitid, Float:fX, Float:fY, Float:fZ)
+{
+	if(PlayerCache[playerid][pItemWeapon] != INVALID_ITEM_ID)
+	{
+		new itemid = PlayerCache[playerid][pItemWeapon];
+		PlayerItemCache[playerid][itemid][iValue][1] --;
+	     
+		if(PlayerItemCache[playerid][itemid][iValue][1] <= 0)
+		{
+			ResetPlayerWeaponsEx(playerid);
+			PlayerCache[playerid][pCheckWeapon] = (gettime() + 5);
+
+			PlayerItemCache[playerid][itemid][iValue][1] = 0;
+			PlayerItemCache[playerid][itemid][iUsed] = false;
+
+			orm_update(PlayerItemCache[playerid][itemid][iOrm]);
+
+			PlayerCache[playerid][pItemWeapon] = INVALID_ITEM_ID;
+			RemovePlayerAttachedObject(playerid, SLOT_WEAPON);
+ 		}
+    }
+	return 1;
+}
+
+public OnPlayerShootDynamicObject(playerid, weaponid, objectid, Float:x, Float:y, Float:z)
+{
+	return 1;
+}
+
 
 public OnPlayerStreamIn(playerid, forplayerid)
 {
-	Streamer_Update(forplayerid);
+	Streamer_Update(forplayerid, STREAMER_TYPE_3D_TEXT_LABEL);
 	return 1;
 }
 
@@ -6848,7 +7006,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	}
 	
     printf("[dial] %s (UID: %d, GID: %d): [%s] (%d, %d, %d)", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], inputtext, playerid, dialogid, response);
-	
+
 	if(dialogid == D_STATS)
 	{
 	    if(response)
@@ -7609,7 +7767,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			format(title, sizeof(title), "Opcje przedmiotu: %s (UID: %d)", PlayerItemCache[playerid][itemid][iName], PlayerItemCache[playerid][itemid][iUID]);
 
 			PlayerCache[playerid][pItemArray][ITEM_NONE] = itemid;
-			ShowPlayerDialog(playerid, D_ITEM_OPTIONS, DIALOG_STYLE_TABLIST_HEADERS, title, "*\tAkcja\n01\tOd³ó¿ w pobli¿u\n02\tPoka¿ informacje\n03\tSprzedaj innemu graczowi\n04\tW³ó¿ do przedmiotu\n05\tDodaj do craftingu\n06\tWsadŸ do schowka\n07\tOddaj innemu graczowi za darmo\n08\tRozdziel przedmiot\n09\tDodaj do ulubionych", "Wybierz", "Wróæ");
+			ShowPlayerDialog(playerid, D_ITEM_OPTIONS, DIALOG_STYLE_TABLIST_HEADERS, title, "*\tAkcja\n01\tOd³ó¿ w pobli¿u\n02\tPoka¿ informacje\n03\tSprzedaj innemu graczowi\n04\tW³ó¿ do przedmiotu\n05\tDodaj do craftingu\n06\tWsadŸ do schowka\n07\tOddaj innemu graczowi za darmo\n08\tRozdziel przedmiot\n09\tDodaj do ulubionych", "Wybierz", "Zamknij");
 			return 1;
 		}
 	}
@@ -7765,7 +7923,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		}
 		else
 		{
-		    CallLocalFunction("ListPlayerItems", "d", playerid);
 		    return 1;
 		}
 	}
@@ -8171,7 +8328,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		       	ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³ow¹ kwotê.");
 		        return 1;
 		    }
-		    OnPlayerSendOffer(playerid, giveplayer_id, PlayerItemCache[playerid][itemid][iName], OFFER_ITEM, itemid, 0, price);
+		    OnPlayerSendOffer(playerid, giveplayer_id, PlayerItemCache[playerid][itemid][iName], OFFER_ITEM, PlayerItemCache[playerid][itemid][iUID], 0, price);
 	        return 1;
 	    }
 	    else
@@ -9115,7 +9272,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `char_uid`, `char_gid` FROM `"SQL_PREF"characters` WHERE char_banknumb = '%d' LIMIT 1", bank_number);
 			tmp_cache = mysql_query(connHandle, query);
 
-			if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+			if(rows > 0)
 			{
 			    cache_get_value_index_int(0, 0, char_uid);
 			    cache_get_value_index_int(0, 1, char_gid);
@@ -9208,9 +9366,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	    	new itemid = PlayerCache[playerid][pItemArray][ITEM_DISC], audio_url[128],
-		        audio_uid;
-
+	    	new itemid = PlayerCache[playerid][pItemArray][ITEM_DISC], format_url[128], audio_uid;
 	        if(strfind(inputtext, "http://", true))
 	        {
 	            ShowPlayerDialog(playerid, D_DISC_RECORD, DIALOG_STYLE_INPUT, "Czysta p³yta » Nagrywanie", "To jest czysta p³yta, na której mo¿esz nagraæ dowolny kawa³ek.\nWklej w pole tekstowe poni¿ej link do muzyki, która ma byæ odtwarzana poprzez urz¹dzenia.\n\nUpewnij siê, ¿e link jest poprawny w innym wypadku muzyka mo¿e nie byæ s³yszalna.\n\nD³ugoœæ linku nie mo¿e przekroczyæ 64 znaków.\n\n{FF0000}* Link musi rozpoczynaæ siê na \"http://\".", "Nagraj", "Anuluj");
@@ -9226,8 +9382,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	            ShowPlayerDialog(playerid, D_DISC_RECORD, DIALOG_STYLE_INPUT, "Czysta p³yta » Nagrywanie", "To jest czysta p³yta, na której mo¿esz nagraæ dowolny kawa³ek.\nWklej w pole tekstowe poni¿ej link do muzyki, która ma byæ odtwarzana poprzez urz¹dzenia.\n\nUpewnij siê, ¿e link jest poprawny w innym wypadku muzyka mo¿e nie byæ s³yszalna.\n\nD³ugoœæ linku nie mo¿e przekroczyæ 64 znaków.\n\n{FF0000}* Link nie mo¿e przekroczyæ 64 znaków!", "Nagraj", "Anuluj");
 				return 1;
 	        }
-	        mysql_escape_string(inputtext, audio_url);
-			mysql_query_format("INSERT INTO `"SQL_PREF"audiourls` (`audio_url`) VALUES ('%s')", audio_url);
+	        mysql_escape_string(inputtext, format_url);
+			mysql_query_format("INSERT INTO `"SQL_PREF"audiourls` (`audio_url`) VALUES ('%s')", format_url);
 
 			audio_uid = cache_insert_id();
 
@@ -9329,7 +9485,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `channel_ownertype`, `channel_owner`, `channel_password`  FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
 			tmp_cache = mysql_query(connHandle, query);
 
-	        if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+	        if(rows > 0)
 	        {
 	            cache_get_value_index_int(0, 0, channel_ownertype);
 	            cache_get_value_index_int(0, 1, channel_owner);
@@ -9386,7 +9543,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `channel_uid` FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' AND channel_password = '%s' LIMIT 1", radio_canal, channel_password);
 			tmp_cache = mysql_query(connHandle, query);
 
-			if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+			if(rows > 0)
 			{
 			    SetPlayerVehicleRadioCanal(playerid, vehid, radio_canal);
 				ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pomyœlnie po³¹czy³eœ siê z kana³em %d.\nU¿yj komendy /cb, by porozumiewaæ siê na kanale z innymi.", radio_canal);
@@ -9418,8 +9576,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `channel_uid` FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
 			tmp_cache = mysql_query(connHandle, query);
 
-
-	        if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+	        if(rows > 0)
 	        {
 	            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten kana³ jest niedostêpny.");
 	        }
@@ -9476,7 +9634,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `channel_ownertype`, `channel_owner` FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
 	        tmp_cache = mysql_query(connHandle, query);
 	        
-			if(cache_get_row_count(rows))
+	        cache_get_row_count(rows);
+			if(rows > 0)
 			{
 				cache_get_value_index_int(0, 0, channel_ownertype);
 				cache_get_value_index_int(0, 1, channel_owner);
@@ -9553,7 +9712,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `channel_ownertype`, `channel_owner` FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
 			tmp_cache = mysql_query(connHandle, query);
 
-			if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+			if(rows > 0)
 			{
 				cache_get_value_index_int(0, 0, channel_ownertype);
 				cache_get_value_index_int(0, 1, channel_owner);
@@ -9614,7 +9774,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `channel_ownertype`, `channel_owner` FROM `"SQL_PREF"radio_channels` WHERE channel_canal = '%d' LIMIT 1", radio_canal);
             tmp_cache = mysql_query(connHandle, query);
 
-			if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+			if(rows > 0)
 			{
 				cache_get_value_index_int(0, 0, channel_ownertype);
 				cache_get_value_index_int(0, 1, channel_owner);
@@ -9766,7 +9927,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		mysql_format(connHandle, query, sizeof(query), "SELECT `attach_model`, `attach_bone`, `attach_x`, `attach_y`, `attach_z`, `attach_rx`, `attach_ry`, `attach_rz`, `attach_sx`, `attach_sy`, `attach_sz` FROM `"SQL_PREF"attached_objects` WHERE attach_uid = '%d' LIMIT 1", access_uid);
 		tmp_cache = mysql_query(connHandle, query);
 
-		if(cache_get_row_count(rows))
+        cache_get_row_count(rows);
+		if(rows > 0)
 		{
 		    cache_get_value_index_int(0, 0, access_model);
 		    cache_get_value_index_int(0, 1, access_bone);
@@ -9861,7 +10023,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `char_name`, `directory_reason`, `directory_date`, `directory_pdp` FROM `"SQL_PREF"directory`, `"SQL_PREF"characters` WHERE char_uid = directory_giver AND directory_uid = '%d' LIMIT 1", directory_uid);
             tmp_cache = mysql_query(connHandle, query);
 
-			if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+			if(rows > 0)
 			{
 			    cache_get_value_index(0, 0, giver_name, 32);
 			    
@@ -10152,7 +10315,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			mysql_format(connHandle, query, sizeof(query), "SELECT `order_item_type`, `order_item_value1`, `order_item_value2`, `order_type` FROM `"SQL_PREF"orders` WHERE order_uid = '%d' LIMIT 1", OrderCache[playerid][oUID]);
             tmp_cache = mysql_query(connHandle, query);
 
-			if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+			if(rows > 0)
 			{
 				cache_get_value_index_int(0, 0, order_item_type);
 				
@@ -10976,6 +11140,28 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        return 1;
 	    }
 	}
+	if(dialogid == D_ACTOR_CORPSE)
+	{
+	    if(response)
+	    {
+			if(!strfind(inputtext, "1. Zabezpiecz zw³oki (zapakuj w folie)", true))
+			{
+			    new actorid = PlayerCache[playerid][pMainTable], ActorData[sActorData];
+			    Streamer_GetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
+			    
+			    DeleteActor(actorid);
+			    CreatePlayerItem(playerid, ActorData[aName], ITEM_CORPSE, 0, 0);
+			    
+				ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Przedmiot %s zosta³y pomyœlnie zabezpieczone, okryte foli¹.\nPojawi³y siê one w Twoim ekwpunku, dziêki czemu mo¿esz je teraz swobodnie transportowaæ.", ActorData[aName]);
+			    return 1;
+			}
+			return 1;
+	    }
+	    else
+	    {
+	        return 1;
+	    }
+	}
 	if(dialogid == D_OBJECT_PRIORITY)
 	{
  		if(response)
@@ -11254,7 +11440,7 @@ public OnPlayerEditAttachedObject(playerid, response, index, modelid, boneid, Fl
 	{
 	    case EDIT_RESPONSE_CANCEL:
 	    {
-	        new itemid = PlayerCache[playerid][pMainTable];
+	        new itemid = PlayerCache[playerid][pItemArray][ITEM_CLOTH_ACCESS];
 	        
 	        PlayerItemCache[playerid][itemid][iUsed] = false;
 			orm_update(PlayerItemCache[playerid][itemid][iOrm]);
@@ -11264,10 +11450,10 @@ public OnPlayerEditAttachedObject(playerid, response, index, modelid, boneid, Fl
 	    }
 	    case EDIT_RESPONSE_FINAL:
 	    {
-	        new itemid = PlayerCache[playerid][pMainTable];
+	        new itemid = PlayerCache[playerid][pItemArray][ITEM_CLOTH_ACCESS];
 	        if((fOffsetX > 0.2 || fOffsetX < -0.1) || (fOffsetY > 0.15 || fOffsetY < -0.15) || (fOffsetZ > 0.025 || fOffsetZ < -0.025) || (fScaleX > 1.5 || fScaleX < 0.5) || (fScaleY > 1.5 || fScaleY < 0.5) || (fScaleZ > 1.5 || fScaleZ < 0.5))
 	        {
-	            if(PlayerItemCache[playerid][itemid][iValue][0])
+	            if(PlayerItemCache[playerid][itemid][iValue][0] != 0)
 	            {
 	                // Pobieranie pozycji z bazy wzglêdem value1
 	                new access_uid = PlayerItemCache[playerid][itemid][iValue][0],
@@ -11280,7 +11466,8 @@ public OnPlayerEditAttachedObject(playerid, response, index, modelid, boneid, Fl
 					mysql_format(connHandle, query, sizeof(query), "SELECT `attach_x`, `attach_y`, `attach_z`, `attach_rx`, `attach_ry`, `attach_rz`, `attach_sx`, `attach_sy`, `attach_sz` FROM `"SQL_PREF"attached_objects` WHERE attach_uid = '%d' LIMIT 1", access_uid);
 	                tmp_cache = mysql_query(connHandle, query);
 	                
-					if(cache_get_row_count(rows))
+	                cache_get_row_count(rows);
+					if(rows > 0)
 					{
 					    cache_get_value_index_float(0, 0, access_posx);
 					    cache_get_value_index_float(0, 1, access_posy);
@@ -11311,10 +11498,10 @@ public OnPlayerEditAttachedObject(playerid, response, index, modelid, boneid, Fl
 	        }
 	        
 	        // Zapisz pozycjê
-	        if(PlayerItemCache[playerid][itemid][iValue][0])
+	        if(PlayerItemCache[playerid][itemid][iValue][0] != 0)
 	        {
 	            new access_uid = PlayerItemCache[playerid][itemid][iValue][0];
-	            mysql_query_format("UPDATE `"SQL_PREF"attached_objects` SET attach_s = '%f', attach_y = '%f', attach_z = '%f', attach_rx = '%f', attach_ry = '%f', attach_rz = '%f', attach_sx = '%f', attach_sy = '%f', attach_sz = '%f' WHERE attach_uid = '%d' LIMIT 1", fOffsetX, fOffsetY, fOffsetZ, fRotX, fRotY, fRotZ, fScaleX, fScaleY, fScaleZ, access_uid);
+	            mysql_query_format("UPDATE `"SQL_PREF"attached_objects` SET attach_x = '%f', attach_y = '%f', attach_z = '%f', attach_rx = '%f', attach_ry = '%f', attach_rz = '%f', attach_sx = '%f', attach_sy = '%f', attach_sz = '%f' WHERE attach_uid = '%d' LIMIT 1", fOffsetX, fOffsetY, fOffsetZ, fRotX, fRotY, fRotZ, fScaleX, fScaleY, fScaleZ, access_uid);
 			}
 	        else
 	        {
@@ -12101,6 +12288,7 @@ public DeleteDoor(doorid)
 	    }
 	}
 
+    mysql_query_format("DELETE FROM `"SQL_PREF"doors` WHERE door_uid = '%d'", DoorData[dUID]);
 	DestroyDynamicPickup(doorid);
 	return 1;
 }
@@ -12686,16 +12874,17 @@ public OnPlayerUseItem(playerid, itemid)
 		
 		if(!PlayerItemCache[playerid][itemid][iUsed])
 		{
-		    PlayerCache[playerid][pCheckWeapon] = false;
+		    PlayerCache[playerid][pCheckWeapon] = (gettime() + 5);
 		
 		    PlayerCache[playerid][pItemWeapon] = itemid;
 		    GivePlayerWeapon(playerid, PlayerItemCache[playerid][itemid][iValue][0], PlayerItemCache[playerid][itemid][iValue][1]);
 		    
 		    PlayerItemCache[playerid][itemid][iUsed] = true;
+		    orm_update(PlayerItemCache[playerid][itemid][iOrm]);
 		}
 		else
 		{
-		    PlayerCache[playerid][pCheckWeapon] = false;
+		    PlayerCache[playerid][pCheckWeapon] = (gettime() + 5);
 		
 		    ResetPlayerWeaponsEx(playerid);
 		    PlayerCache[playerid][pItemWeapon] = INVALID_ITEM_ID;
@@ -12943,7 +13132,8 @@ public OnPlayerUseItem(playerid, itemid)
 		mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"chits` WHERE chit_uid = '%d' LIMIT 1", PlayerItemCache[playerid][itemid][iValue][0]);
         tmp_cache = mysql_query(connHandle, query);
 
-		if(cache_get_row_count(rows))
+        cache_get_row_count(rows);
+		if(rows > 0)
 		{
 		    cache_get_value_index_int(0, 0, chit_uid);
 		    cache_get_value_index(0, 1, chit_desc, 128);
@@ -13067,17 +13257,18 @@ public OnPlayerUseItem(playerid, itemid)
 				    return 0;
 				}
 				
-    			new audio_url[128];
+    			new format_url[128];
     			new rows, Cache:tmp_cache, query[128];
     			
 				mysql_format(connHandle, query, sizeof(query), "SELECT `audio_url` FROM `"SQL_PREF"audiourls` WHERE audio_uid = '%d' LIMIT 1", PlayerItemCache[playerid][itemid][iValue][0]);
                 tmp_cache = mysql_query(connHandle, query);
 
-				if(cache_get_row_count(rows))
+                cache_get_row_count(rows);
+				if(rows > 0)
 				{
 
-				    cache_get_value_index(0, 0, audio_url, 128);
-				    strmid(CarInfo[vehid][cAudioURL], audio_url, 0, strlen(audio_url), 64);
+				    cache_get_value_index(0, 0, format_url, 128);
+				    strmid(CarInfo[vehid][cAudioURL], format_url, 0, strlen(format_url), 64);
 
 				    // Za³¹cz muzê u wszystkich, nie tylko u siebie
 				    foreach(new i : Player)
@@ -13173,16 +13364,17 @@ public OnPlayerUseItem(playerid, itemid)
 			PlayerCache[playerid][pItemPlayer] = itemid;
 			PlayerItemCache[playerid][itemid][iUsed] = true;
 
-   			new audio_url[128];
+   			new format_url[128];
 			new rows, Cache:tmp_cache, query[128];
 
 			mysql_format(connHandle, query, sizeof(query), "SELECT `audio_url` FROM `"SQL_PREF"audiourls` WHERE audio_uid = '%d' LIMIT 1", PlayerItemCache[playerid][itemid][iValue][0]);
             tmp_cache = mysql_query(connHandle, query);
 
-			if(cache_get_row_count(rows))
+            cache_get_row_count(rows);
+			if(rows > 0)
 			{
-   				cache_get_value_index(0, 0, audio_url, 128);
-   				PlayStreamedAudioForPlayer(playerid, audio_url);
+   				cache_get_value_index(0, 0, format_url, 128);
+   				PlayStreamedAudioForPlayer(playerid, format_url);
 			}
 			if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 
@@ -13538,127 +13730,7 @@ public OnPlayerUseItem(playerid, itemid)
 	
 	if(item_type == ITEM_CORPSE)
 	{
-		if(PlayerCache[playerid][pDuty][DUTY_GROUP] == INVALID_GROUP_ID)
-		{
-		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby u¿yæ tego przedmiotu, musisz byæ na s³u¿bie grupy.");
-		    return 0;
-		}
-		new group_id = PlayerCache[playerid][pDuty][DUTY_GROUP];
-		if(GroupData[group_id][gType] != G_TYPE_POLICE && GroupData[group_id][gType] != G_TYPE_MEDICAL && GroupData[group_id][gType] != G_TYPE_FBI)
-		{
-		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz odpowiedniego doœwiadczenia, by móc zidentyfikowaæ zw³oki.");
-		    return 0;
-		}
-		new corpse_uid = PlayerItemCache[playerid][itemid][iValue][0],
-		    corpse_death, corpse_owner, corpse_killer, corpse_weapon, corpse_body, corpse_date;
-
-		new rows, Cache:tmp_cache, query[512];
-
-		mysql_format(connHandle, query, sizeof(query), "SELECT `corpse_death`, `corpse_owner`, `corpse_killer`, `corpse_weapon`, `corpse_body`, `corpse_date` FROM `"SQL_PREF"corpses` WHERE corpse_uid = '%d' LIMIT 1", corpse_uid);
-        tmp_cache = mysql_query(connHandle, query);
-
-		if(cache_get_row_count(rows))
-		{
-		    cache_get_value_index_int(0, 0, corpse_death);
-		    cache_get_value_index_int(0, 1, corpse_owner);
-		    cache_get_value_index_int(0, 2, corpse_killer);
-		    cache_get_value_index_int(0, 3, corpse_weapon);
-		    cache_get_value_index_int(0, 4, corpse_body);
-		    
-		    cache_get_value_index_int(0, 5, corpse_date);
-		}
-		if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
-
-		switch(GroupData[group_id][gType])
-		{
-		    case G_TYPE_POLICE, G_TYPE_FBI:
-		    {
-		        if(corpse_killer)
-		        {
-					ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zbieraj¹c dowody z cia³a oraz jego otoczenia jesteœ w stanie wyj¹æ DNA zabójcy: %s.", CharCode(corpse_killer));
-				}
-				else
-				{
-				    ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zabójcy uda³o siê idealnie zatrzeæ dowody zbrodni.");
-				}
-		    }
-		    case G_TYPE_MEDICAL:
-		    {
-		        if(strfind(PlayerItemCache[playerid][itemid][iName], "(niezidentyfikowane)", true) != -1)
-		        {
-  				    new item_name[32];
-					format(item_name, sizeof(item_name), "Zwloki (DNA: %s)", CharCode(corpse_owner));
-					
-					strmid(PlayerItemCache[playerid][itemid][iName], item_name, 0, strlen(item_name), 32);
-					orm_update(PlayerItemCache[playerid][itemid][iOrm]);
-
-					ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Jako medyk, by³eœ w stanie zidentyfikowaæ zw³oki.\nZw³oki zosta³y pomyœlnie zidentyfikowane (DNA: %s).", CharCode(corpse_owner));
-		        }
-		        else
-				{
-  					new corpse_desc[512], list_body_part[256],
-  					    year, month, day, hour, minute, second;
-  					
-		 			for(new bp_id = 0; bp_id < sizeof(BodyPartInfo); bp_id++)
-					{
-		    			if(BodyPartInfo[bp_id][bpType] & corpse_body)
-		    			{
-		        			format(list_body_part, sizeof(list_body_part), "%s, %s", list_body_part, BodyPartInfo[bp_id][bpName]);
-						}
-					}
-
-					if(strlen(list_body_part))
-					{
-		    			strdel(list_body_part, 0, 2);
-					}
-					else
-					{
-		    			format(list_body_part, sizeof(list_body_part), "brak");
-					}
-  					
-					TimestampToDate(corpse_date, year, month, day, hour, minute, second, 1);
-					format(corpse_desc, sizeof(corpse_desc), "Dok³adna data zgonu %02d/%02d/%d %02d:%02d.\nPrzyczyna œmierci: %s\nWidoczne obra¿enia: %s", day, month, year, hour, minute, DeathTypeData[corpse_death][0], list_body_part);
-
-					if(corpse_weapon)
-					{
-						new weapon_id;
-						
-						mysql_format(connHandle, query, sizeof(query), "SELECT `item_value1` FROM `"SQL_PREF"items` WHERE item_uid = '%d' LIMIT 1", corpse_weapon);
-                        tmp_cache = mysql_query(connHandle, query);
-
-						cache_get_value_index_int(0, 0, weapon_id);
-						if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
-
-  						new weapon_type = GetWeaponType(weapon_id), weapon_name[24];
-		    			GetWeaponName(weapon_id, weapon_name, 24);
-
-						switch(weapon_type)
-						{
-							case WEAPON_TYPE_LIGHT:
-					        {
-								format(corpse_desc, sizeof(corpse_desc), "%s\n\nWidaæ wyraŸnie, ¿e cia³o zosta³o zranione za pomoc¹ broni lekkiej.\nBadaj¹c ³uski znajduj¹ce siê przy ciele martwego, poznajesz broñ zabójcy.", corpse_desc);
-							}
-					        case WEAPON_TYPE_MELEE:
-					        {
-					            format(corpse_desc, sizeof(corpse_desc), "%s\n\nWidaæ wyraŸnie, ¿e cia³o zosta³o zranione za pomoc¹ broni bia³ej.\nS¹dz¹c po ogólnych obra¿eniach, mo¿esz poznaæ szczegó³y narzêdzia zbrodni.", corpse_desc);
-					        }
-					        case WEAPON_TYPE_HEAVY:
-					        {
-					            format(corpse_desc, sizeof(corpse_desc), "%s\n\nOfiara musia³a zostaæ raniona za pomoc¹ broni ciê¿kiej.\nBadaj¹c ³uski znajduj¹ce siê przy ciele martwego, poznajesz broñ zabójcy.", corpse_desc);
-		  			        }
-						}
-
-						format(corpse_desc, sizeof(corpse_desc), "%s\n\nModel: %d\nNazwa: %s\nNr. identyfikacyjny: %d", corpse_desc, weapon_id, weapon_name, corpse_weapon);
-					}
-					else
-					{
-						format(corpse_desc, sizeof(corpse_desc), "%s\n\nObra¿enia nie wskazuj¹ na ¿aden przyrz¹d oraz broñ.", corpse_desc);
-					}
-					
-					ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Badanie zw³ok", corpse_desc, "OK", "");
-		        }
-		    }
-		}
+		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "%s\n\nZabezpieczone zw³oki nie mog¹ ju¿ zostaæ u¿yte.\nMo¿esz je przetransportowaæ w pojeŸdzie, schowaæ w kostnicy lub sporz¹dziæ pogrzeb.", PlayerItemCache[playerid][itemid][iName]);
 	    return 1;
 	}
 	
@@ -13789,8 +13861,7 @@ public OnPlayerUseItem(playerid, itemid)
     			{
 					if(GetPlayerAreaID(i) == areaid)
 					{
-		   				//Audio_Stop(i, PlayerCache[playerid][pAudioHandle]);
-					    PlayerCache[i][pAudioHandle] = 0;
+                        StopStreamedAudioForPlayer(i);
 					}
 				}
 			}
@@ -13815,15 +13886,16 @@ public OnPlayerUseItem(playerid, itemid)
 			PlayerCache[playerid][pItemBoombox] = itemid;
 			PlayerItemCache[playerid][itemid][iUsed] = true;
 
-   			new audio_url[128];
+   			new format_url[128];
 			new rows, Cache:tmp_cache, query[256];
 
 			mysql_format(connHandle, query, sizeof(query), "SELECT `audio_url` FROM `"SQL_PREF"audiourls` WHERE audio_uid = '%d' LIMIT 1", PlayerItemCache[playerid][itemid][iValue][0]);
             tmp_cache = mysql_query(connHandle, query);
 
-			if(cache_get_row_count(rows))
+    		cache_get_row_count(rows);
+			if(rows > 0)
 			{
-   				cache_get_value_index(0, 0, audio_url, 128);
+   				cache_get_value_index(0, 0, format_url, 128);
    				
    				foreach(new i : Player)
    				{
@@ -13831,13 +13903,13 @@ public OnPlayerUseItem(playerid, itemid)
    				    {
    				        if(PlayerCache[i][pCurrentArea] == PlayerCache[playerid][pCurrentArea])
    				        {
-   				            //PlayerCache[i][pAudioHandle] = Audio_PlayStreamed(i, audio_url);
+                            PlayStreamedAudio3DForPlayer(i, format_url, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]);
    				        }
    				    }
    				}
    				
-       			PlayStreamedAudioForPlayer(playerid, audio_url);
-   				strmid(AreaData[aAudioURL], audio_url, 0, strlen(audio_url), 128);
+       			PlayStreamedAudioForPlayer(playerid, format_url);
+   				strmid(AreaData[aAudioURL], format_url, 0, strlen(format_url), 128);
 			}
 			if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 			
@@ -13944,8 +14016,13 @@ public OnPlayerDropItem(playerid, itemid)
 
 public OnPlayerRaiseItems(playerid)
 {
-	new rows, main_query[2048], query[128], string_lenght, item_uid, items_count, string[128],
-		object_id, object_extra_id, item_place = GetExternalItemCachePlace(playerid), item_owner;
+	new rows, main_query[2048], query[128], string_lenght, item_uid, items_count, string[128], ObjectData[MAX_VIS_OBJECTS],
+		object_id, count_objects, item_place = GetExternalItemCachePlace(playerid), item_owner;
+		
+	new Float:PosX, Float:PosY, Float:PosZ,
+	    virtual_world = GetPlayerVirtualWorld(playerid);
+	    
+	GetPlayerPos(playerid, PosX, PosY, PosZ);
 		
 	switch(item_place)
 	{
@@ -13975,10 +14052,44 @@ public OnPlayerRaiseItems(playerid)
 		}
 		case PLACE_ACTOR:
 		{
-		    new actorid = PlayerCache[playerid][pMainTable], ActorData[sActorData];
+		    new actorid = PlayerCache[playerid][pMainTable], ActorData[sActorData],
+				Float:actor_pos[3], group_id;
+				
 		    Streamer_GetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
+		    Streamer_GetItemPos(STREAMER_TYPE_ACTOR, actorid, actor_pos[0], actor_pos[1], actor_pos[2]);
 		    
 		    item_owner = ActorData[aUID];
+		    
+		    // Wyœlij informacje do PD
+			foreach(new i : Player)
+			{
+				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+    			{
+					if(PlayerCache[i][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
+					{
+						group_id = PlayerCache[i][pDuty][DUTY_GROUP];
+ 						if(GroupData[group_id][gType] == G_TYPE_POLICE)
+      					{
+							SendClientMessage(i, COLOR_GREEN, "Centrala: Do wszystkich jednostek, otrzymaliœmy zg³oszenie:");
+	       					SendClientFormatMessage(i, COLOR_GREEN, "Zg³aszaj¹cy: anonim, treœæ: Ktoœ napad³ na przechodnia w tych okolicach!");
+
+							TD_ShowSmallInfo(i, 5, "Na mapie zaznaczono ~r~pozycje~w~, w ktorej doszlo do napadu na aktora.");
+
+							SetPlayerCheckpoint(i, actor_pos[0], actor_pos[1], actor_pos[2], 2.0);
+							PlayerCache[i][pCheckpoint] = CHECKPOINT_ACTOR;
+						}
+					}
+				}
+			}
+			new anim_id = GetAnimByCommand(".chowaj");
+			if(anim_id != INVALID_ANIM_ID)
+			{
+				ActorData[aAnim] = AnimCache[anim_id][aUID];
+
+				ClearDynamicActorAnimations(actorid);
+				ApplyDynamicActorAnimation(actorid, AnimCache[anim_id][aLib], AnimCache[anim_id][aName], AnimCache[anim_id][aSpeed], AnimCache[anim_id][aOpt1], AnimCache[anim_id][aOpt2], AnimCache[anim_id][aOpt3], AnimCache[anim_id][aOpt4], AnimCache[anim_id][aOpt5]);
+			}
+			Streamer_SetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
 		}
 	}
 
@@ -14021,17 +14132,14 @@ public OnPlayerRaiseItems(playerid)
 		// Usuñ obiekt przedmiotu
 		if(item_place == PLACE_NONE)
 		{
-			object_extra_id = (item_uid * -1);
-			for (new player_object = 0; player_object <= MAX_OBJECTS; player_object++)
+			count_objects = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, 3.0, virtual_world);
+			for (new object = 0; object < count_objects; object++)
 			{
-	 			if(IsValidPlayerObject(playerid, player_object))
-	 			{
-					object_id = Streamer_GetItemStreamerID(playerid, STREAMER_TYPE_OBJECT, player_object);
-					if(Streamer_IsInArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, object_extra_id))
-	  				{
-						DestroyDynamicObject(object_id);
-						break;
-					}
+				object_id = ObjectData[object];
+				if(GetObjectUID(object_id) == (item_uid * -1))
+				{
+				    DestroyDynamicObject(object_id);
+				    break;
 				}
 			}
 		}
@@ -14062,7 +14170,9 @@ public LoadPlayerItems(playerid)
 	tmp_cache = mysql_query(connHandle, query);
 
 	new rows, itemid, ORM:orm_id;
-	if(cache_get_row_count(rows))
+	cache_get_row_count(rows);
+	
+	if(rows > 0)
 	{
 		for(new row = 0; row != rows; row++)
 		{
@@ -14083,9 +14193,20 @@ public LoadPlayerItems(playerid)
 			
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iGroup], "item_group");
 			orm_addvar_int(orm_id, PlayerItemCache[playerid][itemid][iUsed], "item_used");
-
+			
 			orm_setkey(orm_id, "item_uid");
 			orm_apply_cache(orm_id, row, 0);
+			
+
+			if(PlayerItemCache[playerid][itemid][iType] == ITEM_PHONE)
+			{
+				if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pPhoneNumber] = PlayerItemCache[playerid][itemid][iValue][0];
+			}
+
+			if(PlayerItemCache[playerid][itemid][iType] == ITEM_WEAPON || PlayerItemCache[playerid][itemid][iType] == ITEM_INHIBITOR || PlayerItemCache[playerid][itemid][iType] == ITEM_PAINT)
+			{
+				if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pItemWeapon] = itemid;
+			}
 
 			Iter_Add(PlayerItem[playerid], itemid);
 		}
@@ -14097,6 +14218,8 @@ public LoadPlayerItems(playerid)
 
 public UnloadPlayerItems(playerid)
 {
+	if(PlayerCache[playerid][pItemWeapon] != INVALID_ITEM_ID)	PlayerCache[playerid][pCheckWeapon] = (gettime() + 10);
+	
 	foreach(new itemid : PlayerItem[playerid])
 	{
 	    orm_destroy(PlayerItemCache[playerid][itemid][iOrm]);
@@ -14151,7 +14274,10 @@ public query_OnListPlayerNearItems(playerid, item_place)
 	
 	switch(item_place)
 	{
- 		case PLACE_NONE, PLACE_VEHICLE: action_string = "Podnieœ";
+ 		case PLACE_NONE, PLACE_VEHICLE:
+ 		{
+		 	action_string = "Podnieœ";
+		}
    		case PLACE_CLOSET, PLACE_BAG:   action_string = "Wyjmij";
 	    case PLACE_ACTOR:               action_string = "Ukradnij";
 	}
@@ -14793,37 +14919,6 @@ public LoadAllAnims()
 	return 1;
 }
 
-public LoadAllCorpses()
-{
-	new query[512], Cache:tmp_cache;
-
-	mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_posx`, `item_posy`, `item_posz`, `item_interior`, `item_world` FROM `"SQL_PREF"items`, `"SQL_PREF"corpses` WHERE item_type = '%d' AND item_ownertype = '%d' AND corpse_uid = item_value1 AND corpse_date + (7 * 86000) >= '%d'", ITEM_CORPSE, PLACE_NONE, gettime());
-	tmp_cache = mysql_query(connHandle, query);
-
-	new rows, objData[sObjectData], item_uid, object_id,
-		Float:PosX, Float:PosY, Float:PosZ, InteriorID, VirtualWorldID;
-	
-	cache_get_row_count(rows);
-	for(new row = 0; row != rows; row++)
-	{
-	    cache_get_value_index_int(row, 0, item_uid);
-	    
-	    cache_get_value_index_float(row, 1, PosX);
-	    cache_get_value_index_float(row, 2, PosY);
-	    cache_get_value_index_float(row, 3, PosZ);
-	    
-	    cache_get_value_index_int(row, 4, InteriorID);
-	    cache_get_value_index_int(row, 5, VirtualWorldID);
-	    
-    	object_id = CreateDynamicObject(ItemTypeInfo[ITEM_CORPSE][iTypeObjModel], PosX, PosY, PosZ - 1.0, ItemTypeInfo[ITEM_CORPSE][iTypeObjRotX], ItemTypeInfo[ITEM_CORPSE][iTypeObjRotY], 180.0, VirtualWorldID, InteriorID, -1, MAX_DRAW_DISTANCE);
-    	
-        objData[objUID] = (item_uid * -1);
-		Streamer_SetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
-	}
-	if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
-	return 1;
-}
-
 public OnPlayerSendOffer(playerid, customerid, OfferName[], OfferType, OfferValue1, OfferValue2, OfferPrice)
 {
 	if(OfferData[playerid][oCustomerID] != INVALID_PLAYER_ID)
@@ -14849,19 +14944,6 @@ public OnPlayerSendOffer(playerid, customerid, OfferName[], OfferType, OfferValu
 	    }
 	}
 	
-	new offer_desc[256];
-	
-	format(offer_desc, sizeof(offer_desc), "~y~~h~Oferta od %s ~>~ %s~n~~n~~b~~h~~h~Nazwa: ~w~%s~n~~g~~h~Koszt: ~w~$%d", PlayerName(playerid), OfferTypeInfo[OfferType][oTypeName], OfferName, OfferPrice);
-	PlayerTextDrawSetString(customerid, TextDrawOfferDesc[customerid], offer_desc);
-	
-	TextDrawShowForPlayer(customerid, TextDrawOfferAccept);
-	TextDrawShowForPlayer(customerid, TextDrawOfferReject);
-
-	TextDrawShowForPlayer(customerid, TextDrawOfferBack);
-	PlayerTextDrawShow(customerid, TextDrawOfferDesc[customerid]);
-	
-	SelectTextDraw(customerid, COLOR_GREEN);
-	
 	OfferData[playerid][oCustomerID] = customerid;
 	OfferData[playerid][oType] = OfferType;
 	
@@ -14880,6 +14962,19 @@ public OnPlayerSendOffer(playerid, customerid, OfferName[], OfferType, OfferValu
 	
 	SendClientMessage(playerid, COLOR_INFO, "Oferta zosta³a wys³ana. Odczekaj chwilê, by przekonaæ siê, czy gracz zaakceptuje Twoj¹ ofertê.");
 	printf("[offe] %s (UID: %d, GID: %d) wys³a³ ofertê dla %s (UID: %d, GID: %d). Typ oferty: %s, nazwa: %s, wartoœci: %d/%d, cena: $%d", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerRealName(customerid), PlayerCache[customerid][pUID], PlayerCache[customerid][pGID], OfferTypeInfo[OfferType][oTypeName], OfferName, OfferValue1, OfferValue2, OfferPrice);
+
+	new offer_desc[256];
+
+	format(offer_desc, sizeof(offer_desc), "~y~~h~Oferta od %s ~>~ %s~n~~n~~b~~h~~h~Nazwa: ~w~%s~n~~g~~h~Koszt: ~w~$%d", PlayerName(playerid), OfferTypeInfo[OfferType][oTypeName], OfferName, OfferPrice);
+	PlayerTextDrawSetString(customerid, TextDrawOfferDesc[customerid], offer_desc);
+
+	TextDrawShowForPlayer(customerid, TextDrawOfferAccept);
+	TextDrawShowForPlayer(customerid, TextDrawOfferReject);
+
+	TextDrawShowForPlayer(customerid, TextDrawOfferBack);
+	PlayerTextDrawShow(customerid, TextDrawOfferDesc[customerid]);
+
+	SelectTextDraw(customerid, COLOR_GREEN);
 	return 1;
 }
 
@@ -16407,7 +16502,8 @@ public LoadPlayerBans(playerid)
 	mysql_format(connHandle, query, sizeof(query), "SELECT `ban_reason` FROM `"SQL_PREF"bans` WHERE (ban_owner = '%d' OR ban_ip = '%s' OR ban_serial = '%s') AND ban_filter != '%d' LIMIT 1", PlayerCache[playerid][pGID], IP, ban_serial, PlayerCache[playerid][pGID]);
 	tmp_cache = mysql_query(connHandle, query);
 
-   	if(cache_get_row_count(rows))
+    cache_get_row_count(rows);
+   	if(rows > 0)
    	{
    	    cache_get_value_index(0, 0, ban_reason, 128);
    	   	ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zosta³eœ zbanowany, powód: %s\nMo¿esz z³o¿yæ apelacje na forum: "WEB_URL".", ban_reason);
@@ -16537,6 +16633,8 @@ public query_OnLoadActors()
 		cache_get_value_index(row, 12, ActorData[aText], 128);
 		
 		actor_id = CreateDynamicActor(modelid, actor_pos[0], actor_pos[1], actor_pos[2], actor_pos[3], true, 100.0, actor_vw, actor_interior);
+
+		if(ActorData[aType] == ACTOR_CORPSE)	ActorData[aLabel] = CreateDynamic3DTextLabel(ActorData[aName], COLOR_RED, actor_pos[0], actor_pos[1], actor_pos[2] - 0.5, 20.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 0, actor_vw, actor_interior);
 		Streamer_SetArrayData(STREAMER_TYPE_ACTOR, actor_id, E_STREAMER_EXTRA_ID, ActorData);
 	}
 	return 1;
@@ -16544,7 +16642,10 @@ public query_OnLoadActors()
 
 public DeleteActor(actorid)
 {
-	new actor_uid = GetActorUID(actorid);
+	new actor_uid = GetActorUID(actorid), ActorData[sActorData];
+	Streamer_GetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
+	
+	if(ActorData[aLabel])   DestroyDynamic3DTextLabel(ActorData[aLabel]);
 	
 	mysql_query_format("DELETE FROM `"SQL_PREF"actors` WHERE actor_uid = '%d' LIMIT 1", actor_uid);
 	DestroyDynamicActor(actorid);
@@ -16657,7 +16758,7 @@ public OnPlayerInteractActor(playerid, actorid)
 			return 1;
 	    }
 	    
-	    if(group_type == G_TYPE_BAR)
+	    if(group_type == G_TYPE_BAR || group_type == G_TYPE_24/7)
 	    {
 			ListGroupProductsForPlayer(group_id, playerid, PRODUCT_LIST_BUY);
 	        return 1;
@@ -16738,13 +16839,40 @@ public OnPlayerInteractActor(playerid, actorid)
 		return 1;
 	}
 	
+	// Ofiara
 	if(actor_type == ACTOR_VICTIM)
 	{
+ 		// Zosta³ napadniêty
+	    if(ActorData[aExtraID] != 0)
+	    {
+			if(PlayerCache[playerid][pDuty][DUTY_GROUP] == INVALID_GROUP_ID)
+			{
+			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten aktor zosta³ napadniêty!\nAby dokonaæ interakcji, musisz byæ na s³u¿bie grupy.");
+			    return 1;
+			}
+			new group_duty = PlayerCache[playerid][pDuty][DUTY_GROUP];
+			if(GroupData[group_duty][gType] != G_TYPE_POLICE)
+			{
+			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten aktor zosta³ napadniêty!\nNie posiadasz odpowiedniego doœwiadczenia, by móc przes³uchaæ aktora.");
+			    return 1;
+			}
+	        new player_robbed = GetPlayerID(ActorData[aExtraID]);
+	        if(player_robbed == INVALID_PLAYER_ID)
+	        {
+				SendClientFormatMessage(playerid, COLOR_FADE1, "%s mówi: Nie widzia³em jego twarzy, mia³ maskê i celowa³ do mnie z broni!", ActorData[aName]);
+	        }
+	        else
+	        {
+	            SendClientFormatMessage(playerid, COLOR_FADE1, "%s mówi: Dok³adnie widzia³em jego twarz... {C2A2DA}* opisuje rysopis %s *", ActorData[aName], PlayerRealName(player_robbed));
+	        }
+	        return 1;
+	    }
 	    if(GetPlayerTargetDynamicActor(playerid) != actorid)
 	    {
 	        return 1;
 	    }
 	    new query[512];
+	    ActorData[aExtraID] = (PlayerCache[playerid][pItemMask] == INVALID_ITEM_ID)	? PlayerCache[playerid][pUID] : -1;
 	    ApplyDynamicActorAnimation(actorid, "ROB_BANK", "SHP_HandsUp_Scr", 4, 0, 1, 1, 1, 1);
 	    
 	    mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"items` (item_name, item_type, item_value1, item_value2, item_ownertype, item_owner) SELECT item_name, item_type, item_value1, item_value2, item_ownertype, %d FROM `"SQL_PREF"items` WHERE item_ownertype = %d AND item_owner = 0", ActorData[aUID], PLACE_ACTOR);
@@ -16753,7 +16881,141 @@ public OnPlayerInteractActor(playerid, actorid)
 		mysql_format(connHandle, query, sizeof(query), "SELECT `item_uid`, `item_name` FROM `"SQL_PREF"items` WHERE item_ownertype = %d AND item_owner = %d ORDER BY RAND() LIMIT %d", PLACE_ACTOR, ActorData[aUID], 5 + random(5));
 		mysql_tquery(connHandle, query, "query_OnListPlayerNearItems", "dd", playerid, PLACE_ACTOR);
 		
+		Streamer_SetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
 		PlayerCache[playerid][pMainTable] = actorid;
+	    return 1;
+	}
+	
+	// Zw³oki
+	if(actor_type == ACTOR_CORPSE)
+	{
+		if(PlayerCache[playerid][pDuty][DUTY_GROUP] == INVALID_GROUP_ID)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby dokonaæ interakcji, musisz byæ na s³u¿bie grupy.");
+		    return 0;
+		}
+		group_id = PlayerCache[playerid][pDuty][DUTY_GROUP];
+		if(GroupData[group_id][gType] != G_TYPE_POLICE && GroupData[group_id][gType] != G_TYPE_MEDICAL && GroupData[group_id][gType] != G_TYPE_FBI)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz odpowiedniego doœwiadczenia, by móc zidentyfikowaæ zw³oki.");
+		    return 0;
+		}
+		new corpse_actor = GetActorUID(actorid),
+		    corpse_death, corpse_owner, corpse_killer, corpse_weapon, corpse_body, corpse_date;
+
+		new rows, Cache:tmp_cache, query[512];
+
+		mysql_format(connHandle, query, sizeof(query), "SELECT `corpse_death`, `corpse_owner`, `corpse_killer`, `corpse_weapon`, `corpse_body`, `corpse_date` FROM `"SQL_PREF"corpses` WHERE corpse_actor = '%d' LIMIT 1", corpse_actor);
+        tmp_cache = mysql_query(connHandle, query);
+
+        cache_get_row_count(rows);
+		if(rows > 0)
+		{
+		    cache_get_value_index_int(0, 0, corpse_death);
+		    cache_get_value_index_int(0, 1, corpse_owner);
+		    cache_get_value_index_int(0, 2, corpse_killer);
+		    cache_get_value_index_int(0, 3, corpse_weapon);
+		    cache_get_value_index_int(0, 4, corpse_body);
+
+		    cache_get_value_index_int(0, 5, corpse_date);
+		}
+		if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
+
+		switch(GroupData[group_id][gType])
+		{
+		    case G_TYPE_POLICE, G_TYPE_FBI:
+		    {
+		        if(corpse_killer)
+		        {
+					ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zbieraj¹c dowody z cia³a oraz jego otoczenia jesteœ w stanie wyj¹æ DNA zabójcy: %s.", CharCode(corpse_killer));
+				}
+				else
+				{
+				    ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zabójcy uda³o siê idealnie zatrzeæ dowody zbrodni.");
+				}
+		    }
+		    case G_TYPE_MEDICAL:
+		    {
+		        if(strfind(ActorData[aName], "(niezidentyfikowane)", true) != -1)
+		        {
+  				    new item_name[32];
+  				    
+					format(item_name, sizeof(item_name), "Zwloki (DNA: %s)", CharCode(corpse_owner));
+					UpdateDynamic3DTextLabelText(ActorData[aLabel], COLOR_RED, item_name);
+
+					strmid(ActorData[aName], item_name, 0, strlen(item_name), 32);
+					SaveActor(actorid);
+
+					ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Jako medyk, by³eœ w stanie zidentyfikowaæ zw³oki.\nZw³oki zosta³y pomyœlnie zidentyfikowane (DNA: %s).", CharCode(corpse_owner));
+		        }
+		        else
+				{
+  					new corpse_desc[512], list_body_part[256],
+  					    year, month, day, hour, minute, second;
+
+		 			for(new bp_id = 0; bp_id < sizeof(BodyPartInfo); bp_id++)
+					{
+		    			if(BodyPartInfo[bp_id][bpType] & corpse_body)
+		    			{
+		        			format(list_body_part, sizeof(list_body_part), "%s, %s", list_body_part, BodyPartInfo[bp_id][bpName]);
+						}
+					}
+
+					if(strlen(list_body_part))
+					{
+		    			strdel(list_body_part, 0, 2);
+					}
+					else
+					{
+		    			format(list_body_part, sizeof(list_body_part), "brak");
+					}
+
+					TimestampToDate(corpse_date, year, month, day, hour, minute, second, 1);
+					format(corpse_desc, sizeof(corpse_desc), "Dok³adna data zgonu %02d/%02d/%d %02d:%02d.\nPrzyczyna œmierci: %s\nWidoczne obra¿enia: %s", day, month, year, hour, minute, DeathTypeData[corpse_death][0], list_body_part);
+
+					if(corpse_weapon)
+					{
+						new weapon_id;
+
+						mysql_format(connHandle, query, sizeof(query), "SELECT `item_value1` FROM `"SQL_PREF"items` WHERE item_uid = '%d' LIMIT 1", corpse_weapon);
+                        tmp_cache = mysql_query(connHandle, query);
+
+						cache_get_value_index_int(0, 0, weapon_id);
+						if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
+
+  						new weapon_type = GetWeaponType(weapon_id), weapon_name[24];
+		    			GetWeaponName(weapon_id, weapon_name, 24);
+
+						switch(weapon_type)
+						{
+							case WEAPON_TYPE_LIGHT:
+					        {
+								format(corpse_desc, sizeof(corpse_desc), "%s\n\nWidaæ wyraŸnie, ¿e cia³o zosta³o zranione za pomoc¹ broni lekkiej.\nBadaj¹c ³uski znajduj¹ce siê przy ciele martwego, poznajesz broñ zabójcy.", corpse_desc);
+							}
+					        case WEAPON_TYPE_MELEE:
+					        {
+					            format(corpse_desc, sizeof(corpse_desc), "%s\n\nWidaæ wyraŸnie, ¿e cia³o zosta³o zranione za pomoc¹ broni bia³ej.\nS¹dz¹c po ogólnych obra¿eniach, mo¿esz poznaæ szczegó³y narzêdzia zbrodni.", corpse_desc);
+					        }
+					        case WEAPON_TYPE_HEAVY:
+					        {
+					            format(corpse_desc, sizeof(corpse_desc), "%s\n\nOfiara musia³a zostaæ raniona za pomoc¹ broni ciê¿kiej.\nBadaj¹c ³uski znajduj¹ce siê przy ciele martwego, poznajesz broñ zabójcy.", corpse_desc);
+		  			        }
+						}
+
+						format(corpse_desc, sizeof(corpse_desc), "%s\n\nModel: %d\nNazwa: %s\nNr. identyfikacyjny: %d", corpse_desc, weapon_id, weapon_name, corpse_weapon);
+					}
+					else
+					{
+						format(corpse_desc, sizeof(corpse_desc), "%s\n\nObra¿enia nie wskazuj¹ na ¿aden przyrz¹d oraz broñ.", corpse_desc);
+					}
+					
+					strcat(corpse_desc, "\n---\n1. Zabezpiecz zw³oki (zapakuj w folie)");
+					ShowPlayerDialog(playerid, D_ACTOR_CORPSE, DIALOG_STYLE_LIST, "Badanie zw³ok", corpse_desc, "Wybierz", "Zamknij");
+
+					PlayerCache[playerid][pMainTable] = actorid;
+				}
+		    }
+		}
 	    return 1;
 	}
 	return 1;
@@ -16882,7 +17144,7 @@ public UpdatePlayerStatus(playerid)
 public CreatePlayerCorpse(playerid, killer_uid, weapon_uid)
 {
 	new	Float:PosX, Float:PosY, Float:PosZ, Float:PosA, InteriorID, VirtualWorldID,
-	    date = gettime(), corpse_uid, corpse_death = PlayerCache[playerid][pDeathType], corpse_name[32];
+	    date = gettime(), corpse_death = PlayerCache[playerid][pDeathType], corpse_name[32];
 
 	GetPlayerPos(playerid, PosX, PosY, PosZ);
 	GetPlayerFacingAngle(playerid, PosA);
@@ -16892,20 +17154,27 @@ public CreatePlayerCorpse(playerid, killer_uid, weapon_uid)
 
 	if(PlayerCache[playerid][pDocuments])	format(corpse_name, sizeof(corpse_name), "Zwloki %s", PlayerRealName(playerid));
 	else                                    corpse_name = "Zwloki (niezidentyfikowane)";
+	
+	new actor_uid = crp_CreateActor(corpse_name, PlayerCache[playerid][pSkin], PosX, PosY, PosZ, PosA, VirtualWorldID, InteriorID);
+	mysql_query_format("INSERT INTO `"SQL_PREF"corpses` (corpse_owner, corpse_killer, corpse_death, corpse_weapon, corpse_body, corpse_actor, corpse_date) VALUES ('%d', '%d', '%d', '%d', '%d', '%d', '%d')", PlayerCache[playerid][pUID], killer_uid, corpse_death, weapon_uid, PlayerCache[playerid][pDeathBody], actor_uid, date);
 
-	mysql_query_format("INSERT INTO `"SQL_PREF"corpses` (corpse_owner, corpse_death, corpse_killer, corpse_weapon, corpse_body, corpse_date) VALUES ('%d', '%d', '%d', '%d', '%d', '%d')", PlayerCache[playerid][pUID], corpse_death, killer_uid, weapon_uid, PlayerCache[playerid][pDeathBody], date);
-	corpse_uid = cache_insert_id();
+	new actorid = GetActorID(actor_uid), ActorData[sActorData];
+	Streamer_GetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
+	
+	ActorData[aType] = ACTOR_CORPSE;
+	ActorData[aLabel] = CreateDynamic3DTextLabel(corpse_name, COLOR_RED, PosX, PosY, PosZ - 0.5, 20.0);
+	
+	new anim_id = GetAnimByCommand(".padnij");
+	if(anim_id != INVALID_ANIM_ID)
+	{
+		ActorData[aAnim] = AnimCache[anim_id][aUID];
 
-	new item_uid, object_id;
-	mysql_query_format("INSERT INTO `"SQL_PREF"items` (item_name, item_type, item_value1, item_ownertype, item_owner, item_posx, item_posy, item_posz, item_interior, item_world) VALUES ('%s', '%d', '%d', '%d', '0', '%f', '%f', '%f', '%d', '%d')", corpse_name, ITEM_CORPSE, corpse_uid, PLACE_NONE, PosX, PosY, PosZ, InteriorID, VirtualWorldID);
-
-	item_uid = cache_insert_id();
-	object_id = CreateDynamicObject(ItemTypeInfo[ITEM_CORPSE][iTypeObjModel], PosX, PosY, PosZ - 1.0, ItemTypeInfo[ITEM_CORPSE][iTypeObjRotX], ItemTypeInfo[ITEM_CORPSE][iTypeObjRotY], -PosA, VirtualWorldID, InteriorID, -1, MAX_DRAW_DISTANCE);
-
-	new objData[sObjectData];
-	objData[objUID] = (item_uid * -1);
-
-	Streamer_SetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
+		ClearDynamicActorAnimations(actorid);
+		ApplyDynamicActorAnimation(actorid, AnimCache[anim_id][aLib], AnimCache[anim_id][aName], AnimCache[anim_id][aSpeed], AnimCache[anim_id][aOpt1], AnimCache[anim_id][aOpt2], AnimCache[anim_id][aOpt3], AnimCache[anim_id][aOpt4], AnimCache[anim_id][aOpt5]);
+	}
+	
+	Streamer_SetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
+	SaveActor(actorid);
 	return 1;
 }
 
@@ -16931,7 +17200,7 @@ public OnPlayerRequestDownload(playerid, type, crc)
 	{
 	    TD_ShowSmallInfo(playerid, 0, string);
 	
-	    format(fullurl,256,"%s/%s",baseurl, dlfilename);
+	    format(fullurl,256,"%s/%s", models_url, dlfilename);
 	    RedirectDownload(playerid, fullurl);
 	}
 	return 1;
@@ -17009,8 +17278,6 @@ public OnPlayerFinishedDownloading(playerid, virtualworld)
 
 public OnDynamicActorStreamIn(actorid, forplayerid)
 {
-	if(Streamer_IsItemVisible(forplayerid, STREAMER_TYPE_ACTOR, actorid))  return 1;
-	
 	new ActorData[sActorData];
 	Streamer_GetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
 	
@@ -17027,8 +17294,7 @@ public OnDynamicActorStreamIn(actorid, forplayerid)
 /* Komendy */
 cmd:test(playerid, params[])
 {
-	new actorid = GetPlayerCameraTargetDynActor(playerid);
-	OnPlayerInteractActor(playerid, actorid);
+
 	return 1;
 }
 
@@ -19574,7 +19840,7 @@ cmd:aprzedmiot(playerid, params[])
  		new item_uid, item_value2;
 	    if(sscanf(varchar, "dd", item_uid, item_value2))
 	    {
-	        ShowTipForPlayer(playerid, "/aprzedmiot value1 [UID przedmiotu] [Value 2]");
+	        ShowTipForPlayer(playerid, "/aprzedmiot value2 [UID przedmiotu] [Value 2]");
 	        return 1;
 	    }
 	    new player_owner = GetItemOwner(item_uid);
@@ -19897,20 +20163,23 @@ cmd:tel(playerid, params[])
 		        if(PlayerCache[i][pCallingTo] == playerid)
 		        {
           			PlayerCache[i][pCallingTo] = INVALID_PLAYER_ID;
-          			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
-
-	   				SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
-	   				RemovePlayerAttachedObject(playerid, SLOT_PHONE);
 
 					SetPlayerSpecialAction(i, SPECIAL_ACTION_STOPUSECELLPHONE);
 					RemovePlayerAttachedObject(i, SLOT_PHONE);
 					
     				SendClientMessage(playerid, COLOR_YELLOW, "Rozmowa zosta³a pomyœlnie zakoñczona.");
 	            	SendClientMessage(i, COLOR_YELLOW, "Rozmowa zosta³a pomyœlnie zakoñczona.");
-		            return 1;
 		        }
 		    }
 		}
+		PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
+		
+  		if(GetPlayerSpecialAction(playerid) == SPECIAL_ACTION_USECELLPHONE)
+	    {
+			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
+			RemovePlayerAttachedObject(playerid, SLOT_PHONE);
+			return 1;
+	    }
 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aktualnie z nikim nie rozmawiasz oraz nikt nie próbuje siê z Tob¹ po³¹czyæ.");
 	    return 1;
 	}
@@ -19947,11 +20216,11 @@ cmd:tel(playerid, params[])
 	if(!strval(params))	return 1;
 	
 	new phone_number = strval(params), string[128];
-	if(phone_number == PlayerCache[playerid][pPhoneNumber])
+	/*if(phone_number == PlayerCache[playerid][pPhoneNumber])
 	{
 	    SendClientMessage(playerid, COLOR_DO, "* S³ychaæ sygna³ zajêtoœci... *");
 	    return 1;
-	}
+	}*/
 	if(PlayerCache[playerid][pCallingTo] != INVALID_PLAYER_ID)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aktualnie prowadzisz ju¿ jak¹œ rozmowê telefoniczn¹.\nZakoñcz obecn¹ rozmowê, by móc zadzwoniæ (/tel zakoncz).");
@@ -20104,15 +20373,15 @@ cmd:tel(playerid, params[])
 				SendClientMessage(playerid, COLOR_DO, "* S³ychaæ sygna³ próby po³¹czenia siê... *");
 				SendClientFormatMessage(i, COLOR_YELLOW, "Po³¹czenie przychodz¹ce od %d, u¿yj (/tel)efon odbierz, by odebraæ rozmowê.", PlayerCache[playerid][pPhoneNumber]);
 
-				new audio_handle;
+				PlayAudioForPlayer(playerid, AUDIO_CALLING_TO);
+
 				foreach(new player : Player)
 			    {
 					if(PlayerCache[player][pLogged] && PlayerCache[player][pSpawned])
 					{
-					    if(IsPlayerInRangeOfPoint(player, 10.0, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ]))
+					    if(IsPlayerInRangeOfPoint(player, 15.0, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ]))
 					    {
-						    //audio_handle = Audio_Play(player, AUDIO_CALLING, false, true);
-						    //Audio_Set3DPosition(player, audio_handle, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 10.0);
+							Play3DAudioForPlayer(player, AUDIO_CALLING, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 15.0);
 						}
 					}
 			    }
@@ -20145,28 +20414,25 @@ cmd:sms(playerid, params[])
 	    {
 	        if(PlayerCache[i][pPhoneNumber] == number)
 	        {
-	            SendClientFormatMessage(i, COLOR_YELLOW, "[SMS] %d: %s", PlayerCache[playerid][pPhoneNumber], text);
-	            SendClientFormatMessage(playerid, COLOR_YELLOW, "Wys³ano » [SMS] %d: %s", number, text);
-
-	            format(string, sizeof(string), "* %s wysy³a SMS-a.", PlayerName(playerid));
+         		format(string, sizeof(string), "* %s wysy³a SMS-a.", PlayerName(playerid));
 	            ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
-
-	            if(PlayerCache[i][pSex]) 			format(string, sizeof(string), "* %s otrzyma³ SMS-a.", PlayerName(i));
+	        
+         		if(PlayerCache[i][pSex]) 			format(string, sizeof(string), "* %s otrzyma³ SMS-a.", PlayerName(i));
 	            else 								format(string, sizeof(string), "* %s otrzyma³a SMS-a.", PlayerName(i));
 
 	            ProxDetector(10.0, i, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
-
+	            
+	            SendClientFormatMessage(i, COLOR_YELLOW, "[SMS] %d: %s", PlayerCache[playerid][pPhoneNumber], text);
+	            SendClientFormatMessage(playerid, COLOR_YELLOW, "Wys³ano » [SMS] %d: %s", number, text);
+	            
 				new audio_handle;
   				foreach(new player : Player)
 			    {
 					if(PlayerCache[player][pLogged] && PlayerCache[player][pSpawned])
 					{
-					    if(IsPlayerInRangeOfPoint(player, 10.0, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ]))
+					    if(IsPlayerInRangeOfPoint(player, 15.0, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ]))
 					    {
-						    //audio_handle = Audio_Play(player, AUDIO_SMS);
-						    
-						    //Audio_SetFX(i, audio_handle, 6);
-						    //Audio_Set3DPosition(player, audio_handle, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 10.0);
+					        Play3DAudioForPlayer(player, AUDIO_SMS, PlayerCache[i][pPosX], PlayerCache[i][pPosY], PlayerCache[i][pPosZ], 15.0);
 						}
 					}
 			    }
@@ -21862,7 +22128,8 @@ cmd:oferuj(playerid, params[])
 		mysql_format(connHandle, query, sizeof(query), "SELECT COUNT(char_uid) FROM `"SQL_PREF"char_groups` WHERE group_belongs = '%d'", GroupData[group_id][gUID]);
 		tmp_cache = mysql_query(connHandle, query);
 		
-		if(cache_get_row_count(rows))
+		cache_get_row_count(rows);
+		if(rows > 0)
 		{
 		    cache_get_value_index_int(0, 0, members_count);
 		}
@@ -27492,7 +27759,7 @@ cmd:spec(playerid, params[])
 
 		RemovePlayerAttachedObject(playerid, SLOT_WEAPON);
 
-  		PlayerCache[playerid][pCheckWeapon] = false;
+  		PlayerCache[playerid][pCheckWeapon] = (gettime() + 5);
    		PlayerItemCache[playerid][itemid][iUsed] = false;
 
 		orm_update(PlayerItemCache[playerid][itemid][iOrm]);
@@ -27827,7 +28094,7 @@ cmd:asel(playerid, params[])
 	OnPlayerFreeze(playerid, true, 0);
 	PlayerCache[playerid][pEditActor] = actorid;
 	
-	TD_ShowHint(playerid, HINT_NONE, 0, "Edycja aktora~n~~n~Za pomoca ~g~strzalek ~w~edytuj pozycje aktora, przytrzymaj klawisz:~n~~y~SHIFT~w~ - gora/dol/rotacja~n~~y~LALT~w~ - mniejsza predkosc poruszania~n~~y~SPACE~w~ - wieksza predkosc poruszania.~n~~n~Komendy:~n~~p~/asave~w~ - zapis aktora~n~~p~/adel~w~ - usun aktora~n~~p~/atext~w~ - tekst wymowy~n~~p~/atype~w~ - rodzaj~n~~n~Uzyj komendy ~r~/anim~w~, aby wybrac animacje lub wywolaj poprzez kropke ~y~(np. .krzeslo)~w~.");
+	TD_ShowHint(playerid, HINT_NONE, 0, "Edycja aktora~n~~n~Za pomoca ~g~strzalek ~w~edytuj pozycje aktora, przytrzymaj klawisz:~n~~y~SHIFT~w~ - gora/dol/rotacja~n~~y~LALT~w~ - wolniejsze poruszanie~n~~y~SPACE~w~ - szybsze poruszanie.~n~~n~Komendy:~n~~p~/asave~w~ - zapis aktora~n~~p~/adel~w~ - usun aktora~n~~p~/atext~w~ - tekst wymowy~n~~p~/atype~w~ - rodzaj~n~~n~Uzyj komendy ~r~/anim~w~, aby wybrac animacje lub wywolaj poprzez kropke ~y~(np. .krzeslo)~w~.");
 	return 1;
 }
 
@@ -28076,8 +28343,20 @@ stock ResetPlayerCamera(playerid)
 
 stock crp_GivePlayerMoney(playerid, money)
 {
+	// Uniknijmy ujemnych wartoœci
+	if(PlayerCache[playerid][pCash] < 0 && money < 0)
+	{
+	    PlayerCache[playerid][pCash] = 0;
+	    SetPlayerMoney(playerid, 0);
+	    
+	    orm_update(PlayerCache[playerid][pOrm]);
+	    return 1;
+	}
+	
 	PlayerCache[playerid][pCash] += money;
 	GivePlayerMoney(playerid, money);
+	
+	orm_update(PlayerCache[playerid][pOrm]);
 	return 1;
 }
 
@@ -28211,6 +28490,8 @@ stock CharCode(player_uid)
 	format(string, sizeof(string), "%d", player_uid);
 
     SHA256_PassHash(string, "code", charcode, sizeof(charcode));
+    strmid(charcode, charcode, 0, 5, 5);
+    
 	return charcode;
 }
 
@@ -29071,7 +29352,8 @@ stock IsVehiclePlaceFree(vehid)
 	mysql_format(connHandle, query, sizeof(query), "SELECT vehicle_uid FROM `"SQL_PREF"vehicles` WHERE vehicle_posx < %f + 4 AND vehicle_posx > %f - 4 AND vehicle_posy < %f + 4 AND vehicle_posy > %f - 4 AND vehicle_posz < %f + 4 AND vehicle_posz > %f - 4 LIMIT 1", VehPosX, VehPosX, VehPosY, VehPosY, VehPosZ, VehPosZ);
 	tmp_cache = mysql_query(connHandle, query);
   	
-    if(cache_get_row_count(rows))
+  	cache_get_row_count(rows);
+    if(rows > 0)
     {
     	IsFree = false;
     }
@@ -29684,6 +29966,20 @@ stock GetPlayerAreaID(playerid)
 	return areaid;
 }
 
+stock GetActorID(actor_uid)
+{
+	new actorid = INVALID_ACTOR_ID, actors = Streamer_GetUpperBound(STREAMER_TYPE_ACTOR);
+	for (new i = 0; i <= actors; i++)
+	{
+	    if(Streamer_IsInArrayData(STREAMER_TYPE_ACTOR, i, E_STREAMER_EXTRA_ID, actor_uid))
+	    {
+	        actorid = i;
+	        break;
+	    }
+	}
+	return actorid;
+}
+
 stock GetActorUID(actorid)
 {
 	new ActorData[sActorData];
@@ -30214,6 +30510,24 @@ stock IsValidObjectModel(model)
 	return (valid_model[model >> 5] & (1 << (model & 0x1F)));
 }
 
+stock PlayAudioForPlayer(playerid, audio_id)
+{
+	new format_url[128];
+	format(format_url, sizeof(format_url), "%s/%s", audio_url, AudioData[audio_id]);
+	
+	PlayAudioStreamForPlayer(playerid, format_url);
+	return 1;
+}
+
+stock Play3DAudioForPlayer(playerid, audio_id, Float:posX, Float:posY, Float:posZ, Float:dist)
+{
+	new format_url[128];
+	format(format_url, sizeof(format_url), "%s/%s", audio_url, AudioData[audio_id]);
+
+	PlayAudioStreamForPlayer(playerid, format_url, posX, posY, posZ, dist, true);
+	return 1;
+}
+
 stock PlayStreamedAudioForPlayer(playerid, streamString[])
 {
 	StopAudioStreamForPlayer(playerid);
@@ -30308,20 +30622,47 @@ stock GetAnimUID(anim_id)
 	return anim_uid;
 }
 
+stock GetAnimByCommand(command[])
+{
+	new anim_id = INVALID_ANIM_ID;
+	foreach(new anim : Anim)
+	{
+		if(!strcmp(command, AnimCache[anim][aCommand], true))
+   		{
+   		    anim_id = anim;
+			break;
+		}
+	}
+	return anim_id;
+}
+
 stock GetPlayerStatus(playerid)
 {
-	new player_status = 1023;
-	
-	if(PlayerCache[playerid][pBW] <= 0) 								player_status -= STATUS_TYPE_DAZED;
-	if(GetPlayerDrunkLevel(playerid) < 10000)   						player_status -= STATUS_TYPE_DRUNK;
-	if(PlayerCache[playerid][pStrength] < 6500) 						player_status -= STATUS_TYPE_MUSCLE;
-	if(!PlayerCache[playerid][pRoll])               					player_status -= STATUS_TYPE_ROLL;
-	if(PlayerCache[playerid][pItemMask] == INVALID_ITEM_ID)				player_status -= STATUS_TYPE_MASKED;
-	if(PlayerCache[playerid][pItemPlayer] == INVALID_ITEM_ID)           player_status -= STATUS_TYPE_EARPIECE;
-	if(PlayerCache[playerid][pAFK] < 0)                                 player_status -= STATUS_TYPE_AFK;
-	if(!PlayerCache[playerid][pBelts])                                  player_status -= STATUS_TYPE_BELTS;
-	if(PlayerCache[playerid][pDrugLevel] < 10)                          player_status -= STATUS_TYPE_STONED;
-	if(!PlayerCache[playerid][pGlove])                                  player_status -= STATUS_TYPE_GLOVES;
+	new player_status = 0;
+	if(PlayerCache[playerid][pBW] > 0)
+	{
+		player_status += STATUS_TYPE_DAZED;
+		
+		if(PlayerCache[playerid][pDeathWeapon] == 0)
+		{
+		    player_status += STATUS_TYPE_DEFEATED;
+		}
+		else
+		{
+		    player_status += STATUS_TYPE_SHOT;
+		}
+	}
+
+	if(GetPlayerDrunkLevel(playerid) >= 10000)   						player_status += STATUS_TYPE_DRUNK;
+	if(PlayerCache[playerid][pStrength] >= 6500) 						player_status += STATUS_TYPE_MUSCLE;
+	if(PlayerCache[playerid][pRoll])               						player_status += STATUS_TYPE_ROLL;
+	if(PlayerCache[playerid][pItemMask] != INVALID_ITEM_ID)				player_status += STATUS_TYPE_MASKED;
+	if(PlayerCache[playerid][pItemPlayer] != INVALID_ITEM_ID)           player_status += STATUS_TYPE_EARPIECE;
+	if(PlayerCache[playerid][pAFK] > 0)                                 player_status += STATUS_TYPE_AFK;
+	if(PlayerCache[playerid][pBelts])                                  	player_status += STATUS_TYPE_BELTS;
+	if(PlayerCache[playerid][pDrugLevel] >= 10)                         player_status += STATUS_TYPE_STONED;
+	if(PlayerCache[playerid][pGlove])                                  	player_status += STATUS_TYPE_GLOVES;
+	if(PlayerCache[playerid][pHealth] <= 10.0)                          player_status += STATUS_TYPE_INJURED;
 	
 	return player_status;
 }
