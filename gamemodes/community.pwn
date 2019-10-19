@@ -417,6 +417,14 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define PRODUCT_OWNER_DOOR      1
 #define PRODUCT_OWNER_AREA      2
 
+// Logi transakcji
+#define TRANSACTION_NONE 		0
+#define TRANSACTION_ORDER 		1
+#define TRANSACTION_OFFER 		2
+#define TRANSACTION_SERVICE 	3
+#define TRANSACTION_WITHDRAW 	4
+#define TRANSACTION_DEPOSIT 	5
+
 // Typy ofert
 #define OFFER_NONE              0
 #define OFFER_ITEM              1
@@ -492,6 +500,10 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define JOB_MECHANIC   			1
 #define JOB_COURIER             2
 #define JOB_SELLER              3
+#define JOB_NEWSPAPER           4
+#define JOB_LUMBERJACK          5
+#define JOB_STOREKEEPER         6
+#define JOB_FISHERMAN           7
 
 // Akcesoria w pojeŸdzie
 #define VEH_ACCESS_NONE         0
@@ -884,6 +896,7 @@ forward LoadAllProducts();
 forward DeleteProduct(product_id);
 forward SaveProduct(product_id, what);
 forward ListGroupProductsForPlayer(group_id, playerid, list_type);
+forward AddGroupTransactionLog(transaction_owner, group_id, transaction_type, price, transaction_value, transaction_extraid);
 
 forward crp_AddObject(ModelID, Float:PosX, Float:PosY, Float:PosZ, Float:RotX, Float:RotY, Float:RotZ, InteriorID, VirtualWorld);
 forward SaveObjectPos(object_id);
@@ -1111,7 +1124,6 @@ enum sPlayer
 	pAJ,
 	
 	pHouse,
-	pJob,
 	
 	pDocuments,
 	pAchievements,
@@ -2296,6 +2308,15 @@ enum sDoorInfo
 	bool:dObjectsLoaded
 };
 
+enum sWorkData
+{
+	wID,
+	wValue[2],
+	
+	wExtraID
+}
+new WorkInfo[MAX_PLAYERS][sWorkData];
+
 new BlockadeType[8] = {3578, 1228, 1237, 1425, 978, 979, 2892, 1437};
 
 main()
@@ -2484,7 +2505,7 @@ public OnGameModeInit()
 	    posX = 225.0;
 	    posY = 167.0;
 
-	    if(group_slot == 2 || group_slot == 3)	posY += 110.0;
+	    if(group_slot == 2 || group_slot == 3)	posY += 120.0;
 	    if(group_slot == 1 || group_slot == 3)	posX = 355.0;
 
 		TD_GroupOption[0][group_slot] = TextDrawCreate(posX, posY, "INFO");
@@ -10208,7 +10229,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
                 cache_get_value_index_int(row, 2, order_price);
 			    
 			    format(list_orders, sizeof(list_orders), "%s\n%d\t$%d\t%s", list_orders, order_uid, order_price, order_name);
-			}
+   			}
 			if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 			
 			if(strlen(list_orders))
@@ -10275,13 +10296,31 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				TD_ShowSmallInfo(playerid, 3, "Wprowadzono ~r~bledna ~w~ilosc sztuk.");
 			    return 1;
 			}
-			if(PlayerCache[playerid][pCash] < OrderCache[playerid][oPrice] * product_count)
-			{
-				format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
-				ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
+			new doorid = PlayerCache[playerid][pMainTable], DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
-				TD_ShowSmallInfo(playerid, 3, "Nie posiadasz tyle ~r~gotowki~w~.");
-			    return 1;
+			new group_id = GetGroupID(DoorData[dOwner]);
+			if(HavePlayerGroupPerm(playerid, GroupData[group_id][gUID], G_PERM_CAPITAL) && PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
+			{
+				if(GroupData[group_id][gCapital] < OrderCache[playerid][oPrice] * product_count)
+				{
+					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
+					ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
+
+					TD_ShowSmallInfo(playerid, 3, "Grupa ~r~nie posiada ~w~takiej ilosci pieniedzy w kapitale.");
+				    return 1;
+				}
+			}
+			else
+			{
+				if(PlayerCache[playerid][pCash] < OrderCache[playerid][oPrice] * product_count)
+				{
+					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
+					ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
+
+					TD_ShowSmallInfo(playerid, 3, "Nie posiadasz tyle ~r~gotowki~w~.");
+				    return 1;
+				}
 			}
 			OrderCache[playerid][oCount] = product_count;
 			ShowPlayerDialog(playerid, D_ORDER_PRICE, DIALOG_STYLE_INPUT, "Koszt produktu", "WprowadŸ oferowan¹ cenê produktu.\nCena jak¹ wprowadzisz bêdzie pobierana za zakup produktu w Twojej instytucji.\n\nCena powinna byæ wy¿sza ni¿ hurtowa, byœ mia³ profit z wyprzedanych produktów.\nKoszt danego produktu mo¿esz zmieniæ za pomoc¹ /drzwi opcje, b¹dŸ w panelu.", "Zamów", "Anuluj");
@@ -10310,14 +10349,14 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				TD_ShowSmallInfo(playerid, 3, "Wprowadzono ~r~bledna ~w~cene produktu.");
 	            return 1;
 	        }
-  			new order_price = OrderCache[playerid][oPrice] * OrderCache[playerid][oCount],
-			    order_item_type, order_item_value1, order_item_value2, order_type;
+  			new order_price = OrderCache[playerid][oPrice] * OrderCache[playerid][oCount], string[256],
+			    order_item_type, order_item_value1, order_item_value2, order_type, order_limit, order_time_limit;
 
 			// Jednak weŸmiemy mu o 40% mniej gotówki, niech zarobi
 			if(OrderCache[playerid][oCount] >= 20)	order_price = floatround(order_price * 0.6);
 			new rows, Cache:tmp_cache, query[256];
 
-			mysql_format(connHandle, query, sizeof(query), "SELECT `order_item_type`, `order_item_value1`, `order_item_value2`, `order_type` FROM `"SQL_PREF"orders` WHERE order_uid = '%d' LIMIT 1", OrderCache[playerid][oUID]);
+			mysql_format(connHandle, query, sizeof(query), "SELECT `order_item_type`, `order_item_value1`, `order_item_value2`, `order_type`, `order_limit`, `order_time_limit` FROM `"SQL_PREF"orders` WHERE order_uid = '%d' LIMIT 1", OrderCache[playerid][oUID]);
             tmp_cache = mysql_query(connHandle, query);
 
             cache_get_row_count(rows);
@@ -10329,11 +10368,54 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				cache_get_value_index_int(0, 2, order_item_value2);
 				
 				cache_get_value_index_int(0, 3, order_type);
+				
+				cache_get_value_index_int(0, 4, order_limit);
+				cache_get_value_index_int(0, 5, order_time_limit);
 			}
 			if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
+			
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			
+			// Limity na zamawianie
+			if(order_limit > 0 && order_time_limit > 0)
+			{
+			    new transaction_sum;
+			    
+			    // Sprawdzamy transakcje grupy dla tego produktu
+			    mysql_format(connHandle, query, sizeof(query), "SELECT SUM(transaction_value) FROM `"SQL_PREF"group_transactions` WHERE transaction_type = '%d' AND transaction_group = '%d' AND transaction_extraid = '%d' AND transaction_date > %d - %d", TRANSACTION_ORDER, DoorData[dOwner], OrderCache[playerid][oUID], gettime(), order_time_limit);
+			    tmp_cache = mysql_query(connHandle, query);
+			    
+			    cache_get_row_count(rows);
+			    
+			    if(rows > 0)    cache_get_value_index_int(0, 0, transaction_sum);
+			    if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
+			    
+			    // Jeœli przekroczy³ limit
+			    if(transaction_sum + OrderCache[playerid][oCount] > order_limit)
+			    {
+					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
+					ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
+					
+					TD_ShowSmallInfo(playerid, 10, "Na ten produkt zostal narzucony ~r~limit zamawiania~w~.~n~Mozesz zamowic ~y~%d sztuk ~w~tego produktu na ~y~%d dni~w~.~n~~n~Pozostala ilosc sztuk tego produktu to: ~y~%d~w~.", order_limit, order_time_limit / 86000, order_limit - transaction_sum);
+			        return 1;
+			    }
+			}
 
-			crp_GivePlayerMoney(playerid, -order_price);
-			CreatePackage(GetDoorUID(doorid), OrderCache[playerid][oName], order_item_type, order_item_value1, order_item_value2, OrderCache[playerid][oCount], price, order_type);
+			new group_id = GetGroupID(DoorData[dOwner]);
+			if(HavePlayerGroupPerm(playerid, GroupData[group_id][gUID], G_PERM_CAPITAL) && PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
+			{
+				GroupData[group_id][gCapital] -= order_price;
+				orm_update(GroupData[group_id][gOrm]);
+			}
+			else
+			{
+				crp_GivePlayerMoney(playerid, -order_price);
+				orm_update(PlayerCache[playerid][pOrm]);
+			}
+			
+			CreatePackage(DoorData[dUID], OrderCache[playerid][oName], order_item_type, order_item_value1, order_item_value2, OrderCache[playerid][oCount], price, order_type);
+			AddGroupTransactionLog(playerid, group_id, TRANSACTION_ORDER, -order_price, OrderCache[playerid][oCount], OrderCache[playerid][oUID]);
 
 			PlayerCache[playerid][pMainTable] = 0;
 			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
@@ -10496,7 +10578,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-	        PlayerCache[playerid][pJob] = PlayerCache[playerid][pMainTable];
+	        WorkInfo[playerid][wID] = PlayerCache[playerid][pMainTable];
 	        orm_update(PlayerCache[playerid][pOrm]);
 	        
 	        ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Gratulacje! Podj¹³eœ siê nowej pracy dorywczej.\nSkorzystaj z komendy /pomoc, by zobaczyæ dodatkowe przywileje.");
@@ -11279,18 +11361,19 @@ public OnPlayerClickTextDraw(playerid, Text:clickedid)
 			{
 			    OnPlayerAcceptOffer(playerid, offererid);
 			}
-	        CancelSelectTextDraw(playerid);
+	        return 1;
 	    }
 
 		if(clickedid == TextDrawOfferReject)
 		{
 		    OnPlayerRejectOffer(playerid, offererid);
-      		CancelSelectTextDraw(playerid);
+      		return 1;
 		}
 
   		if(_:clickedid == INVALID_TEXT_DRAW)
 		{
 		    OnPlayerRejectOffer(playerid, offererid);
+		    return 1;
 		}
 	}
 	return 0;
@@ -11822,6 +11905,9 @@ public query_OnLoadGroups()
 
 		orm_addvar_string(orm_id, group_color, 12, "group_color");
 		orm_addvar_int(orm_id, GroupData[group_id][gFlags], "group_flags");
+		
+		orm_addvar_int(orm_id, GroupData[group_id][gValue1], "group_value1");
+		orm_addvar_int(orm_id, GroupData[group_id][gValue2], "group_value2");
 
 		orm_addvar_int(orm_id, GroupData[group_id][gOwner], "group_owner");
 		orm_addvar_int(orm_id, GroupData[group_id][gLastTax], "group_last_tax");
@@ -11840,8 +11926,6 @@ public query_OnLoadGroups()
 	printf("[load] Proces wczytywania grup zosta³ zakoñczony (count: %d).", Iter_Count(Groups));
 	return 1;
 }
-
-// SELECT sum(session_end - session_start) FROM `ipb_game_sessions` WHERE session_type = 1 AND session_owner =  AND session_start >= 1570492800 AND session_start <= 1570579200 AND session_end >= 1570492800 AND session_end <= 1570579200
 
 public ShowPlayerGroupInfo(playerid, group_id)
 {
@@ -11892,11 +11976,11 @@ public ShowPlayerGroupOptions(playerid)
 
 			if(PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
 			{
-		    	format(string, sizeof(string), "~>~ %s~w~(%d) ~o~~n~~n~~n~~n~~n~~n~~n~", slot + 1, GroupData[group_id][gTag]);
+		    	format(string, sizeof(string), "~>~ %s~w~ (%d) ~o~~n~~n~~n~~n~~n~~n~~n~", GroupData[group_id][gTag], slot + 1);
 			}
 			else
 			{
-	   			format(string, sizeof(string), "~>~ %s~w~(%d) ~n~~n~~n~~n~~n~~n~~n~", slot + 1, GroupData[group_id][gTag]);
+	   			format(string, sizeof(string), "~>~ %s~w~ (%d) ~n~~n~~n~~n~~n~~n~~n~", GroupData[group_id][gTag], slot + 1);
 			}
 			
 			PlayerTextDrawSetString(playerid, TD_MainGroupTag[playerid][slot], string);
@@ -11966,70 +12050,97 @@ public LoadPlayerGroups(playerid)
 	if(cache_is_valid(tmp_cache))	cache_delete(tmp_cache);
 	
 	// Sprawdzam kiedy ostatnia wyp³ata
-	if(IsPlayerInAnyGroup(playerid) && PlayerCache[playerid][pLastPayday] + 86000 <= gettime())
+	if(PlayerCache[playerid][pLastPayday] + 86000 <= gettime())
 	{
-	    new group_last_uid = 0;
+	    if(IsPlayerInAnyGroup(playerid))
+	    {
+		    new group_last_uid = 0;
 
-		mysql_format(connHandle, query, sizeof(query), "SELECT g.group_belongs, g.group_payment, (s.session_end - s.session_start) FROM `ipb_char_groups` g LEFT JOIN `ipb_game_sessions` s on g.char_uid = s.session_owner WHERE s.session_type = 2 AND s.session_extraid = g.group_belongs AND s.session_end < %d AND s.session_start > (%d - 86000) AND g.char_uid = %d", PlayerCache[playerid][pLastPayday], PlayerCache[playerid][pLastPayday], PlayerCache[playerid][pUID]);
-	 	tmp_cache = mysql_query(connHandle, query);
+			mysql_format(connHandle, query, sizeof(query), "SELECT g.group_belongs, g.group_payment, (s.session_end - s.session_start) FROM `"SQL_PREF"char_groups` g LEFT JOIN `"SQL_PREF"game_sessions` s on g.char_uid = s.session_owner WHERE s.session_type = 2 AND s.session_extraid = g.group_belongs AND s.session_end < %d AND s.session_start > (%d - 86000) AND g.char_uid = %d", PlayerCache[playerid][pLastPayday], PlayerCache[playerid][pLastPayday], PlayerCache[playerid][pUID]);
+		 	tmp_cache = mysql_query(connHandle, query);
 
-		cache_get_row_count(rows);
-		for(new row = 0; row != rows; row++)
-		{
-		    new session_sum, group_payment, group_belongs;
+			cache_get_row_count(rows);
+			for(new row = 0; row != rows; row++)
+			{
+			    new session_sum, group_payment, group_belongs;
 
-		    cache_get_value_index_int(row, 2, session_sum);
-		    cache_get_value_index_int(row, 1, group_payment);
-		    cache_get_value_index_int(row, 0, group_belongs);
+			    cache_get_value_index_int(row, 2, session_sum);
+			    cache_get_value_index_int(row, 1, group_payment);
+			    cache_get_value_index_int(row, 0, group_belongs);
 
-			// Nie powtarzaj funkcji
-			if(group_last_uid == 0 || group_belongs != group_last_uid)	group_slot = GetPlayerGroupSlot(playerid, group_belongs);
+				// Nie powtarzaj funkcji
+				if(group_last_uid == 0 || group_belongs != group_last_uid)	group_slot = GetPlayerGroupSlot(playerid, group_belongs);
 
-			PlayerGroup[playerid][group_slot][gpDutyMinute] += floatround(session_sum / 60);
-			PlayerGroup[playerid][group_slot][gpPay] = group_payment;
+				PlayerGroup[playerid][group_slot][gpDutyMinute] += floatround(session_sum / 60);
+				PlayerGroup[playerid][group_slot][gpPay] = group_payment;
 
-			// Maksymalnie 3h s³u¿by
-			if(PlayerGroup[playerid][group_slot][gpDutyMinute] >= 180)	PlayerGroup[playerid][group_slot][gpDutyMinute] = 180;
-			
-			group_last_uid = group_belongs;
-		}
-		if(cache_is_valid(tmp_cache))	cache_delete(tmp_cache);
+				// Maksymalnie 3h s³u¿by
+				if(PlayerGroup[playerid][group_slot][gpDutyMinute] >= 180)	PlayerGroup[playerid][group_slot][gpDutyMinute] = 180;
 
-		new list_pay[512], year[2], month[2], day[2], hour[2], minute[2], second[2],
-		    payday_sum, duty_hours_sum, duty_minutes_sum;
-		
-		TimestampToDate(PlayerCache[playerid][pLastPayday], year[0], month[0], day[0], hour[0], minute[0], second[0], 1);
-        TimestampToDate(PlayerCache[playerid][pLastPayday] - 86000, year[1], month[1], day[1], hour[1], minute[1], second[1], 1);
+				group_last_uid = group_belongs;
+			}
+			if(cache_is_valid(tmp_cache))	cache_delete(tmp_cache);
 
-		format(list_pay, sizeof(list_pay), "~y~Wyplata za okres: ~n~%02d/%02d/%d - %02d/%02d/%d~w~~n~", day[1], month[1], year[1], day[0], month[0], year[0]);
-		
-		for(new slot = 0; slot < MAX_GROUP_SLOTS; slot++)
-		{
-		    if(PlayerGroup[playerid][slot][gpUID])
-		    {
-		        if(PlayerGroup[playerid][slot][gpDutyMinute])
-		        {
-				   	new	duty_pay = floatround(PlayerGroup[playerid][slot][gpDutyMinute] * PlayerGroup[playerid][slot][gpPay]) / 60,
-						duty_hours = floatround(PlayerGroup[playerid][slot][gpDutyMinute] / 60, floatround_floor),
-						duty_minutes = floatround(PlayerGroup[playerid][slot][gpDutyMinute], floatround_floor) % 60;
+			new list_pay[512], year[2], month[2], day[2], hour[2], minute[2], second[2],
+			    payday_sum, duty_hours_sum, duty_minutes_sum;
 
-				   	group_id = PlayerGroup[playerid][slot][gpID];
-					format(list_pay, sizeof(list_pay), "%s~n~%s (%d) - ~g~$%d ~w~(%dg %dm)~w~", list_pay, GroupData[group_id][gTag], PlayerGroup[playerid][slot][gpUID], duty_pay, duty_hours, duty_minutes);
+			TimestampToDate(PlayerCache[playerid][pLastPayday], year[0], month[0], day[0], hour[0], minute[0], second[0], 1);
+	        TimestampToDate(PlayerCache[playerid][pLastPayday] - 86000, year[1], month[1], day[1], hour[1], minute[1], second[1], 1);
 
-					duty_hours_sum += duty_hours;
-	                duty_minutes_sum += duty_minutes;
+			format(list_pay, sizeof(list_pay), "~y~Wyplata za okres: ~n~%02d/%02d/%d - %02d/%02d/%d~w~~n~", day[1], month[1], year[1], day[0], month[0], year[0]);
 
-	                payday_sum += duty_pay;
+			for(new slot = 0; slot < MAX_GROUP_SLOTS; slot++)
+			{
+			    if(PlayerGroup[playerid][slot][gpUID])
+			    {
+			        if(PlayerGroup[playerid][slot][gpDutyMinute])
+			        {
+					   	new	duty_pay = floatround(PlayerGroup[playerid][slot][gpDutyMinute] * PlayerGroup[playerid][slot][gpPay]) / 60,
+							duty_hours = floatround(PlayerGroup[playerid][slot][gpDutyMinute] / 60, floatround_floor),
+							duty_minutes = floatround(PlayerGroup[playerid][slot][gpDutyMinute], floatround_floor) % 60;
+
+					   	group_id = PlayerGroup[playerid][slot][gpID];
+						format(list_pay, sizeof(list_pay), "%s~n~%s (%d) - ~g~$%d ~w~(%dg %dm)~w~", list_pay, GroupData[group_id][gTag], PlayerGroup[playerid][slot][gpUID], duty_pay, duty_hours, duty_minutes);
+
+						duty_hours_sum += duty_hours;
+		                duty_minutes_sum += duty_minutes;
+
+		                payday_sum += duty_pay;
+					}
 				}
+			}
+			
+			// Op³ata za hotel
+			if(PlayerCache[playerid][pHouse] != 0)
+			{
+				new doorid = GetDoorID(PlayerCache[playerid][pHouse]);
+				if(doorid != INVALID_DOOR_ID)
+				{
+					new DoorData[sDoorInfo];
+					Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+					
+					if(DoorData[dOwnerType] == OWNER_GROUP)
+					{
+					    group_id = GetGroupID(DoorData[dOwner]);
+					    if(GroupData[group_id][gType] == G_TYPE_HOTEL)
+					    {
+					        payday_sum -= GroupData[group_id][gValue1];
+					        format(list_pay, sizeof(list_pay), "%s~n~~n~Oplata za wynajem: ~r~$%d~w~", list_pay, GroupData[group_id][gValue1]);
+					    }
+					}
+				}
+			}
+
+			format(list_pay, sizeof(list_pay), "%s~n~~n~Suma: ~g~$%d~n~~w~Lacznie: %dg %dm~n~~n~~w~Pieniadze zostaly przelane na Twoje ~y~konto bankowe~w~.", list_pay, payday_sum, duty_hours_sum, duty_minutes_sum);
+
+			if(payday_sum > 0)
+			{
+				TD_ShowHint(playerid, HINT_NONE, 20, list_pay);
+				PlayerCache[playerid][pBankCash] += payday_sum;
 			}
 		}
 		
-		format(list_pay, sizeof(list_pay), "%s~n~~n~Suma: ~g~$%d~n~~w~Lacznie: %dg %dm~n~~n~~w~Pieniadze zostaly przelane na Twoje ~y~konto bankowe~w~.", list_pay, payday_sum, duty_hours_sum, duty_minutes_sum);
-		TD_ShowHint(playerid, HINT_NONE, 20, list_pay);
-		
-		PlayerCache[playerid][pBankCash] += payday_sum;
 		PlayerCache[playerid][pLastPayday] = gettime();
-		
 		orm_update(PlayerCache[playerid][pOrm]);
 	}
 	return 1;
@@ -14674,6 +14785,15 @@ public ListGroupProductsForPlayer(group_id, playerid, list_type)
 	return 1;
 }
 
+public AddGroupTransactionLog(transaction_owner, group_id, transaction_type, price, transaction_value, transaction_extraid)
+{
+	new query[512];
+	mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"group_transactions` VALUES ('', '%d', '%d', '%d', '%d', '%d', '%d', '%d')", PlayerCache[transaction_owner][pUID], transaction_type, GroupData[group_id][gUID], price, transaction_value, transaction_extraid, gettime());
+	mysql_query(connHandle, query);
+	
+	return 1;
+}
+
 public crp_AddObject(ModelID, Float:PosX, Float:PosY, Float:PosZ, Float:RotX, Float:RotY, Float:RotZ, InteriorID, VirtualWorld)
 {
 	new object_id, object_uid, objData[sObjectData];
@@ -15043,19 +15163,23 @@ public OnPlayerSendOffer(playerid, customerid, OfferName[], OfferType, OfferValu
 		{
 			if(PlayerCache[customerid][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
 			{
-   				if(OfferType != OFFER_SALON && OfferType != OFFER_TAX)
-   				{
-					new group_id = PlayerCache[customerid][pDuty][DUTY_GROUP], veh_uid = OfferValue1, vehid = GetVehicleID(veh_uid);
-					if(CarInfo[vehid][cOwnerType] == OWNER_GROUP && CarInfo[vehid][cOwner] == GroupData[group_id][gUID])
-					{
-	    				pay_type = PAY_TYPE_CAPITAL;
-						TD_ShowSmallInfo(customerid, 0, "~r~Uwaga!~n~~w~Za ta usluge zaplacisz za pomoca kapitalu grupy ~y~%s (UID: %d)~w~. Jesli nie chcesz tego robic - ~r~dezaktywuj ~w~sluzbe grupy.", GroupData[group_id][gName], GroupData[group_id][gUID]);
+			    new group_id = PlayerCache[customerid][pDuty][DUTY_GROUP];
+			    if(HavePlayerGroupPerm(playerid, GroupData[group_id][gUID], G_PERM_CAPITAL))
+			    {
+	   				if(OfferType != OFFER_SALON && OfferType != OFFER_TAX)
+	   				{
+						new veh_uid = OfferValue1, vehid = GetVehicleID(veh_uid);
+						if(CarInfo[vehid][cOwnerType] == OWNER_GROUP && CarInfo[vehid][cOwner] == GroupData[group_id][gUID])
+						{
+		    				pay_type = PAY_TYPE_CAPITAL;
+							TD_ShowSmallInfo(customerid, 0, "~r~Uwaga!~n~~w~Za ta usluge zaplacisz za pomoca kapitalu grupy ~y~%s (UID: %d)~w~. Jesli nie chcesz tego robic - ~r~dezaktywuj ~w~sluzbe grupy.", GroupData[group_id][gName], GroupData[group_id][gUID]);
+						}
 					}
-				}
-				else
-				{
-	   				pay_type = PAY_TYPE_CAPITAL;
-	   				TD_ShowSmallInfo(customerid, 0, "~r~Uwaga!~n~~w~Za ta usluge zaplacisz za pomoca kapitalu grupy ~y~%s (UID: %d)~w~. Jesli nie chcesz tego robic - ~r~dezaktywuj ~w~sluzbe grupy.");
+					else
+					{
+		   				pay_type = PAY_TYPE_CAPITAL;
+		   				TD_ShowSmallInfo(customerid, 0, "~r~Uwaga!~n~~w~Za ta usluge zaplacisz za pomoca kapitalu grupy ~y~%s (UID: %d)~w~. Jesli nie chcesz tego robic - ~r~dezaktywuj ~w~sluzbe grupy.");
+					}
 				}
 			}
 		}
@@ -15231,9 +15355,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				if(PlayerCache[offererid][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
 				{
 					new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+					
 					GroupData[group_id][gCash] += group_cash;
-
 					orm_update(GroupData[group_id][gOrm]);
+					
+     				AddGroupTransactionLog(playerid, group_id, TRANSACTION_OFFER, group_cash, offer_type, ProductData[product_id][pUID]);
 					ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 				}
 				else
@@ -15243,6 +15369,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 					GroupData[group_id][gCash] += group_cash;
 					orm_update(GroupData[group_id][gOrm]);
 
+                    AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, ProductData[product_id][pUID]);
 					ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Sprzeda³eœ produkt %s za cenê $%d. Otrzyma³eœ premiê w wysokoœci $%d!", OfferData[playerid][oName], offer_price, playercash);
 				}
 			}
@@ -15360,6 +15487,8 @@ public OnPlayerAcceptOffer(playerid, offererid)
 					
 					GroupData[capital_group_id][gCapital] -= offer_price;
 					PlayerCache[offererid][pBankCash] += playercash;
+					
+					AddGroupTransactionLog(playerid, capital_group_id, TRANSACTION_SERVICE, -offer_price, offer_type, veh_uid);
 				}
 				else
 				{
@@ -15373,8 +15502,9 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    if(GroupData[group_id][gType] == G_TYPE_GASSTATION)
 				    {
 				        GroupData[group_id][gCash] += group_cash;
-
 				        orm_update(GroupData[group_id][gOrm]);
+				        
+       					AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 						ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 				    }
 				}
@@ -15418,6 +15548,8 @@ public OnPlayerAcceptOffer(playerid, offererid)
 
 					GroupData[capital_group_id][gCapital] -= offer_price;
 					PlayerCache[offererid][pBankCash] += playercash;
+					
+					AddGroupTransactionLog(playerid, capital_group_id, TRANSACTION_SERVICE, -offer_price, offer_type, veh_uid);
 				}
 				else
 				{
@@ -15431,8 +15563,9 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    if(GroupData[group_id][gType] == G_TYPE_WORKSHOP || GroupData[group_id][gType] == G_TYPE_GASSTATION)
 			    	{
 				        GroupData[group_id][gCash] += group_cash;
-
 				        orm_update(GroupData[group_id][gOrm]);
+				        
+				        AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 	       				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 				    }
 				}
@@ -15581,9 +15714,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 			}
 			new mandate_reason[128], add_pdp = OfferData[playerid][oValue1];
@@ -15612,9 +15747,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 			}
 			new vehid = OfferData[playerid][oValue1];
@@ -15643,9 +15780,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 			}
 			PlayerCache[playerid][pDocuments] += OfferData[playerid][oValue1];
@@ -15680,9 +15819,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 			}
 
@@ -15716,9 +15857,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 			}
 
@@ -15750,9 +15893,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d\nPunkty aktywnoœci: +%d", playercash, group_cash);
 			}
 			PlayerCache[offererid][pHealing] = playerid;
@@ -15779,9 +15924,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 			}
 			new pass_time = OfferData[playerid][oValue1], group_uid = OfferData[playerid][oValue2];
@@ -15885,9 +16032,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 		    }
 		}
@@ -15923,9 +16072,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				}
 				
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 		    }
 		    new veh_model = OfferData[playerid][oValue1], veh_uid, spawn_point = random(sizeof(SalonSpawnPos)), color = random(36);
@@ -15968,9 +16119,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 		    }
 
@@ -16000,9 +16153,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 		    }
 			new vehid = OfferData[playerid][oValue1];
@@ -16031,9 +16186,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
+				
 				GroupData[group_id][gCash] += group_cash;
-
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 		    }
 
@@ -16065,9 +16222,11 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += playercash;
 				}
 				new group_id = PlayerCache[offererid][pDuty][DUTY_GROUP];
-				GroupData[group_id][gCash] += group_cash;
 				
+				GroupData[group_id][gCash] += group_cash;
 				orm_update(GroupData[group_id][gOrm]);
+				
+				AddGroupTransactionLog(offererid, group_id, TRANSACTION_OFFER, group_cash, offer_type, 0);
 				ShowPlayerInfoDialog(offererid, D_TYPE_INFO, "Otrzyma³eœ premiê w wysokoœci $%d!\n\nNa konto grupy dodano: $%d", playercash, group_cash);
 			}
 			new lesson_time = OfferData[playerid][oValue1],
@@ -16189,6 +16348,8 @@ public OnPlayerAcceptOffer(playerid, offererid)
 			{
 				new capital_group_id = PlayerCache[playerid][pDuty][DUTY_GROUP];
 				GroupData[capital_group_id][gCapital] -= offer_price;
+				
+				AddGroupTransactionLog(playerid, capital_group_id, TRANSACTION_SERVICE, -offer_price, offer_type, veh_uid);
 			}
 			else
 			{
@@ -16212,6 +16373,8 @@ public OnPlayerAcceptOffer(playerid, offererid)
 	
 	TextDrawHideForPlayer(playerid, TextDrawOfferBack);
 	PlayerTextDrawHide(playerid, TextDrawOfferDesc[playerid]);
+	
+	CancelSelectTextDraw(playerid);
 	
 	OfferData[playerid][oOffererID]		= INVALID_PLAYER_ID;
 	OfferData[playerid][oType]  		= 0;
@@ -16246,6 +16409,8 @@ public OnPlayerRejectOffer(playerid, offererid)
 
 	TextDrawHideForPlayer(playerid, TextDrawOfferBack);
 	PlayerTextDrawHide(playerid, TextDrawOfferDesc[playerid]);
+	
+	CancelSelectTextDraw(playerid);
 
 	OfferData[playerid][oOffererID]		= INVALID_PLAYER_ID;
 	OfferData[playerid][oType]  		= 0;
@@ -17521,7 +17686,7 @@ public OnPlayerFinishedDownloading(playerid, virtualworld)
     orm_addvar_int(orm_id, PlayerCache[playerid][pAJ], "char_aj");
 
     orm_addvar_int(orm_id, PlayerCache[playerid][pHouse], "char_house");
-    orm_addvar_int(orm_id, PlayerCache[playerid][pJob], "char_job");
+    orm_addvar_int(orm_id, WorkInfo[playerid][wID], "char_job");
 
     orm_addvar_int(orm_id, PlayerCache[playerid][pDocuments], "char_documents");
     orm_addvar_int(orm_id, PlayerCache[playerid][pAchievements], "char_achievements");
@@ -18230,6 +18395,7 @@ cmd:g(playerid, params[])
 	   	GroupData[group_id][gCash] -= price;
 	   	orm_update(GroupData[group_id][gOrm]);
 
+        AddGroupTransactionLog(playerid, group_id, TRANSACTION_WITHDRAW, -price, 0, 0);
 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Wyp³aci³eœ pieni¹dze z konta grupy.\n\nZ konta grupy zosta³o wyp³acone: $%d\nPozosta³e œrodki na koncie: $%d", price, GroupData[group_id][gCash]);
 
 		printf("[cash] %s (UID: %d, GID: %d) wyp³aci³ $%d z konta grupy %s (UID: %d). Na koncie pozosta³o: $%d", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], price, GroupData[group_id][gName], GroupData[group_id][gUID], GroupData[group_id][gCash]);
@@ -18286,7 +18452,8 @@ cmd:g(playerid, params[])
 
 	   	GroupData[group_id][gCapital] += price;
 	    orm_update(GroupData[group_id][gOrm]);
-
+	    
+		AddGroupTransactionLog(playerid, group_id, TRANSACTION_DEPOSIT, price, 0, 0);
 	   	ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Wp³aci³eœ pieni¹dze na konto grupy.\n\nNa konto grupy zosta³o wp³acone: $%d\nKapita³ grupy wynosi: $%d", price, GroupData[group_id][gCapital]);
 
         printf("[cash] %s (UID: %d, GID: %d) wp³aci³ $%d na konto grupy %s (UID: %d). Nowy stan konta: $%d", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], price, GroupData[group_id][gName], GroupData[group_id][gUID], GroupData[group_id][gCapital]);
@@ -20570,6 +20737,15 @@ cmd:tel(playerid, params[])
 		
 		if(strlen(list_category))
 		{
+  			if(HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_CAPITAL))
+  			{
+				new group_id = GetGroupID(DoorData[dOwner]);
+				if(PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
+				{
+			    	TD_ShowSmallInfo(playerid, 0, "~r~Uwaga!~n~~w~Za ta usluge zaplacisz za pomoca kapitalu grupy ~y~%s (UID: %d)~w~. Jesli nie chcesz tego robic - ~r~dezaktywuj ~w~sluzbe grupy.", GroupData[group_id][gName], GroupData[group_id][gUID]);
+				}
+			}
+			
 		    ShowPlayerDialog(playerid, D_ORDER_CATEGORY, DIALOG_STYLE_LIST, "Wybierz kategoriê:", list_category, "Wybierz", "Anuluj");
 		}
 		else
@@ -21082,11 +21258,11 @@ cmd:oferuj(playerid, params[])
 	     	}
 	    }
 	    
-	    if(PlayerCache[playerid][pJob] != JOB_NONE)
+	    if(WorkInfo[playerid][wID] != JOB_NONE)
 	    {
 	        format(list_offers, sizeof(list_offers), "%s\n \n{C0C0C0}Praca:{FFFFFF}", list_offers);
 	        
-	        if(PlayerCache[playerid][pJob] == JOB_MECHANIC)
+	        if(WorkInfo[playerid][wID] == JOB_MECHANIC)
 	        {
        			strcat(list_offers, "\n • tankowanie", sizeof(list_offers));
 	       		strcat(list_offers, "\n • naprawe", sizeof(list_offers));
@@ -21095,7 +21271,7 @@ cmd:oferuj(playerid, params[])
 	          	strcat(list_offers, "\n • montaz", sizeof(list_offers));
 	        }
 	        
-	        if(PlayerCache[playerid][pJob] == JOB_SELLER)
+	        if(WorkInfo[playerid][wID] == JOB_SELLER)
 	        {
 	            strcat(list_offers, "\n • produkt", sizeof(list_offers));
 	        }
@@ -21213,7 +21389,7 @@ cmd:oferuj(playerid, params[])
 	
 	if(!strcmp(type, "produkt", true) || !strcmp(type, "product", true))
 	{
-		if(PlayerCache[playerid][pDuty][DUTY_GROUP] == INVALID_GROUP_ID && PlayerCache[playerid][pJob] != JOB_SELLER)
+		if(PlayerCache[playerid][pDuty][DUTY_GROUP] == INVALID_GROUP_ID && WorkInfo[playerid][wID] != JOB_SELLER)
   	    {
   	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz byæ na s³u¿bie grupy lub posiadaæ pracê dorywcz¹ sprzedawcy, by móc coœ zaoferowaæ.");
   	        return 1;
@@ -21266,7 +21442,7 @@ cmd:oferuj(playerid, params[])
 		        }
 		        else
 		        {
-		            if(PlayerCache[playerid][pJob] != JOB_SELLER)
+		            if(WorkInfo[playerid][wID] != JOB_SELLER)
 		            {
 		                ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz pracy dorywczej jako sprzedawca.");
 		                return 1;
@@ -21583,7 +21759,7 @@ cmd:oferuj(playerid, params[])
 	
 	if(!strcmp(type, "tankowanie", true) || !strcmp(type, "refuel", true))
 	{
-	    if(PlayerCache[playerid][pJob] != JOB_MECHANIC)
+	    if(WorkInfo[playerid][wID] != JOB_MECHANIC)
 	    {
 	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz pracy mechanika, jako dorywczej.");
 	        return 1;
@@ -21672,7 +21848,7 @@ cmd:oferuj(playerid, params[])
 	
 	if(!strcmp(type, "naprawe", true) || !strcmp(type, "repair", true))
 	{
-		if(PlayerCache[playerid][pJob] != JOB_MECHANIC)
+		if(WorkInfo[playerid][wID] != JOB_MECHANIC)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz pracy mechanika, jako dorywczej.");
 		    return 1;
@@ -21732,7 +21908,7 @@ cmd:oferuj(playerid, params[])
 	
 	if(!strcmp(type, "lakierowanie", true) || !strcmp(type, "painting", true))
 	{
-		if(PlayerCache[playerid][pJob] != JOB_MECHANIC)
+		if(WorkInfo[playerid][wID] != JOB_MECHANIC)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz pracy mechanika, jako dorywczej.");
 		    return 1;
@@ -21888,7 +22064,7 @@ cmd:oferuj(playerid, params[])
 	
 	if(!strcmp(type, "montaz", true))
 	{
-		if(PlayerCache[playerid][pJob] != JOB_MECHANIC)
+		if(WorkInfo[playerid][wID] != JOB_MECHANIC)
 		{
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz pracy mechanika, jako dorywczej.");
 		    return 1;
@@ -23981,7 +24157,7 @@ cmd:pokoj(playerid, params[])
 	        return 1;
 	    }
 	    PlayerCache[playerid][pHouse] = DoorData[dUID];
-	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wynaj¹³eœ pokój w hotelu \"%s\".\nOp³ata bêdzie pobierana przy ka¿dej wyp³acie.\n\nTwój numer pokoju to: %d", DoorData[dName], PlayerCache[playerid][pUID]);
+	    ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Wynaj¹³eœ pokój w hotelu \"%s\".\nOp³ata ($%d) bêdzie pobierana przy ka¿dej wyp³acie.\n\nTwój numer pokoju to: %d", DoorData[dName], GroupData[group_id][gValue1], PlayerCache[playerid][pUID]);
 	    return 1;
 	}
 	if(!strcmp(type, "wymelduj", true))
@@ -25564,22 +25740,25 @@ cmd:kogut(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w pojeŸdzie nale¿¹cym do grupy.");
 	    return 1;
 	}
-	new count_objects = Streamer_CountVisibleItems(playerid, STREAMER_TYPE_OBJECT), object_id;
-	for (new player_object = 0; player_object <= count_objects; player_object++)
+	new Float:PosX, Float:PosY, Float:PosZ,
+	    virtual_world = GetPlayerVirtualWorld(playerid);
+	    
+	GetPlayerPos(playerid, PosX, PosY, PosZ);
+	
+	new ObjectData[MAX_VIS_OBJECTS], object_id,
+		count_objects = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, 3.0, virtual_world);
+
+	for (new object = 0; object < count_objects; object++)
 	{
-	    if(IsValidPlayerObject(playerid, player_object))
-	    {
-	        object_id = Streamer_GetItemStreamerID(playerid, STREAMER_TYPE_OBJECT, player_object);
-  			if(Streamer_GetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_ATTACHED_VEHICLE) == vehid)
-  			{
-  			    DestroyDynamicObject(object_id);
-				TD_ShowSmallInfo(playerid, 3, "Syrena ~b~policyjna ~w~zostala ~r~schowana~w~.");
-  			    return 1;
-  			}
-	    }
+		object_id = ObjectData[object];
+		if(Streamer_GetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_ATTACHED_VEHICLE) == vehid)
+		{
+  			DestroyDynamicObject(object_id);
+			TD_ShowSmallInfo(playerid, 3, "Syrena ~b~policyjna ~w~zostala ~r~schowana~w~.");
+			return 1;
+		}
 	}
 	
-	new Float:PosX, Float:PosY, Float:PosZ;
 	GetVehicleModelInfo(CarInfo[vehid][cModel], VEHICLE_MODEL_INFO_FRONTSEAT, PosX, PosY, PosZ);
 	
 	object_id = CreateDynamicObject(18646, 0.0, 0.0, 0.0, 0.0, 0.00, 0.0, -1, -1, -1, MAX_DRAW_DISTANCE);
@@ -27296,7 +27475,7 @@ cmd:paczka(playerid, params[])
 	        
 	        switch(PackageCache[package_id][pType])
 	        {
-	            case PACKAGE_PRODUCT:					if(PlayerCache[playerid][pJob] != JOB_COURIER)  			continue;
+	            case PACKAGE_PRODUCT:					if(WorkInfo[playerid][wID] != JOB_COURIER)  			continue;
 	            case PACKAGE_DRUGS, PACKAGE_WEAPON:		if(!IsPlayerInGroup(playerid, DoorData[dOwner]))			continue;
 	        }
 	        format(list_packages, sizeof(list_packages), "%s\n%d\t\t%s", list_packages, PackageCache[package_id][pUID], DoorData[dName]);
@@ -27309,7 +27488,7 @@ cmd:paczka(playerid, params[])
 	}
 	else
 	{
-	    TD_ShowSmallInfo(playerid, 3, "Nie ma ~r~zadnych ~w~dostepnych paczek.");
+	    TD_ShowSmallInfo(playerid, 3, "Nie ma ~r~zadnych ~w~dostepnych dla Ciebie paczek.");
 	}
 	return 1;
 }
@@ -29225,14 +29404,14 @@ stock TD_CreateForPlayer(playerid)
 	for(new group_slot = 0; group_slot < MAX_GROUP_SLOTS; group_slot++)
 	{
 	    posX = 190.000000;
-		posY = 130.000000;
+		posY = 125.000000;
 
 		if(group_slot == 1) posX += 130.000000;
-		if(group_slot == 2) posY += 110.000000;
+		if(group_slot == 2) posY += 120.000000;
 		if(group_slot == 3)
 		{
 			posX += 130.000000;
-			posY += 110.000000;
+			posY += 120.000000;
 		}
 
 		TD_MainGroupTag[playerid][group_slot] = CreatePlayerTextDraw(playerid, posX, posY, "_");
