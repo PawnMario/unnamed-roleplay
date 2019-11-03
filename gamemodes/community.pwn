@@ -63,7 +63,6 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define MAX_ANIMS           400
 #define MAX_PACKAGES        100
 #define MAX_RACE_CP         200
-#define MAX_NEWSPAPER_DOORS 100
 #define	MAX_DRAW_DISTANCE   250.0
 
 #define MAX_GROUPS          200
@@ -76,7 +75,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 #define ACTIVITY_LIMIT      1000
 
-#define PACC_VEHICLES    	3
+#define PACC_VEHICLES    	5
 #define FACC_VEHICLES   	1
 
 #define PACC_POINTS         15
@@ -314,7 +313,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define A_PERM_AREAS        	64
 #define A_PERM_OBJECTS      	128
 #define A_PERM_ITEMS          	256
-#define A_PERM_ACTOR            512
+#define A_PERM_ACTORS           512
 #define A_PERM_MAX              1023
 
 // Duty
@@ -364,7 +363,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define ITEM_CAR_CARD           28  // Karta pojazdu (value1 = model, value2 = w³aœciciel)
 #define ITEM_ROLL               29  // Rolki
 #define ITEM_MEDICINE           30  // Medykament (value1 = hp)
-#define ITEM_DRUG               31  // Narkotyk (value1 = typ narkotyku, value2 = pozosta³e)
+#define ITEM_DRUG               31  // Narkotyk (value1 = typ narkotyku, value2 = waga (g))
 #define ITEM_JOINT              32  // Joint (value1 = waga, value2 = jakoœæ [0-3])
 #define ITEM_KEYS               33  // Kluczyki (value1 = uid pojazdu)
 #define ITEM_GLOVES             34  // Rêkawiczki
@@ -399,6 +398,8 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define TRANSACTION_SERVICE 	3
 #define TRANSACTION_WITHDRAW 	4
 #define TRANSACTION_DEPOSIT 	5
+#define TRANSACTION_REMOVE      6
+#define TRANSACTION_DOTATION    7
 
 // Typy ofert
 #define OFFER_NONE              0
@@ -503,6 +504,9 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define OBJECT_TAG              18663
 #define OBJECT_ECHIDNA          2892
 #define OBJECT_FOOD_BOX         1342
+#define OBJECT_CORNER_GREEN     19606
+#define OBJECT_CORNER_BLUE      19607
+#define OBJECT_CORNER_RED       19605
 
 // Typy lakierowania
 #define SPRAY_TYPE_NONE     	0
@@ -829,6 +833,8 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 #define D_OBJECT_PRIORITY       107
 
+#define D_CORNER_OFFER          108
+
 // Forward's
 forward OnPlayerLogin(playerid);
 forward SetPlayerSpawn(playerid);
@@ -982,7 +988,6 @@ new Cache:external_items_cache[MAX_PLAYERS][10];
 // Iterators
 new Iterator:Groups<MAX_GROUPS>;
 new Iterator:Vehicles<MAX_VEHICLES>;
-new Iterator:NewsPaperDoors<MAX_NEWSPAPER_DOORS>;
 
 new Iterator:PlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
 new Iterator:CheckedPlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
@@ -995,6 +1000,8 @@ new Iterator:Anim<MAX_ANIMS>;
 
 new Iterator:Package<MAX_PACKAGES>;
 
+new Iterator:NewsPaperDoors<100>;
+
 // tymczasowy enum na zapis
 enum sAttachEdit
 {
@@ -1002,8 +1009,6 @@ enum sAttachEdit
 	aName[32]
 }
 new AttachEdit[MAX_PLAYERS][sAttachEdit];
-
-
 
 // Enums
 enum sPlayer
@@ -1061,7 +1066,6 @@ enum sPlayer
 	pAchievements,
 	
 	pPDP,
-	pWarns,
 	
 	pHint,
 	pLastPayday,
@@ -1196,6 +1200,9 @@ enum sPlayer
 	pTaggingObject,
 	pTaggingTime,
 	
+	pCornerObject,
+	pCornerPrice,
+	
 	bool: pRaceCreating,
 	pRaceCheckpoints,
 	
@@ -1289,31 +1296,31 @@ new GroupTypeInfo[][sGroupTypeInfo] =
 	{"Nieokreœlony",			0,		2000,		G_FLAG_OOC | G_FLAG_TAX},
 	{"Police",					900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_911 | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
 	{"Medical",					1100,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
-	{"San News",				500,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR},
-	{"Ochrona",					300,	11000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Gang",					200,	0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_TAG | G_FLAG_SEARCHING},
-	{"Stacja benzynowa",		300,	12000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Gastronomia",				300,	9000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Firma taksówkarska",		300,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Warsztat",				300,	10000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Si³ownia",				300,	7000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Government",				700,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
+	{"San News",				700,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR},
+	{"Ochrona",					700,	11000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Gang",					100,	0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_TAG | G_FLAG_SEARCHING},
+	{"Stacja benzynowa",		700,	12000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Gastronomia",				700,	9000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Firma taksówkarska",		700,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Warsztat",				700,	10000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Si³ownia",				700,	7000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Government",				900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
 	
-	{"Armia",					600,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
-	{"Fire Department",			900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_BLOCADE},
-	{"FBI",						1250,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
+	{"Armia",					900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
+	{"Fire Department",			1100,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_BLOCADE},
+	{"FBI",						900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
 
 	{"Mafia",					0,		0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_SEARCHING},
 
 	{"Rodzina",                 0,      0,          G_FLAG_OOC | G_FLAG_SPAWN},
 	{"Zmotoryzowana",           0,      0,          G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_RACE},
 	
-	{"Szko³a jazdy",            300,    9000,       G_FLAG_OOC | G_FLAG_TAX},
+	{"Szko³a jazdy",            700,    9000,       G_FLAG_OOC | G_FLAG_TAX},
 	
-	{"Wypo¿yczalnia",           300,    9800,      	G_FLAG_OOC | G_FLAG_TAX},
-	{"24/7",					100,	5000,		G_FLAG_OOC | G_FLAG_TAX},
+	{"Wypo¿yczalnia",           700,    9800,      	G_FLAG_OOC | G_FLAG_TAX},
+	{"24/7",					700,	5000,		G_FLAG_OOC | G_FLAG_TAX},
 
-	{"Salon samochodowy",		300,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Salon samochodowy",		700,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
 	{"Ciucholand",				0,		8000,		G_FLAG_OOC | G_FLAG_TAX},
 
 	{"Hotel",					150,	5500,		G_FLAG_OOC | G_FLAG_TAX},
@@ -2056,7 +2063,7 @@ enum sPosData
 }
 new PosInfo[][sPosData] =
 {
-	{1743.0033,	-1862.8491,	13.5758,	359.7995, 	0, 0},
+	{1759.1573,	-1950.0715,	14.1096,	305.4562, 	0, 0},
 	{154.1221, 	-1951.9156, 47.8750,	  	0.0, 	0, 0},
 	{2233.6584,	-1113.2397,	1050.8828,	 2.7833,  	5, 0}
 };
@@ -2066,6 +2073,24 @@ new Float:SalonSpawnPos[3][4] =
 	{901.3408, -1208.8365, 16.8620, 178.8416},
 	{866.7073, -1209.3844, 16.8687, 176.9288},
 	{830.8945, -1208.5759, 16.8481, 177.3645}
+};
+
+enum sDrugTypeInfo
+{
+	dName[32],
+	dCornerPrice,
+	
+	dAmount
+}
+new DrugTypeInfo[][sDrugTypeInfo] =
+{
+	{"Nieokreœlony",    0,		0},
+	{"Marihuana",   	20,		0},
+	{"Kokaina",         200,	30},
+	{"Heroina",         80,		25},
+	{"Amfetamina",      50,		20},
+	{"Crack",           35,		35},
+	{"Od¿ywka",         0,		10}
 };
 
 enum sStatusData
@@ -2186,7 +2211,9 @@ enum sObjectData
 	Float:objGateRZ,
 	
 	bool:objGateStatus,
-	bool:objGate
+	bool:objGate,
+	
+	objExtraID
 };
 
 enum sAreaData
@@ -2251,7 +2278,7 @@ enum sWorkData
 }
 new WorkInfo[MAX_PLAYERS][sWorkData];
 
-new BlockadeType[8] = {3578, 1228, 1237, 1425, 978, 979, 2892, 1437};
+new BlockadeType[8] = {3578, 1228, 1238, 1425, -2060, -2061, 2892, 1437};
 
 main()
 {
@@ -2269,7 +2296,7 @@ public OnGameModeInit()
 	gettime(hour, minute, second);
 	getdate(year, month, day);
 	
-	SetWeather(2);
+	SetWeather(13);
 	SetWorldTime(hour + 1);
 	
 	Iter_Init(PlayerItem);
@@ -2524,7 +2551,7 @@ task OnMinuteTask[60000]()
 	}
 	LastHour = hour;
 	
-	foreach(new i :Player)
+	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
@@ -2541,9 +2568,8 @@ task OnMinuteTask[60000]()
 		            
 		            PlayerCache[i][pPoints] += (IsPlayerPremium(i) ? PACC_POINTS : FACC_POINTS);
 
-					mysql_format(connHandle, query, sizeof(query), "UPDATE `ipb_members` SET member_game_points = '%d' WHERE member_id = '%d' LIMIT 1", PlayerCache[i][pPoints], PlayerCache[i][pGID]);
+					mysql_format(connHandle, query, sizeof(query), "UPDATE `core_members` SET member_game_points = '%d' WHERE member_id = '%d' LIMIT 1", PlayerCache[i][pPoints], PlayerCache[i][pGID]);
 					mysql_query(connHandle, query);
-
 
 					SetPlayerScore(i, PlayerCache[i][pPoints]);
 					
@@ -2666,87 +2692,97 @@ task OnMinuteTask[60000]()
 	    }
 	}
 	
-	new DoorData[sDoorInfo];
-	for (new doorid = 0; doorid < Streamer_CountItems(STREAMER_TYPE_PICKUP); doorid++)
+	new count_doors = Streamer_GetUpperBound(STREAMER_TYPE_PICKUP);
+	for(new doorid = 0; doorid < count_doors; doorid++)
 	{
-	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
-		if(DoorData[dFireData][FIRE_TIME])
+	    new DoorData[sDoorInfo];
+  		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		    
+		if(DoorData[dFireData][FIRE_TIME] > 0)
 	 	{
+	 	    printf("0 DOOR: %d", DoorData[dUID]);
+	 	    
 			new string[128], group_id;
+
 			DoorData[dFireData][FIRE_TIME] ++;
+			Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 
 			foreach(new i : Player)
 			{
-	  			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+ 				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	   			{
-	      			if(PlayerCache[i][pDuty][DUTY_GROUP])
-		       	 	{
-						group_id = PlayerCache[i][pDuty][DUTY_GROUP];
-						if(GroupData[group_id][gType] == G_TYPE_FIREDEPT)
-						{
-							if(GetPlayerDoorID(i) == doorid)
+					if(GetPlayerDoorID(i) == doorid)
+					{
+		     			if(PlayerCache[i][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
+			       	 	{
+							group_id = PlayerCache[i][pDuty][DUTY_GROUP];
+							if(GroupData[group_id][gType] == G_TYPE_FIREDEPT)
 							{
 								if(PlayerCache[i][pItemWeapon] != INVALID_ITEM_ID)
 								{
 									if(GetPlayerWeapon(i) == 42)
 									{
-									    DoorData[dFireData][FIRE_TIME] --;
-									    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+		    							DoorData[dFireData][FIRE_TIME] --;
+			   							Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 									}
 								}
 							}
-						}
-	     			}
+	    				}
+					}
 		    	}
 			}
-   			new color, Float:percent = (float(DoorData[dFireData][FIRE_TIME]) / 15.0) * 100, fire_label = DoorData[dFireData][FIRE_LABEL],
+			printf("1 DOOR: %d", DoorData[dUID]);
+			
+ 			new color, Float:percent = (float(DoorData[dFireData][FIRE_TIME]) / 10.0) * 100, fire_label = DoorData[dFireData][FIRE_LABEL],
 				Float:door_enter[3];
-				
+
 			Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, door_enter[0], door_enter[1], door_enter[2]);
-      		format(string, sizeof(string), "Ten budynek stan¹³ w p³omieniach!\nSzacowane zniszczenia: %d%", floatround(percent));
-      		
-      		if(DoorData[dFireData][FIRE_TIME] < 5)			color = 0x33AA33FF;
-      		else if(DoorData[dFireData][FIRE_TIME] >= 5 && DoorData[dFireData][FIRE_TIME] < 10)
-      		{
-			  	color = 0xFF9900FF;
-                CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 9, 5.0);
+   			format(string, sizeof(string), "Ten budynek stan¹³ w p³omieniach!\nSzacowane zniszczenia: %d%", floatround(percent));
+
+			if(DoorData[dFireData][FIRE_TIME] < 2)			color = 0x33AA33FF;
+	      	else if(DoorData[dFireData][FIRE_TIME] >= 4 && DoorData[dFireData][FIRE_TIME] < 8)
+			{
+				color = 0xFF9900FF;
+       			CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 9, 5.0);
 			}
-      		else
-	  		{
+  			else
+  			{
 			  	color = 0xAA3333FF;
 			  	CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 2, 8.0);
 			}
-			
-      		UpdateDynamic3DTextLabelText(Text3D:fire_label, color, string);
-      		
-      		// Po¿ar dobieg³ koñca
-      		if(percent >= 100)
-      		{
-      		    DoorData[dExitX]   = 0.0;
-      		    DoorData[dExitY]   = 0.0;
-      		    DoorData[dExitZ]   = 0.0;
-      		    
-      		    DoorData[dExitInt] = 0;
-      		    DoorData[dExitVW]  = 0;
-      		    
-      		    DestroyDynamicObject(DoorData[dFireData][FIRE_OBJECT]);
-      		    DestroyDynamic3DTextLabel(Text3D:DoorData[dFireData][FIRE_LABEL]);
-      		    
-      		    DoorData[dFireData][FIRE_TIME] = 0;
-      		    CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 6, 8.0);
-      		    
-      		    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
-      		    SaveDoor(doorid);
-      		}
-      		else if(percent <= 0)
-      		{
+			printf("2 DOOR: %d", DoorData[dUID]);
+
+			UpdateDynamic3DTextLabelText(Text3D:fire_label, color, string);
+
+			// Po¿ar dobieg³ koñca
+			if(percent >= 100)
+			{
+	   		    DoorData[dExitX]   = 0.0;
+	   		    DoorData[dExitY]   = 0.0;
+	   		    DoorData[dExitZ]   = 0.0;
+
+				DoorData[dExitInt] = 0;
+				DoorData[dExitVW]  = 0;
+
+				DestroyDynamicObject(DoorData[dFireData][FIRE_OBJECT]);
+				DestroyDynamic3DTextLabel(Text3D:DoorData[dFireData][FIRE_LABEL]);
+
+				DoorData[dFireData][FIRE_TIME] = 0;
+				CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 6, 8.0);
+
+				Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+				SaveDoor(doorid);
+			}
+			else if(percent <= 0)
+			{
   		    	DestroyDynamicObject(DoorData[dFireData][FIRE_OBJECT]);
-      		    DestroyDynamic3DTextLabel(Text3D:DoorData[dFireData][FIRE_LABEL]);
-      		    
-      		    DoorData[dFireData][FIRE_TIME] = 0;
-      		    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
-      		}
-	  	}
+    		    DestroyDynamic3DTextLabel(Text3D:DoorData[dFireData][FIRE_LABEL]);
+
+				DoorData[dFireData][FIRE_TIME] = 0;
+            	Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			}
+			printf("3 DOOR: %d", DoorData[dUID]);
+		}
 	}
 	return 1;
 }
@@ -2893,7 +2929,7 @@ task OnSecondTask[1000]()
 				   		    {
 					   		    if(PlayerCache[playerid][pLogged] && PlayerCache[playerid][pSpawned])
 					   		    {
-									if(PlayerCache[playerid][pDuty][DUTY_GROUP])
+									if(PlayerCache[playerid][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
 									{
 									    group_id = PlayerCache[playerid][pDuty][DUTY_GROUP];
 									    if(GroupData[group_id][gType] == G_TYPE_POLICE)
@@ -3447,6 +3483,8 @@ task OnSecondTask[1000]()
 			            Float:oPosX, Float:oPosY, Float:oPosZ;
 			            
 					GetDynamicObjectPos(object_id, oPosX, oPosY, oPosZ);
+					Streamer_UpdateEx(i, oPosX, oPosY, oPosZ, 0, 0, -1);
+					
 					crp_SetPlayerPos(i, oPosX, oPosY, oPosZ);
 
 					SetPlayerInterior(i, 0);
@@ -3517,6 +3555,71 @@ task OnSecondTask[1000]()
 					PlayerCache[i][pTaggingTime]    = 0;
 
 					TD_ShowSmallInfo(i, 3, "Tagowanie zostalo ~r~anulowane~w~.");
+				}
+			}
+			
+			// Cornery
+			if(PlayerCache[i][pCornerObject] != INVALID_OBJECT_ID)
+			{
+			    new object_id = PlayerCache[i][pCornerObject], object_type = GetObjectModel(object_id), Float:distance;
+				Streamer_GetDistanceToItem(PosX, PosY, PosZ, STREAMER_TYPE_OBJECT, object_id, distance);
+				
+				if(distance <= 3.0)
+				{
+				    if(second % 20 == 0 && PlayerCache[i][pCornerPrice] == 0)
+				    {
+					    new time_multiplier, Float:price_multiplier;
+						if(object_type == OBJECT_CORNER_RED)
+						{
+						    time_multiplier = 1;
+						    price_multiplier = 0.9;
+						}
+
+						if(object_type == OBJECT_CORNER_BLUE)
+						{
+						    time_multiplier = 2;
+							price_multiplier = 0.5;
+						}
+
+						if(object_type == OBJECT_CORNER_GREEN)
+						{
+						    time_multiplier = 3;
+						    price_multiplier = 0.3;
+						}
+
+						// Przychodzi klient (time + random_time)
+						if(minute % (time_multiplier + random(time_multiplier)) == 0)
+						{
+						    new drug_type = random(6), drug_value = random(10);
+						    foreach(new itemid : PlayerItem[i])
+						    {
+						        if(PlayerItemCache[i][itemid][iUID])
+						        {
+						            if(PlayerItemCache[i][itemid][iType] == ITEM_DRUG && PlayerItemCache[i][itemid][iValue][0] == drug_type && PlayerItemCache[i][itemid][iValue][1] >= drug_value)
+						            {
+						                new drug_string[512],
+											price = (DrugTypeInfo[drug_type][dCornerPrice] + random(floatround(DrugTypeInfo[drug_type][dCornerPrice] * price_multiplier))) * drug_value;
+
+						                format(drug_string, sizeof(drug_string), "Pojawi³ siê nowy klient chêtny na zakup %s (%dg). Jego oferta: $%d ($%d za gram).\n\nMo¿esz zaakceptowaæ tê ofertê, lub podaæ swoj¹ cenê (co niekoniecznie\nmo¿e siê udaæ), b¹dŸ odrzuciæ tê ofertê i poczekaæ na korzystniejsz¹.\n\nWprowadŸ poni¿ej ile oczekujesz za gram tego produktu\njeœli natomiast akceptujesz z³o¿on¹ ofertê przez klienta - zostaw okno puste.", PlayerItemCache[i][itemid][iName], drug_value, price, price / drug_value);
+						                ShowPlayerDialog(i, D_CORNER_OFFER, DIALOG_STYLE_INPUT, "Handel » Nowy klient", drug_string, "Negocjuj", "Odrzuæ");
+						                
+										PlayerCache[i][pItemArray][ITEM_DRUG] = itemid;
+										PlayerCache[i][pCornerPrice] = price;
+										
+										PlayerCache[i][pMainTable] = drug_value;
+						                break;
+						            }
+						        }
+						    }
+						}
+					}
+				}
+				else
+				{
+				    PlayerCache[i][pCornerObject]   = INVALID_OBJECT_ID;
+				    PlayerCache[i][pCornerPrice] = 0;
+				    
+				    TD_ShowSmallInfo(i, 3, "Handel zostal ~r~zakonczony~w~.");
 				}
 			}
 			
@@ -3603,6 +3706,43 @@ task OnSecondTask[1000]()
 									format(string, sizeof(string), "WeaponHack (weapID: %d, weapName: %s).", weapon_id, weapon_name);
 									GivePlayerPunish(i, INVALID_PLAYER_ID, PUNISH_BAN, string, 365, 0);
 									continue;
+								}
+							}
+							
+							// Zapiszmy amunicjê non-onplayerweaponshot broni
+							if(GetPlayerWeaponID(i) == 37 || GetPlayerWeaponID(i) == 41 || GetPlayerWeaponID(i) == 42)
+							{
+   								new itemid = PlayerCache[i][pItemWeapon],
+									weapon_id = GetPlayerWeaponID(i), weapon_ammo;
+									
+ 								weapon_ammo = GetPlayerWeaponAmmo(i, weapon_id);
+								if(weapon_ammo > PlayerItemCache[i][itemid][iValue][1])
+								{
+								    format(string, sizeof(string), "AmmoCheat (%d/%d).", weapon_ammo, PlayerItemCache[i][itemid][iValue][1]);
+									GivePlayerPunish(i, INVALID_PLAYER_ID, PUNISH_BAN, string, 30, 0);
+									continue;
+								}
+
+								if(weapon_ammo < PlayerItemCache[i][itemid][iValue][1])
+								{
+									PlayerItemCache[i][itemid][iValue][1] = weapon_ammo;
+								}
+
+								if(GetPlayerWeaponState(i) == WEAPONSTATE_NO_BULLETS)
+								{
+								    if(PlayerItemCache[i][itemid][iValue][1] <= 0)
+								    {
+										ResetPlayerWeaponsEx(i);
+										PlayerCache[i][pCheckWeapon] = (time + 5);
+
+										PlayerItemCache[i][itemid][iValue][1] = 0;
+										PlayerItemCache[i][itemid][iUsed] = false;
+
+										orm_update(PlayerItemCache[i][itemid][iOrm]);
+
+										PlayerCache[i][pItemWeapon] = INVALID_ITEM_ID;
+										RemovePlayerAttachedObject(i, SLOT_WEAPON);
+									}
 								}
 							}
 						}
@@ -3817,6 +3957,8 @@ public OnPlayerConnect(playerid)
 	PlayerCache[playerid][pTaggingObject]           = INVALID_OBJECT_ID;
 	PlayerCache[playerid][pLogTries]        		= 3;
 	
+	PlayerCache[playerid][pCornerObject]            = INVALID_OBJECT_ID;
+	
 	PlayerCache[playerid][pLastVeh]                 = INVALID_VEHICLE_ID;
 	PlayerCache[playerid][pLastW]                   = INVALID_PLAYER_ID;
 	PlayerCache[playerid][pLastObject]              = INVALID_OBJECT_ID;
@@ -3906,13 +4048,14 @@ public OnPlayerLogin(playerid)
  		    orm_apply_cache(orm_id, 0);
  		    orm_setkey(orm_id, "char_uid");
  		    
- 		    format(query, sizeof(query), "SELECT `name`, `members_pass_hash`, `member_game_admin_perm` FROM `core_members` WHERE member_id = '%d' LIMIT 1", PlayerCache[playerid][pGID]);
+ 		    format(query, sizeof(query), "SELECT `name`, `members_pass_hash`, `member_premium_time`, `member_game_points`, `member_game_admin_perm` FROM `core_members` WHERE member_id = '%d' LIMIT 1", PlayerCache[playerid][pGID]);
  			login_password = mysql_query(connHandle, query);
  			
  			cache_get_value_index(0, 0, PlayerCache[playerid][pGlobName], 256);
 			cache_get_value_index(0, 1, PlayerCache[playerid][pPassword], 256);
-			cache_get_value_index_int(0, 2, PlayerCache[playerid][pAdmin]);
-			//cache_get_value_index_int(0, 2, PlayerCache[playerid][pPremium]);
+			cache_get_value_index_int(0, 2, PlayerCache[playerid][pPremium]);
+			cache_get_value_index_int(0, 3, PlayerCache[playerid][pPoints]);
+			cache_get_value_index_int(0, 4, PlayerCache[playerid][pAdmin]);
 			
 			cache_delete(login_password);
             PlayerCache[playerid][pSession][SESSION_LOGIN] = gettime();
@@ -4345,6 +4488,27 @@ public SetPlayerSpawn(playerid)
 	
 	SetPlayerSkin(playerid, (PlayerCache[playerid][pLastSkin] != 0) ? PlayerCache[playerid][pLastSkin] : PlayerCache[playerid][pSkin]);
 	
+	// Wczytaj obiekty drzwi
+	if(PlayerCache[playerid][pVirtualWorld] != 0)
+	{
+		new doorid = GetDoorID(PlayerCache[playerid][pVirtualWorld]);
+		if(doorid != INVALID_DOOR_ID)
+		{
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			
+			if(DoorData[dExitVW] != 0 && !DoorData[dObjectsLoaded] && DoorData[dExitVW] != Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID))
+			{
+				new query[512];
+				mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorData[dExitVW]);
+		 		mysql_tquery(connHandle, query, "query_OnLoadObjects", "");
+
+				DoorData[dObjectsLoaded] = true;
+				Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			}
+		}
+	}
+	
 	// Podgl¹d
 	if(PlayerCache[playerid][pSpectate] != INVALID_PLAYER_ID)
 	{
@@ -4450,11 +4614,11 @@ public SetPlayerSpawn(playerid)
 			
 			if(DoorData[dExitVW] != 0 && !DoorData[dObjectsLoaded] && DoorData[dExitVW] != Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID))
 			{
-		 		new query[512];
+				new query[512];
 				mysql_format(connHandle, query, sizeof(query), "SELECT "SQL_PREF"objects.*, "SQL_PREF"materials.material_texture FROM "SQL_PREF"objects LEFT JOIN "SQL_PREF"materials on "SQL_PREF"objects.object_uid = "SQL_PREF"materials.material_owner WHERE "SQL_PREF"objects.object_world = '%d' ORDER BY "SQL_PREF"objects.object_uid ASC", DoorData[dExitVW]);
 		 		mysql_tquery(connHandle, query, "query_OnLoadObjects", "");
 
-			    DoorData[dObjectsLoaded] = true;
+				DoorData[dObjectsLoaded] = true;
 				Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 			}
 			
@@ -4581,7 +4745,9 @@ public OnVehicleSpawn(vehicleid)
 	
 	// Nie mo¿e wybuchaæ
     if(CarInfo[vehicleid][cHealth] < 350)	CarInfo[vehicleid][cHealth] = 350;
+    
 	SetVehicleLock(vehicleid, CarInfo[vehicleid][cLocked]);
+	SetVehicleHealth(vehicleid, CarInfo[vehicleid][cHealth]);
 
 	if(!strlen(CarInfo[vehicleid][cRegister]))
 	{
@@ -4596,6 +4762,7 @@ public OnVehicleSpawn(vehicleid)
 	LinkVehicleToInterior(vehicleid, CarInfo[vehicleid][cInteriorID]);
 
 	ChangeVehiclePaintjob(vehicleid, CarInfo[vehicleid][cPaintJob]);
+	ChangeVehicleColor(vehicleid, CarInfo[vehicleid][cColor1], CarInfo[vehicleid][cColor2]);
 
 	new veh_visual[4];
 
@@ -5242,8 +5409,9 @@ public OnPlayerEnterVehicle(playerid, vehicleid, ispassenger)
 	else
 	{
 	    //printf("[cars] %s (UID: %d, GID: %d) wsiad³ do pojazdu %s (UID: %d) jako kierowca.", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], GetVehicleName(CarInfo[vehicleid][cModel]), CarInfo[vehicleid][cUID]);
-        PlayerCache[playerid][pLastVeh] = vehicleid;
+        
 	}
+	PlayerCache[playerid][pLastVeh] = vehicleid;
 	
 	new engine_status = GetVehicleEngineStatus(vehicleid);
 	ChangeVehicleEngineStatus(vehicleid, (IsVehicleBike(vehicleid)) ? 1 : engine_status);
@@ -5664,7 +5832,7 @@ public OnPlayerRequestSpawn(playerid)
 {
 	return 1;
 }
-/*
+
 public OnObjectMoved(objectid)
 {
 	return 1;
@@ -5674,23 +5842,26 @@ public OnPlayerObjectMoved(playerid, objectid)
 {
 	return 1;
 }
-*/
 
 public OnDynamicObjectMoved(objectid)
 {
+	printf("OBJECT: %d", objectid);
 	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 	    {
 	        if(PlayerCache[i][pBasketBall] == objectid)
 	        {
+	            printf("1 OBJECT: %d", objectid);
 	        	new basket_object_id, string[128],
 					Float:oPosX, Float:oPosY, Float:oPosZ,
 				    Float:tPosX, Float:tPosY, Float:tPosZ;
 	        
 	            basket_object_id = PlayerCache[i][pBasketObject];
 	            
-	            GetDynamicObjectPos(basket_object_id, oPosX, oPosY, oPosZ);
+	            GetDynamicObjectPos(objectid, oPosX, oPosY, oPosZ);
+	            
+	            GetDynamicObjectPos(basket_object_id, tPosX, tPosY, tPosZ);
             	GetXYBehindOfObject(basket_object_id, tPosX, tPosY, 0.5);
             	
             	StopDynamicObject(objectid);
@@ -5706,11 +5877,12 @@ public OnDynamicObjectMoved(objectid)
 				{
 			        MoveDynamicObject(objectid, tPosX + random(5), tPosY + random(5), PlayerCache[i][pPosZ], 10.0);
 				}
+				printf("2 OBJECT: %d", objectid);
 				return 1;
 	        }
 	    }
 	}
-	
+	printf("3 OBJECT: %d", objectid);
 	return 1;
 }
 
@@ -5909,14 +6081,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 		        
 		        RemovePlayerAttachedObject(playerid, SLOT_TRYING);
 		        GameTextForPlayer(playerid, "_", 0, 6);
-		        
-		        new doorid = GetPlayerDoorID(playerid), DoorData[sDoorInfo];
-		        Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
-		        
-		        new group_id = GetGroupID(DoorData[dOwner]);
-				GroupData[group_id][gCash] += floatround(0.3 * AccessData[access_id][aPrice]);
 				
-				orm_update(GroupData[group_id][gOrm]);
 				PlayerCache[playerid][pSelectAccess] = INVALID_ACCESS_ID;
 		        
 		        CreatePlayerItem(playerid, AccessData[access_id][aName], ITEM_CLOTH_ACCESS, 0, AccessData[access_id][aUID]);
@@ -5961,15 +6126,6 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 				OnPlayerFreeze(playerid, false, 0);
 
 		        GameTextForPlayer(playerid, "_", 0, 6);
-		        
-		        new doorid = GetPlayerDoorID(playerid), DoorData[sDoorInfo];
-		        Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
-		        
-				new group_id = GetGroupID(DoorData[dOwner]);
-
-				GroupData[group_id][gCash] += floatround(0.3 * SkinData[skin_id][sPrice]);
-				
-				orm_update(GroupData[group_id][gOrm]);
 				
 		        PlayerCache[playerid][pSelectSkin] = INVALID_SKIN_ID;
 		        SetPlayerSkin(playerid, PlayerCache[playerid][pSkin]);
@@ -6030,7 +6186,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 							}
 							else													GameTextForPlayer(playerid, "~n~~n~~n~~r~Wyciskaj do konca!", 1000, 3);
 
-							TD_ShowSmallInfo(playerid, 0, "Powtorzenia: ~b~~h~%d~n~~n~Mozesz sprobowac tez ~r~treningu ~w~po uzyciu ~y~odzywek~w~, ktore zakupisz w silowni.", PlayerCache[playerid][pGymRepeat]);
+							TD_ShowHint(playerid, HINT_NONE, 0, "Powtorzenia: ~b~~h~%d~n~~n~Mozesz sprobowac tez ~r~treningu ~w~po uzyciu ~y~odzywek~w~, ktore zakupisz w silowni.", PlayerCache[playerid][pGymRepeat]);
 						}
 				    }
 				    default:
@@ -6042,6 +6198,8 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 				        
 				        RemovePlayerAttachedObject(playerid, SLOT_TRAIN);
 				        TD_ShowSmallInfo(playerid, 3, "Trening zostal ~g~pomyslnie ~w~zakonczony.");
+				        
+				        TD_HideHint(playerid);
 				    }
 				}
 		    }
@@ -6070,7 +6228,7 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 							}
 							else													GameTextForPlayer(playerid, "~n~~n~~n~~r~Wyciskaj do konca!", 1000, 3);
 
-							TD_ShowSmallInfo(playerid, 0, "Powtorzenia: ~b~~h~%d~n~~n~Mozesz sprobowac tez ~r~treningu ~w~po uzyciu ~y~odzywek~w~, ktore zakupisz w silowni.", PlayerCache[playerid][pGymRepeat]);
+							TD_ShowHint(playerid, HINT_NONE, 0, "Powtorzenia: ~b~~h~%d~n~~n~Mozesz sprobowac tez ~r~treningu ~w~po uzyciu ~y~odzywek~w~, ktore zakupisz w silowni.", PlayerCache[playerid][pGymRepeat]);
 						}
 		            }
 		            case 573:
@@ -6090,6 +6248,8 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 
 						RemovePlayerAttachedObject(playerid, SLOT_TRAIN);
 				        TD_ShowSmallInfo(playerid, 3, "Trening zostal ~g~pomyslnie ~w~zakonczony.");
+				        
+				        TD_HideHint(playerid);
 		            }
 		        }
 		    }
@@ -6870,28 +7030,31 @@ public OnPlayerGiveDamage(playerid, damagedid, Float:amount, weaponid, bodypart)
 	if(damagedid != INVALID_PLAYER_ID && weaponid != 0)
 	{
 	    // AntyWeaponHack
-	    if(PlayerCache[playerid][pItemWeapon] != INVALID_ITEM_ID)
-	    {
-	        new itemid = PlayerCache[playerid][pItemWeapon];
-	        if(PlayerItemCache[playerid][itemid][iValue][0] != weaponid)
-	        {
+		if(PlayerCache[playerid][pCheckWeapon] && gettime() > PlayerCache[playerid][pCheckWeapon])
+		{
+		    if(PlayerCache[playerid][pItemWeapon] != INVALID_ITEM_ID)
+		    {
+		        new itemid = PlayerCache[playerid][pItemWeapon];
+		        if(PlayerItemCache[playerid][itemid][iValue][0] != weaponid)
+		        {
+					new string[128], weapon_name[32];
+					GetWeaponName(weaponid, weapon_name, sizeof(weapon_name));
+
+					format(string, sizeof(string), "WeaponHack (weapID: %d, weapName: %s).", weaponid, weapon_name);
+					GivePlayerPunish(playerid, INVALID_PLAYER_ID, PUNISH_BAN, string, 365, 0);
+					return 1;
+		        }
+		    }
+		    else
+		    {
 				new string[128], weapon_name[32];
 				GetWeaponName(weaponid, weapon_name, sizeof(weapon_name));
 
 				format(string, sizeof(string), "WeaponHack (weapID: %d, weapName: %s).", weaponid, weapon_name);
 				GivePlayerPunish(playerid, INVALID_PLAYER_ID, PUNISH_BAN, string, 365, 0);
-				return 1;
-	        }
-	    }
-	    else
-	    {
-			new string[128], weapon_name[32];
-			GetWeaponName(weaponid, weapon_name, sizeof(weapon_name));
-
-			format(string, sizeof(string), "WeaponHack (weapID: %d, weapName: %s).", weaponid, weapon_name);
-			GivePlayerPunish(playerid, INVALID_PLAYER_ID, PUNISH_BAN, string, 365, 0);
-	        return 1;
-	    }
+		        return 1;
+		    }
+		}
 
 	    new body_part_type = GetBodyPartType(bodypart);
 	    if(!(PlayerCache[damagedid][pDeathBody] & body_part_type))	PlayerCache[damagedid][pDeathBody] += body_part_type;
@@ -7533,8 +7696,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					// Usuñ stare obiekty z tego VW (jeœli s¹)
 					new ObjectData[MAX_VIS_OBJECTS],
 						object_count = Streamer_GetNearbyItems(DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, MAX_DRAW_DISTANCE, DoorData[dUID]);
-
-					mysql_query_format("DELETE FROM `"SQL_PREF"objects` WHERE object_world = '%d'", DoorData[dUID]);
 
 					for (new object = 0; object < object_count; object++)
 					{
@@ -8239,11 +8400,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 						    PlayerItemCache[playerid][bag_item_id][iValue][0] += GetPlayerItemWeight(playerid, itemid);
 						}
 
-						if(listitem == 5)
-						{
-						    PlayerItemCache[playerid][last_itemid][iValue][0] += PlayerItemCache[playerid][itemid][iValue][0];
-						}
-
 						format(items_list_info, sizeof(items_list_info), "%s\n• %s (%d)", items_list_info, PlayerItemCache[playerid][itemid][iName], PlayerItemCache[playerid][itemid][iUID]);
 
 						orm_destroy(PlayerItemCache[playerid][itemid][iOrm]);
@@ -8258,11 +8414,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	            if(listitem == 2)
 	            {
 	                orm_update(PlayerItemCache[playerid][bag_item_id][iOrm]);
-	            }
-
-	            if(listitem == 5)
-	            {
-	                orm_update(PlayerItemCache[playerid][last_itemid][iOrm]);
 	            }
 
 	            mysql_query(connHandle, main_query);
@@ -8666,7 +8817,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	    if(response)
 	    {
 	        new product_uid, product_price, product_count, product_name[32],
-	            doorid = PlayerCache[playerid][pMainTable];
+	            group_id = PlayerCache[playerid][pMainTable];
 	        
 	        sscanf(inputtext, "d'x'd'$'ds[32]", product_uid, product_count, product_price, product_name);
 			
@@ -8698,11 +8849,6 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				crp_GivePlayerMoney(playerid, -product_price);
 				orm_update(PlayerCache[playerid][pOrm]);
 				
-				new DoorData[sDoorInfo];
-				Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
-
-				new group_id = GetGroupID(DoorData[dOwner]);
-				
 				GroupData[group_id][gCash] += group_cash;
 				orm_update(GroupData[group_id][gOrm]);
     		}
@@ -8719,6 +8865,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
       		
         	if(ProductData[product_id][pCount] <= 0)	DeleteProduct(product_id);
 	        else										SaveProduct(product_id, SAVE_PRODUCT_VALUES);
+	        
 	        return 1;
 	    }
 	    else
@@ -8734,7 +8881,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        format(string, sizeof(string), "%s (%d, %d) %d szt.", ProductData[product_id][pName], ProductData[product_id][pValue1], ProductData[product_id][pValue2], ProductData[product_id][pCount]);
 
 			ShowPlayerDialog(playerid, D_PRODUCT_OPTIONS, DIALOG_STYLE_LIST, string, "1. Wyjmij produkt\n2. Zmieñ cenê\n3. Usuñ z magazynu", "Wybierz", "Anuluj");
-	        PlayerCache[playerid][pMainTable] = product_id;
+	        PlayerCache[playerid][pMainTable] = product_uid;
 	        return 1;
 	    }
 	    else
@@ -8746,7 +8893,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-     		new product_id = PlayerCache[playerid][pMainTable], string[256];
+     		new product_uid = PlayerCache[playerid][pMainTable], product_id = GetProductID(product_uid), string[256];
      		if(product_id == INVALID_PRODUCT_ID)
      		{
      		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Tego produktu nie ma w magazynie.");
@@ -8762,8 +8909,17 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Twoja postaæ nie jest w stanie unieœæ wiêcej przedmiotów.");
 					    return 1;
 					}
-	               	new itemid = CreatePlayerItem(playerid, ProductData[product_id][pName], ProductData[product_id][pType], ProductData[product_id][pValue1], ProductData[product_id][pValue2]);
-
+					
+					new itemid;
+					if(ProductData[product_id][pType] == ITEM_DRUG)
+					{
+					    itemid = CreatePlayerItem(playerid, ProductData[product_id][pName], ProductData[product_id][pType], ProductData[product_id][pValue1], ProductData[product_id][pCount]);
+					    ProductData[product_id][pCount] = 0;
+					}
+					else
+					{
+	               		itemid = CreatePlayerItem(playerid, ProductData[product_id][pName], ProductData[product_id][pType], ProductData[product_id][pValue1], ProductData[product_id][pValue2]);
+					}
 					PlayerItemCache[playerid][itemid][iGroup] = ProductData[product_id][pOwner];
 					orm_update(PlayerItemCache[playerid][itemid][iOrm]);
 
@@ -8771,6 +8927,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					if(ProductData[product_id][pCount] <= 0)	DeleteProduct(product_id);
 					else										SaveProduct(product_id, SAVE_PRODUCT_VALUES);
 
+					new group_id = GetGroupID(ProductData[product_id][pOwner]);
+
+                    AddGroupTransactionLog(playerid, group_id, TRANSACTION_REMOVE, 0, 0, ProductData[product_id][pUID]);
 					ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Wyj¹³eœ produkt z magazynu.\nNazwa produktu: %s (%d, %d)\n\nProdukt pojawi³ siê w Twoim ekwipunku.", ProductData[product_id][pName], ProductData[product_id][pValue1], ProductData[product_id][pValue2]);
 	            }
 	            case 1:
@@ -10252,7 +10411,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
      		new string[256];
 	        sscanf(inputtext, "d'$'ds[32]", OrderCache[playerid][oUID], OrderCache[playerid][oPrice], OrderCache[playerid][oName]);
 
-			format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
+			format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 10%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
 			ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
 	        return 1;
 	    }
@@ -10275,7 +10434,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
    			new product_count = strval(inputtext), string[128];
 			if(strlen(inputtext) > 11 || product_count <= 0)
 			{
-				format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
+				format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 10%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
 				ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
 
 				TD_ShowSmallInfo(playerid, 3, "Wprowadzono ~r~bledna ~w~ilosc sztuk.");
@@ -10289,7 +10448,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			{
 				if(GroupData[group_id][gCapital] < OrderCache[playerid][oPrice] * product_count)
 				{
-					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
+					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 10%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
 					ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
 
 					TD_ShowSmallInfo(playerid, 3, "Grupa ~r~nie posiada ~w~takiej ilosci pieniedzy w kapitale.");
@@ -10300,7 +10459,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			{
 				if(PlayerCache[playerid][pCash] < OrderCache[playerid][oPrice] * product_count)
 				{
-					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
+					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 10%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
 					ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
 
 					TD_ShowSmallInfo(playerid, 3, "Nie posiadasz tyle ~r~gotowki~w~.");
@@ -10337,8 +10496,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
   			new order_price = OrderCache[playerid][oPrice] * OrderCache[playerid][oCount], string[256],
 			    order_item_type, order_item_value1, order_item_value2, order_type, order_limit, order_time_limit;
 
-			// Jednak weŸmiemy mu o 40% mniej gotówki, niech zarobi
-			if(OrderCache[playerid][oCount] >= 20)	order_price = floatround(order_price * 0.6);
+			// Jednak weŸmiemy mu o 10% mniej gotówki, niech zarobi
+			if(OrderCache[playerid][oCount] >= 20)	order_price = floatround(order_price * 0.9);
 			new rows, Cache:tmp_cache, query[256];
 
 			mysql_format(connHandle, query, sizeof(query), "SELECT `order_item_type`, `order_item_value1`, `order_item_value2`, `order_type`, `order_limit`, `order_time_limit` FROM `"SQL_PREF"orders` WHERE order_uid = '%d' LIMIT 1", OrderCache[playerid][oUID]);
@@ -10368,7 +10527,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    new transaction_sum;
 			    
 			    // Sprawdzamy transakcje grupy dla tego produktu
-			    mysql_format(connHandle, query, sizeof(query), "SELECT SUM(transaction_value) FROM `"SQL_PREF"group_transactions` WHERE transaction_type = '%d' AND transaction_group = '%d' AND transaction_extraid = '%d' AND transaction_date > %d - %d", TRANSACTION_ORDER, DoorData[dOwner], OrderCache[playerid][oUID], gettime(), order_time_limit);
+			    mysql_format(connHandle, query, sizeof(query), "SELECT SUM(transaction_value) FROM `"SQL_PREF"group_transactions` WHERE transaction_type = '%d' AND transaction_group = '%d' AND transaction_extraid = '%d' AND transaction_date > %d - %d", TRANSACTION_ORDER, DoorData[dOwner], OrderCache[playerid][oUID], gettime(), (86400 * order_time_limit));
 			    tmp_cache = mysql_query(connHandle, query);
 			    
 			    cache_get_row_count(rows);
@@ -10379,10 +10538,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			    // Jeœli przekroczy³ limit
 			    if(transaction_sum + OrderCache[playerid][oCount] > order_limit)
 			    {
-					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 40%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
+					format(string, sizeof(string), "WprowadŸ poni¿ej, ile produktów tego typu chcesz zamówiæ.\nJe¿eli zamawiasz hurtowo, cena maleje a¿ o 10%%.\n\nNazwa produktu: %s\nKoszt za sztukê: $%d", OrderCache[playerid][oName], OrderCache[playerid][oPrice]);
 					ShowPlayerDialog(playerid, D_ORDER_COUNT, DIALOG_STYLE_INPUT, "Iloœæ sztuk", string, "Dalej", "Anuluj");
 					
-					TD_ShowSmallInfo(playerid, 10, "Na ten produkt zostal narzucony ~r~limit zamawiania~w~.~n~Mozesz zamowic ~y~%d sztuk ~w~tego produktu na ~y~%d dni~w~.~n~~n~Pozostala ilosc sztuk tego produktu to: ~y~%d~w~.", order_limit, order_time_limit / 86000, order_limit - transaction_sum);
+					TD_ShowSmallInfo(playerid, 10, "Na ten produkt zostal narzucony ~r~limit zamawiania~w~.~n~Mozesz zamowic ~y~%d sztuk ~w~tego produktu na ~y~%d dni~w~.~n~~n~Pozostala ilosc sztuk tego produktu to: ~y~%d~w~.", order_limit, order_time_limit, order_limit - transaction_sum);
 			        return 1;
 			    }
 			}
@@ -10459,6 +10618,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			
 			SetPlayerInterior(playerid, 1);
 			crp_SetPlayerPos(playerid, 1.5648, 23.8641, 1199.5938);
+			
+			ResetPlayerCamera(playerid);
+			PlayerCache[playerid][pBusStart] 	= INVALID_OBJECT_ID;
+
+			OnPlayerFreeze(playerid, false, 0);
+			Streamer_ToggleCameraUpdate(playerid, false);
 
 			PlayerPlaySound(playerid, 1076, 0.0, 0.0, 0.0);
 			PlayerCache[playerid][pBusRide] = true;
@@ -11263,6 +11428,94 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        return 1;
 	    }
 	}
+	if(dialogid == D_CORNER_OFFER)
+	{
+	    if(response)
+	    {
+	        if(PlayerCache[playerid][pCornerObject] == INVALID_OBJECT_ID)   return 1;
+	        
+	        new itemid = PlayerCache[playerid][pItemArray][ITEM_DRUG];
+	        if(PlayerItemCache[playerid][itemid][iType] != ITEM_DRUG)       return 1;
+	    
+			new drug_type = PlayerItemCache[playerid][itemid][iValue][0], object_id = PlayerCache[playerid][pCornerObject], object_model = GetObjectModel(object_id),
+				price = PlayerCache[playerid][pCornerPrice], drug_value = PlayerCache[playerid][pMainTable], drug_limit, price_limit;
+
+			switch(object_model)
+			{
+			    case OBJECT_CORNER_RED:
+				{
+					drug_limit = 20;
+					price_limit = (price / drug_value) + random(floatround(DrugTypeInfo[drug_type][dCornerPrice] * 0.9));
+				}
+			    case OBJECT_CORNER_BLUE:
+				{
+					drug_limit = 30;
+					price_limit = (price / drug_value) + random(floatround(DrugTypeInfo[drug_type][dCornerPrice] * 0.5));
+				}
+			    case OBJECT_CORNER_GREEN:
+				{
+					drug_limit = 50;
+					price_limit = (price / drug_value) + random(floatround(DrugTypeInfo[drug_type][dCornerPrice] * 0.3));
+				}
+			}
+				
+			if(!is_null(inputtext))
+			{
+				new new_price = strval(inputtext);
+			    if((new_price * drug_value) <= price || new_price > price_limit || random(2) == 1)
+			    {
+       				PlayerCache[playerid][pCornerPrice] = 0;
+	        		TD_ShowSmallInfo(playerid, 3, "Transakcja ~r~nieudana~w~.");
+			        return 1;
+			    }
+			    new string[512];
+			    
+       			format(string, sizeof(string), "Pojawi³ siê nowy klient chêtny na zakup %s (%dg). Jego oferta: $%d ($%d za gram).\n\nMo¿esz zaakceptowaæ tê ofertê, lub podaæ swoj¹ cenê (co niekoniecznie\nmo¿e siê udaæ), b¹dŸ odrzuciæ tê ofertê i poczekaæ na korzystniejsz¹.\n\nWprowadŸ poni¿ej ile oczekujesz za gram tego produktu\njeœli natomiast akceptujesz z³o¿on¹ ofertê przez klienta - zostaw okno puste.", PlayerItemCache[playerid][itemid][iName], drug_value, (new_price * drug_value), new_price);
+          		ShowPlayerDialog(playerid, D_CORNER_OFFER, DIALOG_STYLE_INPUT, "Handel » Nowy klient", string, "Negocjuj", "Odrzuæ");
+
+				PlayerCache[playerid][pItemArray][ITEM_DRUG] = itemid;
+				PlayerCache[playerid][pCornerPrice] = (new_price * drug_value);
+
+				PlayerCache[playerid][pMainTable] = drug_value;
+				TD_ShowSmallInfo(playerid, 5, "Klient ~g~przyjal ~w~Twoja oferte. Mozesz to zaakceptowac, lub jeszcze ~y~zawyzyc ~w~oferte (ryzyko!).");
+				return 1;
+			}
+			else
+			{
+				if(PlayerItemCache[playerid][itemid][iValue][1] >= drug_value)
+				{
+    				PlayerItemCache[playerid][itemid][iValue][1] -= drug_value;
+					    
+    				if(PlayerItemCache[playerid][itemid][iValue][1] <= 0)   DeletePlayerItem(playerid, itemid);
+    				else                                                    orm_update(PlayerItemCache[playerid][itemid][iOrm]);
+					    
+					crp_GivePlayerMoney(playerid, price);
+					TD_ShowSmallInfo(playerid, 5, "Pomyslnie dokonano ~g~transakcji~w~. Sprzedales ~y~%s (%dg) ~w~za ~g~$%d~w~.", PlayerItemCache[playerid][itemid][iName], drug_value, price);
+
+					PlayerCache[playerid][pCornerPrice] = 0;
+                        
+					new ObjectData[sObjectData];
+					Streamer_GetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, ObjectData);
+
+					ObjectData[objExtraID] += drug_value;
+					if(ObjectData[objExtraID] >= drug_limit)    SetDynamicObjectPos(object_id, 0.0, 0.0, 0.0);
+						
+					Streamer_SetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, ObjectData);
+      				return 1;
+				}
+				
+				PlayerCache[playerid][pCornerPrice] = 0;
+                TD_ShowSmallInfo(playerid, 3, "Transakcja zostala ~r~odrzucona~w~.");
+			}
+	        return 1;
+	    }
+	    else
+	    {
+	        PlayerCache[playerid][pCornerPrice] = 0;
+	        TD_ShowSmallInfo(playerid, 3, "Transakcja zostala ~r~odrzucona~w~.");
+	        return 1;
+	    }
+	}
 	return 1;
 }
 
@@ -11405,7 +11658,7 @@ public OnPlayerEditObject(playerid, playerobject, objectid, response, Float:fX, 
 
 	PlayerCache[playerid][pMainTable] = playerobject;
     MovePlayerObject(playerid, playerobject, fX, fY, fZ, 10.0, fRotX, fRotY, fRotZ);
- */
+*/
 	return 1;
 }
 
@@ -11477,6 +11730,9 @@ public OnPlayerEditDynamicObject(playerid, objectid, response, Float:x, Float:y,
 		        }
 			}
 			
+			new player_object = Streamer_GetItemInternalID(playerid, STREAMER_TYPE_OBJECT, objectid);
+			GetPlayerObjectRot(playerid, player_object, rx, ry, rz);
+			
 			SetDynamicObjectPos(objectid, x, y, z);
 			SetDynamicObjectRot(objectid, rx, ry, rz);
 
@@ -11492,7 +11748,11 @@ public OnPlayerEditDynamicObject(playerid, objectid, response, Float:x, Float:y,
 	    }
 	    case EDIT_RESPONSE_UPDATE:
 	    {
-	        //MovePlayerObject(playerid, PlayerCache[playerid][pMainTable], x, y, z, 3.0, rx, ry, rz);
+         	//MovePlayerObject(playerid, PlayerCache[playerid][pMainTable], x, y, z, 3.0, rx, ry, rz);
+         	
+         	new player_object = Streamer_GetItemInternalID(playerid, STREAMER_TYPE_OBJECT, objectid);
+         	MovePlayerObject(playerid, player_object, x, y, z, 3.0, rx, ry, rz);
+         	
 	        TD_ShowLargeInfo(playerid, 0, "Model: ~y~%d          ~w~Identyfikator: ~y~%d~n~~n~~b~PX: ~w~%05.1f            ~b~PY: ~w~%05.1f          ~b~PZ: ~w~%05.1f~n~~n~~r~RX: ~w~%05.1f          ~r~RY: ~w~%05.1f         ~r~RZ: ~w~%05.1f", GetObjectModel(objectid), GetObjectUID(objectid), x, y, z, rx, ry, rz);
 	    }
 	}
@@ -11695,7 +11955,7 @@ public ShowPlayerStatsForPlayer(playerid, giveplayer_id)
 	GetPlayerIp(playerid, IP, sizeof(IP));
 		
 	format(list_stats, sizeof(list_stats), "Identyfikator\t\t\t%d\n", PlayerCache[playerid][pUID]);
-	format(list_stats, sizeof(list_stats), "%sGlobalnie\t\t\t%d\n", list_stats, PlayerCache[playerid][pGID]);
+	format(list_stats, sizeof(list_stats), "%sGlobalnie\t\t\t%d (%s)\n", list_stats, PlayerCache[playerid][pGID], PlayerCache[playerid][pGlobName]);
 		
 	format(list_stats, sizeof(list_stats), "%sCzas gry\t\t\t%dh %dm\n", list_stats, PlayerCache[playerid][pHours], PlayerCache[playerid][pMinutes]);
 
@@ -11954,8 +12214,8 @@ public ShowPlayerGroupInfo(playerid, group_id)
 	format(list_stats, sizeof(list_stats), "Typ grupy:\t\t%s", GroupTypeInfo[GroupData[group_id][gType]][gTypeName]);
     format(list_stats, sizeof(list_stats), "%s\nBud¿et:\t\t\t$%d", list_stats, GroupData[group_id][gCash]);
 
-    format(list_stats, sizeof(list_stats), "%s\nMaksymalna pensja:\t\t$%d", list_stats, GroupData[group_id][gMaxPay]);
-    format(list_stats, sizeof(list_stats), "%s\nKapita³:\t\t$%d", list_stats, GroupData[group_id][gCapital]);
+    format(list_stats, sizeof(list_stats), "%s\nMaksymalna pensja:\t$%d", list_stats, GroupData[group_id][gMaxPay]);
+    format(list_stats, sizeof(list_stats), "%s\nKapita³:\t\t\t$%d", list_stats, GroupData[group_id][gCapital]);
 
     if(GroupData[group_id][gOwner])
     {
@@ -12069,7 +12329,7 @@ public LoadPlayerGroups(playerid)
 		group_slot ++;
 	}
 	if(cache_is_valid(tmp_cache))	cache_delete(tmp_cache);
-	
+
 	// Sprawdzam kiedy ostatnia wyp³ata
 	if(PlayerCache[playerid][pLastPayday] + 86000 <= gettime())
 	{
@@ -12616,7 +12876,7 @@ public query_OnLoadDoors()
 		// Drzwi dla pracy dorywczej
 		if(DoorData[dOwnerType] == OWNER_PLAYER && door_entervw == 0)
 		{
-			if(Iter_Count(NewsPaperDoors) < MAX_NEWSPAPER_DOORS)
+			if(Iter_Count(NewsPaperDoors) < 100)
 			{
 				Iter_Add(NewsPaperDoors, doorid);
 			}
@@ -13866,8 +14126,10 @@ public OnPlayerUseItem(playerid, itemid)
 		        new object_id = GetClosestObjectType(playerid, OBJECT_STOVE);
 				if(object_id == INVALID_OBJECT_ID)
 				{
+				    new drug_amount = DrugTypeInfo[drug_type][dAmount];
+				    
 				    PlayerCache[playerid][pDrugType] = DRUG_COCAINE;
-				    PlayerCache[playerid][pDrugLevel] += PlayerItemCache[playerid][itemid][iValue][1];
+				    PlayerCache[playerid][pDrugLevel] += drug_amount;
 				    
 					if(PlayerCache[playerid][pDrugLevel] < 75)
 					{
@@ -13878,8 +14140,11 @@ public OnPlayerUseItem(playerid, itemid)
 						ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 					}
 					
-					PlayerCache[playerid][pDepend] += (0.1 * PlayerItemCache[playerid][itemid][iValue][1]);
-					DeletePlayerItem(playerid, itemid);
+					PlayerCache[playerid][pDepend] += (0.1 * drug_amount);
+					
+     				PlayerItemCache[playerid][itemid][iValue][1] --;
+			        if(PlayerItemCache[playerid][itemid][iValue][1] <= 0)	DeletePlayerItem(playerid, itemid);
+			        else                                                    orm_update(PlayerItemCache[playerid][itemid][iOrm]);
 				}
 				else
 				{
@@ -13888,8 +14153,10 @@ public OnPlayerUseItem(playerid, itemid)
 		    }
 		    case DRUG_HEROIN:
 		    {
+		        new drug_amount = DrugTypeInfo[drug_type][dAmount];
+		        
 		    	PlayerCache[playerid][pDrugType] = DRUG_HEROIN;
-			    PlayerCache[playerid][pDrugLevel] += PlayerItemCache[playerid][itemid][iValue][1];
+			    PlayerCache[playerid][pDrugLevel] += drug_amount;
 			    
 				if(PlayerCache[playerid][pDrugLevel] < 75)
 				{
@@ -13900,8 +14167,11 @@ public OnPlayerUseItem(playerid, itemid)
 					ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 				}
 				
-				PlayerCache[playerid][pDepend] += (0.2 * PlayerItemCache[playerid][itemid][iValue][1]);
-				DeletePlayerItem(playerid, itemid);
+				PlayerCache[playerid][pDepend] += (0.2 * drug_amount);
+				
+    			PlayerItemCache[playerid][itemid][iValue][1] --;
+		        if(PlayerItemCache[playerid][itemid][iValue][1] <= 0)	DeletePlayerItem(playerid, itemid);
+		        else                                                    orm_update(PlayerItemCache[playerid][itemid][iOrm]);
 		    }
 		    case DRUG_AMPHETAMINE:
 		    {
@@ -13909,12 +14179,13 @@ public OnPlayerUseItem(playerid, itemid)
 		    }
 		    case DRUG_CRACK:
 		    {
-   				if(PlayerCache[playerid][pHealth] + PlayerItemCache[playerid][itemid][iValue][1] <= 100)
+		        new health_amount = DrugTypeInfo[drug_type][dAmount];
+   				if(PlayerCache[playerid][pHealth] + health_amount <= 100)
 				{
 					new Float:health;
 
 					GetPlayerHealth(playerid, health);
-					crp_SetPlayerHealth(playerid, health + PlayerItemCache[playerid][itemid][iValue][1]);
+					crp_SetPlayerHealth(playerid, health + health_amount);
 				}
 				else
 				{
@@ -13924,11 +14195,15 @@ public OnPlayerUseItem(playerid, itemid)
 				format(string, sizeof(string), "* %s za¿ywa %s.", PlayerName(playerid), PlayerItemCache[playerid][itemid][iName]);
 				ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 		    
-		        PlayerCache[playerid][pDepend] += (0.1 * PlayerItemCache[playerid][itemid][iValue][1]);
-		        DeletePlayerItem(playerid, itemid);
+		        PlayerCache[playerid][pDepend] += (0.1 * health_amount);
+		        
+		        PlayerItemCache[playerid][itemid][iValue][1] --;
+		        if(PlayerItemCache[playerid][itemid][iValue][1] <= 0)	DeletePlayerItem(playerid, itemid);
+		        else                                                    orm_update(PlayerItemCache[playerid][itemid][iOrm]);
 		    }
 		    case DRUG_CONDITIONER:
 		    {
+		        new drug_amount = DrugTypeInfo[drug_type][dAmount];
 		        if(PlayerCache[playerid][pDrugType] == DRUG_CONDITIONER)
 		        {
 		            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Za¿y³eœ ju¿ jednej od¿ywki, aby u¿yæ nastêpnej poprzednia musi przestaæ dzia³aæ.");
@@ -13936,14 +14211,16 @@ public OnPlayerUseItem(playerid, itemid)
 		        }
 		    
 		        PlayerCache[playerid][pDrugType] = DRUG_CONDITIONER;
-		        PlayerCache[playerid][pDrugValue1] += PlayerItemCache[playerid][itemid][iValue][1];
+		        PlayerCache[playerid][pDrugValue1] += drug_amount;
 		        
           		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Za¿y³eœ od¿ywki wspomagaj¹cej wzrost si³y.\nPodczas treningu Twoja si³a powinna wzrastaæ trochê szybciej ni¿ zwykle.\n\nJest to czasowe dzia³anie, dlatego zaleca siê braæ od¿ywki przed samym treningiem.");
 
 				format(string, sizeof(string), "* %s za¿ywa %s.", PlayerName(playerid), PlayerItemCache[playerid][itemid][iName]);
 				ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 			
-				DeletePlayerItem(playerid, itemid);
+   				PlayerItemCache[playerid][itemid][iValue][1] --;
+		        if(PlayerItemCache[playerid][itemid][iValue][1] <= 0)	DeletePlayerItem(playerid, itemid);
+		        else                                                    orm_update(PlayerItemCache[playerid][itemid][iOrm]);
 		    }
 		}
 		
@@ -14035,6 +14312,7 @@ public OnPlayerUseItem(playerid, itemid)
 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten budynek ju¿ p³onie!");
 		    return 0;
 		}
+		/*
 	   	new firefighter_count, group_id;
 	    foreach(new i : Player)
 	    {
@@ -14046,7 +14324,7 @@ public OnPlayerUseItem(playerid, itemid)
              		if(GroupData[group_id][gType] == G_TYPE_FIREDEPT)
                		{
                  		firefighter_count ++;
-                   		if(firefighter_count >= 5)
+                   		if(firefighter_count >= 3)
 	                    {
 							break;
         				}
@@ -14054,11 +14332,11 @@ public OnPlayerUseItem(playerid, itemid)
           		}
        		}
 	    }
-	    if(firefighter_count < 5)
+	    if(firefighter_count < 3)
 	    {
 			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mozesz u¿yæ tego przedmiotu teraz.");
    			return 1;
- 		}
+ 		}*/
 		new Float:PosX, Float:PosY, Float:PosZ,
 			virtual_world, interior_id;
 			
@@ -14483,7 +14761,7 @@ public OnPlayerRaiseItems(playerid)
     }
 
 	ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
-	//TD_ShowHint(playerid, HINT_NEW_ITEM, 15, "W Twoim ~y~ekwipunku ~w~pojawil sie nowy przedmiot. Skorzystaj z komendy ~p~/p~w~, by zobaczyc liste przedmiotow, ktore posiadasz przy sobie.~n~~n~Przedmioty to nieodlaczny element rozgrywki. Z pewnoscia bedziesz bardzo czesto ich uzywal podczas gry..."); // TODO
+	//TD_ShowHint(playerid, HINT_NEW_ITEM, 15, "W Twoim ~y~ekwipunku ~w~pojawil sie nowy przedmiot. Skorzystaj z komendy ~p~/p~w~, by zobaczyc liste przedmiotow, ktore posiadasz przy sobie.~n~~n~P"); // TODO
 	return 1;
 }
 
@@ -15330,7 +15608,7 @@ public OnPlayerSendOffer(playerid, customerid, OfferName[], OfferType, OfferValu
 					else
 					{
 		   				pay_type = PAY_TYPE_CAPITAL;
-		   				TD_ShowSmallInfo(customerid, 0, "~r~Uwaga!~n~~w~Za ta usluge zaplacisz za pomoca kapitalu grupy ~y~%s (UID: %d)~w~. Jesli nie chcesz tego robic - ~r~dezaktywuj ~w~sluzbe grupy.");
+		   				TD_ShowSmallInfo(customerid, 0, "~r~Uwaga!~n~~w~Za ta usluge zaplacisz za pomoca kapitalu grupy ~y~%s (UID: %d)~w~. Jesli nie chcesz tego robic - ~r~dezaktywuj ~w~sluzbe grupy.", GroupData[group_id][gName], GroupData[group_id][gUID]);
 					}
 				}
 			}
@@ -16650,13 +16928,14 @@ public OnPlayerEnterDoor(playerid, doorid)
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz wejœæ do budynku maj¹c rolki na nogach.");
 	    return 1;
 	}
-	if(DoorData[dFireData][FIRE_TIME])
+	if(DoorData[dFireData][FIRE_TIME] > 0)
 	{
 	    if(!IsPlayerInGroupType(playerid, G_TYPE_FIREDEPT))
 		{
 	    	ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Ten budynek p³onie!\n\nZadzwoñ po s³u¿by porz¹dkowe, w przeciwnym wypadku\nbudynek ulegnie ca³kowitemu zniszczeniu!");
 	    	return 1;
 		}
+		CreateExplosion(DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], 9, 5.0);
 		TD_ShowSmallInfo(playerid, 5, "Wszedles do ~r~palacego ~w~sie budynku. Uzywaj ~y~gasnicy ~w~by gasic pozar.");
 	}
 	if(PlayerCache[playerid][pFreeze] > 0)
@@ -16673,8 +16952,6 @@ public OnPlayerEnterDoor(playerid, doorid)
 		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	    
 	    freeze_time = 5;
-
-	    printf("Wczytywanie obiektów drzwi %s (%d).", DoorData[dName], DoorData[dUID]);
 	}
    	if(strlen(DoorData[dAudioURL]))
 	{
@@ -16697,29 +16974,31 @@ public OnPlayerEnterDoor(playerid, doorid)
 	}
 	else
 	{
-	    new vehid = GetPlayerVehicleID(playerid);
+	    new vehid = GetPlayerVehicleID(playerid), seatid = GetPlayerVehicleSeat(playerid);
 
 		PlayerCache[playerid][pPosX] = DoorData[dExitX];
 		PlayerCache[playerid][pPosY] = DoorData[dExitY];
 		PlayerCache[playerid][pPosZ] = DoorData[dExitZ];
-
-		SetVehicleVirtualWorld(vehid, DoorData[dExitVW]);
-		SetVehiclePos(vehid, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]);
-
-		SetVehicleZAngle(vehid, DoorData[dExitA]);
-		LinkVehicleToInterior(vehid, DoorData[dExitInt]);
-
+		
 		foreach(new i : Player)
 		{
 		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 		    {
-	  			if(GetPlayerVehicleID(i) == GetPlayerVehicleID(playerid))
+	  			if(GetPlayerVehicleID(i) == vehid)
 	    		{
 					SetPlayerVirtualWorld(i, DoorData[dExitVW]);
 					SetPlayerInterior(i, DoorData[dExitInt]);
 				}
 			}
 		}
+		
+		SetVehicleVirtualWorld(vehid, DoorData[dExitVW]);
+		SetVehiclePos(vehid, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]);
+
+		SetVehicleZAngle(vehid, DoorData[dExitA]);
+		LinkVehicleToInterior(vehid, DoorData[dExitInt]);
+		
+		PutPlayerInVehicle(playerid, vehid, seatid);
 	}
 
 	CancelEdit(playerid);
@@ -16787,7 +17066,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 		    }
 		    case G_TYPE_BANK:
 		    {
-		        TD_ShowHint(playerid, HINT_BANK, 15, "Wlasnie wszedles do ~y~banku~w~! Uzyj komendy ~p~/bank~w~, by zalozyc swoje konto bankowe i moc placic za uslugi za pomoca ~y~karty kredytowej~w~.~n~~n~Bedziesz mogl rowniez trzymac tutaj swoje oszczednosci, a nawet dokonywac ~y~przelewow ~w~(pod warunkiem ze znasz numer konta innego gracza).~n~~n~Ty rowniez otrzymasz swoj ~y~unikalny ~w~numer konta.");
+		        TD_ShowHint(playerid, HINT_BANK, 15, "Wlasnie wszedles do ~y~banku~w~! Uzyj komendy ~p~/bank~w~, by zalozyc swoje konto bankowe i moc placic za uslugi za pomoca ~y~karty kredytowej~w~.~n~~n~Bedziesz mogl rowniez trzymac tutaj swoje oszczednosci, a nawet dokonywac ~y~przelewow ~w~(pod warunkiem ze znasz numer konta innego gracza).~n~~n~Sprawdz swoj ~y~stan konta ~w~po zalozeniu - wydaje sie, ze cos tam jest.");
 		    }
 		}
 	}
@@ -16851,29 +17130,31 @@ public OnPlayerExitDoor(playerid, doorid)
 	}
 	else
 	{
-	    new vehid = GetPlayerVehicleID(playerid);
+	    new vehid = GetPlayerVehicleID(playerid), seatid = GetPlayerVehicleSeat(playerid);
 
 		PlayerCache[playerid][pPosX] = door_enter[0];
 		PlayerCache[playerid][pPosY] = door_enter[1];
 		PlayerCache[playerid][pPosZ] = door_enter[2];
-
-		SetVehicleVirtualWorld(vehid, door_entervw);
-		SetVehiclePos(vehid, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]);
-
-		SetVehicleZAngle(vehid, 0.0);
-		LinkVehicleToInterior(vehid, door_enterint);
-
+		
 		foreach(new i : Player)
 		{
 			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
 			{
-	  			if(GetPlayerVehicleID(i) == GetPlayerVehicleID(playerid))
+	  			if(GetPlayerVehicleID(i) == vehid)
 		    	{
 					SetPlayerVirtualWorld(i, door_entervw);
 					SetPlayerInterior(i, door_enterint);
 				}
 			}
 		}
+
+		SetVehicleVirtualWorld(vehid, door_entervw);
+		SetVehiclePos(vehid, PlayerCache[playerid][pPosX], PlayerCache[playerid][pPosY], PlayerCache[playerid][pPosZ]);
+
+		SetVehicleZAngle(vehid, 0.0);
+		LinkVehicleToInterior(vehid, door_enterint);
+		
+		PutPlayerInVehicle(playerid, vehid, seatid);
 	}
 
 	CancelEdit(playerid);
@@ -16942,8 +17223,8 @@ public GivePlayerAchievement(playerid, achieve_type)
 	new achieve_id = GetAchieveIndex(achieve_type), string[256];
 	format(string, sizeof(string), "Zdobyles osiagniecie: ~n~~y~%s", AchieveInfo[achieve_id][aName]);
 
-	if(AchieveInfo[achieve_id][aPoints] < 0)    format(string, sizeof(string), "%s~n~~n~~w~Punkty: ~r~~h~(%d) cPoints", string, AchieveInfo[achieve_id][aPoints]);
-	else                                        format(string, sizeof(string), "%s~n~~n~~w~Punkty: ~b~~h~(+%d) cPoints", string, AchieveInfo[achieve_id][aPoints]);
+	if(AchieveInfo[achieve_id][aPoints] < 0)    format(string, sizeof(string), "%s~n~~n~~w~Punkty: ~r~~h~(%d) mPoints", string, AchieveInfo[achieve_id][aPoints]);
+	else                                        format(string, sizeof(string), "%s~n~~n~~w~Punkty: ~b~~h~(+%d) mPoints", string, AchieveInfo[achieve_id][aPoints]);
 
 	PlayerTextDrawSetString(playerid, PlayerText:TextDrawAchieve[playerid], string);
 	PlayerTextDrawShow(playerid, PlayerText:TextDrawAchieve[playerid]);
@@ -16955,7 +17236,7 @@ public GivePlayerAchievement(playerid, achieve_type)
 	SetPlayerScore(playerid, PlayerCache[playerid][pPoints]);
 	
 	//Audio_Play(playerid, AUDIO_ACHIEVE);
-	mysql_query_format("UPDATE `ipb_members`, `"SQL_PREF"characters` SET member_game_points = '%d', char_achievements = '%d' WHERE char_uid = '%d' AND member_id = '%d'", PlayerCache[playerid][pPoints], PlayerCache[playerid][pAchievements], PlayerCache[playerid][pUID], PlayerCache[playerid][pGID]);
+	mysql_query_format("UPDATE `core_members`, `"SQL_PREF"characters` SET member_game_points = '%d', char_achievements = '%d' WHERE char_uid = '%d' AND member_id = '%d'", PlayerCache[playerid][pPoints], PlayerCache[playerid][pAchievements], PlayerCache[playerid][pUID], PlayerCache[playerid][pGID]);
 	mysql_query_format("INSERT INTO `"SQL_PREF"char_achievements` (achiev_score, achiev_bit, achiev_owner, achiev_date) VALUES ('%d', '%d', '%d', '%d')", AchieveInfo[achieve_id][aPoints], achieve_type, PlayerCache[playerid][pUID], gettime());
 	return 1;
 }
@@ -17016,11 +17297,7 @@ public GivePlayerPunish(playerid, giverid, punish_type, punish_reason[], punish_
 	{
 	    case PUNISH_WARN:
 	    {
-	        PlayerCache[playerid][pWarns] ++;
-	        mysql_query_format("UPDATE `ipb_members` SET member_game_warns = '%d' WHERE member_id = '%d' LIMIT 1", PlayerCache[playerid][pWarns], PlayerCache[playerid][pGID]);
-	    
-	        format(string, sizeof(string), "Warn (%d)", PlayerCache[playerid][pWarns]);
-			TextDrawSetString(Text:TextDrawPunishTitle, string);
+			TextDrawSetString(Text:TextDrawPunishTitle, "Warn");
 	    }
 	    case PUNISH_KICK:
     	{
@@ -17037,19 +17314,19 @@ public GivePlayerPunish(playerid, giverid, punish_type, punish_reason[], punish_
 	        format(string, sizeof(string), "Ban (%d dni)", punish_time);
 	        TextDrawSetString(Text:TextDrawPunishTitle, string);
 	        
-	        kick = true;
 	        punish_end = punish_date + (punish_time * 86400);
 	        
             PlayerCache[playerid][pBlock] += BLOCK_CHAR;
 	        mysql_query_format("UPDATE `"SQL_PREF"characters` SET char_block = '%d' WHERE char_uid = '%d' LIMIT 1", PlayerCache[playerid][pBlock], PlayerCache[playerid][pUID]);
-	    }
+
+            kick = true;
+		}
 	    case PUNISH_BLOCK:
 	    {
 	        switch(punish_extraid)
 	        {
 	            case BLOCK_CHAR:
 	            {
-					
 	                TextDrawSetString(Text:TextDrawPunishTitle, "Blokada postaci");
 	                kick = true;
 	            }
@@ -17132,15 +17409,12 @@ public AddPlayerPunishLog(playerid, punish_giver, punish_type, punish_extraid, p
 
 public LoadPlayerBans(playerid)
 {
-	new IP[16], ban_reason[128],
-	    ban_serial[128];
-	    
+	new IP[16], ban_reason[128];
 	GetPlayerIp(playerid, IP, sizeof(IP));
-	//gpci(playerid, ban_serial, sizeof(ban_serial));
 	
 	new rows, Cache:tmp_cache, query[256];
 
-	mysql_format(connHandle, query, sizeof(query), "SELECT `ban_reason` FROM `"SQL_PREF"bans` WHERE (ban_owner = '%d' OR ban_ip = '%s' OR ban_serial = '%s') AND ban_filter != '%d' LIMIT 1", PlayerCache[playerid][pGID], IP, ban_serial, PlayerCache[playerid][pGID]);
+	mysql_format(connHandle, query, sizeof(query), "SELECT `ban_reason` FROM `"SQL_PREF"bans` WHERE (ban_owner = '%d' OR ban_ip = '%s') AND ban_filter != '%d' LIMIT 1", PlayerCache[playerid][pGID], IP, PlayerCache[playerid][pGID]);
 	tmp_cache = mysql_query(connHandle, query);
 
     cache_get_row_count(rows);
@@ -17443,7 +17717,7 @@ public OnPlayerInteractActor(playerid, actorid)
 	    if(group_type == G_TYPE_BAR || group_type == G_TYPE_24/7)
 	    {
 			ListGroupProductsForPlayer(group_id, playerid, PRODUCT_LIST_BUY);
-			PlayerCache[playerid][pMainTable] = actorid;
+			PlayerCache[playerid][pMainTable] = group_id;
 	    }
 	    
 	    if(group_type == G_TYPE_CARDEALER)
@@ -17980,42 +18254,7 @@ public OnDynamicActorStreamIn(actorid, forplayerid)
 /* Komendy */
 cmd:test(playerid, params[])
 {
-	new rows, Cache:tmp_cache,
-	    duty_minutes[MAX_GROUP_SLOTS], duty_payday[MAX_GROUP_SLOTS], duty_pay[MAX_GROUP_SLOTS], group_slot;
-	    
- 	mysql_query_format("SELECT g.group_belongs, g.group_payment, (s.session_end - s.session_start) FROM `ipb_char_groups` g LEFT JOIN `ipb_game_sessions` s on g.char_uid = s.session_owner WHERE s.session_type = 2 AND s.session_extraid = g.group_belongs AND s.session_end < %d AND s.session_start > (%d - 86000) AND g.char_uid = 1", gettime(), gettime());
- 	
-	cache_get_row_count(rows);
-	for(new row = 0; row != rows; row++)
-	{
-	    new session_sum, group_payment, group_belongs;
-	    
-	    cache_get_value_index_int(row, 2, session_sum);
-	    cache_get_value_index_int(row, 1, group_payment);
-	    cache_get_value_index_int(row, 0, group_belongs);
 
-		group_slot = GetPlayerGroupSlot(playerid, group_belongs);
-		
-		duty_minutes[group_slot] += floatround(session_sum / 60);
-		duty_pay[group_slot] = group_payment;
-		
-		// Maksymalnie 3h s³u¿by
-		if(duty_minutes[group_slot] >= 180)
-		{
-		    duty_minutes[group_slot] = 180;
-		    continue;
-		}
-	}
-	if(cache_is_valid(tmp_cache))	cache_delete(tmp_cache);
-	
-	for(new slot = 0; slot < MAX_GROUP_SLOTS; slot++)
-	{
-	    if(PlayerGroup[playerid][slot][gpUID])
-	    {
-		    duty_payday[slot] = floatround(duty_minutes[slot] * duty_pay[slot]) / 60;
-			SendClientFormatMessage(playerid, COLOR_WHITE, "[SLOT: %d] Czas pracy: %d minut, wyp³ata: %d, grupa: %d", slot, duty_minutes[slot], duty_payday[slot], PlayerGroup[playerid][slot][gpUID]);
-		}
-	}
 	return 1;
 }
 
@@ -19020,13 +19259,12 @@ cmd:apojazd(playerid, params[])
 		GetVehiclePos(vehid, CarInfo[vehid][cPosX], CarInfo[vehid][cPosY], CarInfo[vehid][cPosZ]);
 		GetVehicleZAngle(vehid, CarInfo[vehid][cPosA]);
 
-		orm_update(CarInfo[vehid][cOrm]);
-		orm_destroy(CarInfo[vehid][cOrm]);
-
 		DestroyVehicle(vehid);
 		Iter_Remove(Vehicles, vehid);
 
-		LoadVehicle(veh_uid);
+		orm_update(CarInfo[vehid][cOrm], "LoadVehicle", "d", veh_uid);
+		orm_destroy(CarInfo[vehid][cOrm]);
+		
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pojazd zosta³ zaparkowany w miejscu, na którym w³aœnie stoi.");
 		return 1;
 	}
@@ -19505,7 +19743,7 @@ cmd:pojazd(playerid, params[])
 				}
 			}
 		}
-  		new veh_uid = CarInfo[vehid][cUID],
+  		new veh_uid = CarInfo[vehid][cUID], ORM:orm_id = CarInfo[vehid][cOrm],
 		  	seatid = GetPlayerVehicleSeat(playerid);
 
 		CarInfo[vehid][cWorldID] = GetPlayerVirtualWorld(playerid);
@@ -19513,17 +19751,12 @@ cmd:pojazd(playerid, params[])
 
 		GetVehiclePos(vehid, CarInfo[vehid][cPosX], CarInfo[vehid][cPosY], CarInfo[vehid][cPosZ]);
 		GetVehicleZAngle(vehid, CarInfo[vehid][cPosA]);
-
-		orm_update(CarInfo[vehid][cOrm]);
-		orm_destroy(CarInfo[vehid][cOrm]);
-
+		
 		DestroyVehicle(vehid);
 		Iter_Remove(Vehicles, vehid);
-
-		LoadVehicle(veh_uid);
 		
-		PlayerCache[playerid][pLastVeh] = vehid;
-		PutPlayerInVehicle(playerid, vehid, seatid);
+		orm_update(orm_id, "LoadVehicle", "d", veh_uid);
+		orm_destroy(orm_id);
 		
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pojazd zosta³ zaparkowany pomyœlnie.");
 	    return 1;
@@ -20324,7 +20557,7 @@ cmd:drzwi(playerid, params[])
 		ShowPlayerDoorInfo(playerid, doorid);
 	    return 1;
 	}
-	if(!strcmp(type, "zamknij", true))
+	if(!strcmp(type, "zamknij", true) || !strcmp(type, "z", true))
 	{
 		new Float:PosX, Float:PosY, Float:PosZ,
 			virtual_world = GetPlayerVirtualWorld(playerid), interior_id = GetPlayerInterior(playerid);
@@ -21288,27 +21521,55 @@ cmd:dom(playerid, params[])
 
 cmd:kup(playerid, params[])
 {
-	new doorid = GetPlayerDoorID(playerid);
-	if(doorid == INVALID_DOOR_ID)
+	new group_id = INVALID_GROUP_ID, doorid = GetPlayerDoorID(playerid);
+	if(doorid != INVALID_DOOR_ID)
 	{
-	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
-	    return 1;
+		new DoorData[sDoorInfo];
+ 		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+ 		
+		if(DoorData[dOwnerType] != OWNER_GROUP)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
+		    return 1;
+		}
+		group_id = GetGroupID(DoorData[dOwner]);
+		if(GroupData[group_id][gType] != G_TYPE_24/7)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
+		    return 1;
+		}
 	}
- 	new DoorData[sDoorInfo];
- 	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
- 	
-	if(DoorData[dOwnerType] != OWNER_GROUP)
+	else
 	{
-	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
-	    return 1;
+	    new areaid = GetPlayerAreaID(playerid);
+	    if(areaid == INVALID_AREA_ID)
+	    {
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
+	        return 1;
+	    }
+	    
+   		new AreaData[sAreaData];
+ 		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, AreaData);
+ 		
+ 		if(!(AreaData[aFlags] & A_FLAG_OFFER))
+ 		{
+ 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
+ 		    return 1;
+ 		}
+		if(AreaData[aOwnerType] != OWNER_GROUP)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
+		    return 1;
+		}
+		group_id = GetGroupID(AreaData[aOwner]);
+		if(GroupData[group_id][gType] != G_TYPE_24/7)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
+		    return 1;
+		}
 	}
-	new group_id = GetGroupID(DoorData[dOwner]);
-	if(GroupData[group_id][gType] != G_TYPE_24/7)
-	{
-	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu 24/7.");
-	    return 1;
-	}
-	PlayerCache[playerid][pMainTable] = doorid;
+
+	PlayerCache[playerid][pMainTable] = group_id;
 	ListGroupProductsForPlayer(group_id, playerid, PRODUCT_LIST_BUY);
 	return 1;
 }
@@ -21316,25 +21577,52 @@ alias:kup("buy");
 
 cmd:ubranie(playerid, params[])
 {
-	new doorid = GetPlayerDoorID(playerid);
-	if(doorid == INVALID_DOOR_ID)
+	new group_id = INVALID_GROUP_ID, doorid = GetPlayerDoorID(playerid);
+	if(doorid != INVALID_DOOR_ID)
 	{
-		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
-	    return 1;
+		new DoorData[sDoorInfo];
+ 		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+
+		if(DoorData[dOwnerType] != OWNER_GROUP)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
+		    return 1;
+		}
+		group_id = GetGroupID(DoorData[dOwner]);
+		if(GroupData[group_id][gType] != G_TYPE_CLOTHES)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
+		    return 1;
+		}
 	}
- 	new DoorData[sDoorInfo];
-  	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
-  	
-	if(DoorData[dOwnerType] != OWNER_GROUP)
+	else
 	{
-	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
-	    return 1;
-	}
-	new group_id = GetGroupID(DoorData[dOwner]);
-	if(GroupData[group_id][gType] != G_TYPE_CLOTHES)
-	{
-	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
-	    return 1;
+	    new areaid = GetPlayerAreaID(playerid);
+	    if(areaid == INVALID_AREA_ID)
+	    {
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
+	        return 1;
+	    }
+
+   		new AreaData[sAreaData];
+ 		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, AreaData);
+ 		
+ 		if(!(AreaData[aFlags] & A_FLAG_OFFER))
+ 		{
+ 		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
+ 		    return 1;
+ 		}
+		if(AreaData[aOwnerType] != OWNER_GROUP)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
+		    return 1;
+		}
+		group_id = GetGroupID(AreaData[aOwner]);
+		if(GroupData[group_id][gType] != G_TYPE_CLOTHES)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w budynku sklepu z odzie¿¹.");
+		    return 1;
+		}
 	}
 	if(PlayerCache[playerid][pSelectSkin] != INVALID_SKIN_ID || PlayerCache[playerid][pSelectAccess] != INVALID_ACCESS_ID)
 	{
@@ -23763,8 +24051,10 @@ cmd:mgate(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie edytujesz aktualnie ¿adnego obiektu.");
 	    return 1;
 	}
-	new object_id = PlayerCache[playerid][pEditObject], object_uid = GetObjectUID(object_id), player_object = PlayerCache[playerid][pMainTable],
+	new object_id = PlayerCache[playerid][pEditObject], object_uid = GetObjectUID(object_id),
 		Float:GateX, Float:GateY, Float:GateZ, Float:GateRX, Float:GateRY, Float:GateRZ;
+		
+	new player_object = Streamer_GetItemInternalID(playerid, STREAMER_TYPE_OBJECT, object_id);
 	
 	GetPlayerObjectPos(playerid, player_object, GateX, GateY, GateZ);
 	GetPlayerObjectRot(playerid, player_object, GateRX, GateRY, GateRZ);
@@ -23974,18 +24264,20 @@ cmd:rx(playerid, params[])
 	    ShowTipForPlayer(playerid, "/rx [Rotacja X]");
 	    return 1;
 	}
-	new object_id = PlayerCache[playerid][pEditObject], object_model = GetObjectModel(object_id),
-	    Float:PosX, Float:PosY, Float:PosZ,
+	new object_id = PlayerCache[playerid][pEditObject],
+		Float:PosX, Float:PosY, Float:PosZ,
 		Float:RotX, Float:RotY, Float:RotZ;
+		
+	new player_object = Streamer_GetItemInternalID(playerid, STREAMER_TYPE_OBJECT, object_id);
 	
-	GetDynamicObjectRot(object_id, RotX, RotY, RotZ);
+	GetPlayerObjectRot(playerid, player_object, RotX, RotY, RotZ);
 	RotX = rot_x;
 	
 	SetDynamicObjectRot(object_id, RotX, RotY, RotZ);
-	CancelEdit(playerid);
+	SetPlayerObjectRot(playerid, player_object, RotX, RotY, RotZ);
 	
 	GetDynamicObjectPos(object_id, PosX, PosY, PosZ);
-	OnPlayerSelectDynamicObject(playerid, object_id, object_model, PosX, PosY, PosZ);
+	OnPlayerEditDynamicObject(playerid, object_id, EDIT_RESPONSE_UPDATE, PosX, PosY, PosZ, RotX, RotY, RotZ);
 	return 1;
 }
 
@@ -24002,18 +24294,20 @@ cmd:ry(playerid, params[])
 	    ShowTipForPlayer(playerid, "/ry [Rotacja Y]");
 	    return 1;
 	}
-	new object_id = PlayerCache[playerid][pEditObject], object_model = GetObjectModel(object_id),
-		Float:RotX, Float:RotY, Float:RotZ,
-		Float:PosX, Float:PosY, Float:PosZ;
+	new object_id = PlayerCache[playerid][pEditObject],
+		Float:PosX, Float:PosY, Float:PosZ,
+		Float:RotX, Float:RotY, Float:RotZ;
 
-	GetDynamicObjectRot(object_id, RotX, RotY, RotZ);
+	new player_object = Streamer_GetItemInternalID(playerid, STREAMER_TYPE_OBJECT, object_id);
+
+	GetPlayerObjectRot(playerid, player_object, RotX, RotY, RotZ);
 	RotY = rot_y;
 
 	SetDynamicObjectRot(object_id, RotX, RotY, RotZ);
-	CancelEdit(playerid);
-
+	SetPlayerObjectRot(playerid, player_object, RotX, RotY, RotZ);
+	
 	GetDynamicObjectPos(object_id, PosX, PosY, PosZ);
-	OnPlayerSelectDynamicObject(playerid, object_id, object_model, PosX, PosY, PosZ);
+	OnPlayerEditDynamicObject(playerid, object_id, EDIT_RESPONSE_UPDATE, PosX, PosY, PosZ, RotX, RotY, RotZ);
 	return 1;
 }
 
@@ -24030,18 +24324,20 @@ cmd:rz(playerid, params[])
 	    ShowTipForPlayer(playerid, "/rz [Rotacja Z]");
 	    return 1;
 	}
-	new object_id = PlayerCache[playerid][pEditObject], object_model = GetObjectModel(object_id),
-		Float:PosX, Float:PosY, Float:PosZ,
+	new object_id = PlayerCache[playerid][pEditObject],
+	    Float:PosX, Float:PosY, Float:PosZ,
 		Float:RotX, Float:RotY, Float:RotZ;
 
-	GetDynamicObjectRot(object_id, RotX, RotY, RotZ);
+	new player_object = Streamer_GetItemInternalID(playerid, STREAMER_TYPE_OBJECT, object_id);
+
+	GetPlayerObjectRot(playerid, player_object, RotX, RotY, RotZ);
 	RotZ = rot_z;
 
 	SetDynamicObjectRot(object_id, RotX, RotY, RotZ);
-	CancelEdit(playerid);
-
+	SetPlayerObjectRot(playerid, player_object, RotX, RotY, RotZ);
+	
 	GetDynamicObjectPos(object_id, PosX, PosY, PosZ);
-	OnPlayerSelectDynamicObject(playerid, object_id, object_model, PosX, PosY, PosZ);
+	OnPlayerEditDynamicObject(playerid, object_id, EDIT_RESPONSE_UPDATE, PosX, PosY, PosZ, RotX, RotY, RotZ);
 	return 1;
 }
 
@@ -25073,7 +25369,7 @@ cmd:tog(playerid, params[])
 	    new Text3D:label_id;
 		for (new i = 0; i < MAX_PLAYERS; i++)
 		{
-		    if(i == playerid)   continue;
+		    if(i == playerid || IsPlayerPremium(i))   continue;
 		    
  	    	if(!strcmp(type, "nick", true))
 		    {
@@ -25103,7 +25399,7 @@ cmd:tog(playerid, params[])
 	        else
 	        {
 	            PlayerCache[playerid][pTogNick] = true;
-	            TD_ShowSmallInfo(playerid, 5, "Nicki innych postaci zostaly ~r~ukryte~w~.~n~Uzyj ponownie ~y~/tog nick~w~, by przywrocic widoczosc nickow.");
+	            TD_ShowSmallInfo(playerid, 5, "Nicki innych postaci zostaly ~r~ukryte ~w~(nie dotyczy premium).~n~Uzyj ponownie ~y~/tog nick~w~, by przywrocic widoczosc nickow.");
 	        }
 	    }
 		else
@@ -25116,7 +25412,7 @@ cmd:tog(playerid, params[])
 		    else
 		    {
 		        PlayerCache[playerid][pTogDesc] = true;
-		        TD_ShowSmallInfo(playerid, 5, "Opisy innych postaci zostaly ~r~ukryte~w~.~n~Uzyj ponownie ~y~/tog opis~w~, by przywrocic widoczosc opisow.");
+		        TD_ShowSmallInfo(playerid, 5, "Opisy innych postaci zostaly ~r~ukryte ~w~(nie dotyczy premium).~n~Uzyj ponownie ~y~/tog opis~w~, by przywrocic widoczosc opisow.");
 		    }
 	    }
 	    Streamer_Update(playerid, STREAMER_TYPE_3D_TEXT_LABEL);
@@ -25427,36 +25723,77 @@ cmd:dotacja(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Grupa, na której s³u¿bie jesteœ nie posiada do tego uprawnieñ.");
 	    return 1;
 	}
-	
-  	new group_uid, price;
-  	if(sscanf(params, "dd", group_uid, price))
-  	{
-  	    ShowTipForPlayer(playerid, "/dotacja [UID grupy] [Kwota]");
-  	    return 1;
-  	}
-  	group_id = GetGroupID(group_uid);
-  	if(group_id == INVALID_GROUP_ID)
-  	{
-  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID grupy.");
-  	    return 1;
-  	}
-  	if(price < 0)
-  	{
-  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³ow¹ kwotê.");
-  	    return 1;
-  	}
-  	new max_dotation = GroupTypeInfo[GroupData[group_id][gType]][gTypeMaxDotation];
-  	if(price <= max_dotation)
-  	{
-		GroupData[group_id][gMaxPay] = price;
-		orm_update(GroupData[group_id][gOrm]);
+	new type[32], varchar[32];
+	if(sscanf(params, "s[32]S()[32]", type, varchar))
+	{
+		ShowTipForPlayer(playerid, "/dotacja [wyplata, kapital]");
+	    return 1;
+	}
+	if(!strcmp(type, "wyplata", true))
+	{
+	  	new group_uid, price;
+	  	if(sscanf(varchar, "dd", group_uid, price))
+	  	{
+	  	    ShowTipForPlayer(playerid, "/dotacja wyplata [UID grupy] [Kwota]");
+	  	    return 1;
+	  	}
+	  	group_id = GetGroupID(group_uid);
+	  	if(group_id == INVALID_GROUP_ID)
+	  	{
+	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID grupy.");
+	  	    return 1;
+	  	}
+	  	if(price < 0)
+	  	{
+	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³ow¹ kwotê.");
+	  	    return 1;
+	  	}
+	  	new max_dotation = GroupTypeInfo[GroupData[group_id][gType]][gTypeMaxDotation];
+	  	if(price <= max_dotation)
+	  	{
+			GroupData[group_id][gMaxPay] = price;
+			orm_update(GroupData[group_id][gOrm]);
 
-		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pomyœlnie ustalono wyokoœæ dotacji na pracownika dla grupy.\n\nGrupa: %s (UID: %d)\nAktualna kwota dotacji: $%d", GroupData[group_id][gName], GroupData[group_id][gUID], GroupData[group_id][gMaxPay]);
-  	}
-  	else
-  	{
- 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Dla tego typu grupy maksymalna dotacja mo¿e wynieœæ $%d.", max_dotation);
-  	}
+			ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Pomyœlnie ustalono wyokoœæ dotacji na pracownika dla grupy.\n\nGrupa: %s (UID: %d)\nAktualna kwota dotacji: $%d", GroupData[group_id][gName], GroupData[group_id][gUID], GroupData[group_id][gMaxPay]);
+	  	}
+	  	else
+	  	{
+	 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Dla tego typu grupy maksymalna dotacja mo¿e wynieœæ $%d.", max_dotation);
+	  	}
+	  	return 1;
+	}
+	if(!strcmp(type, "kapital", true))
+	{
+		new group_uid, price;
+	  	if(sscanf(varchar, "dd", group_uid, price))
+	  	{
+	  	    ShowTipForPlayer(playerid, "/dotacja kapital [UID grupy] [Kwota]");
+	  	    return 1;
+	  	}
+	  	new dotation_group = GetGroupID(group_uid);
+	  	if(group_id == INVALID_GROUP_ID)
+	  	{
+	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono b³êdne UID grupy.");
+	  	    return 1;
+	  	}
+	  	if(price < 0)
+	  	{
+	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³ow¹ kwotê.");
+	  	    return 1;
+	  	}
+	  	if(GroupData[group_id][gCash] < price)
+	  	{
+	  	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz takiej sumy pieniêdzy w bud¿ecie grupy.");
+	  	    return 1;
+	  	}
+	  	
+	  	GroupData[dotation_group][gCapital] += price;
+	  	orm_update(GroupData[dotation_group][gOrm]);
+	  	
+	  	AddGroupTransactionLog(playerid, dotation_group, TRANSACTION_DOTATION, price, gettime(), GroupData[group_id][gUID]);
+	  	ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Grupa %s (UID: %d) otrzyma³a dostacjê w postaci kapita³u: $%d\nObecny stan kapita³u grupy: $%d", GroupData[dotation_group][gName], GroupData[dotation_group][gUID], price, GroupData[dotation_group][gCapital]);
+	    return 1;
+	}
 	return 1;
 }
 
@@ -25733,7 +26070,7 @@ cmd:zabierz(playerid, params[])
 	new type[32], varchar[32];
 	if(sscanf(params, "s[32]S()[32]", type, varchar))
 	{
-		ShowTipForPlayer(playerid, "/zabierz [dowod | prawko | przedmiot]");
+		ShowTipForPlayer(playerid, "/zabierz [dowod, prawko, przedmiot]");
 	    return 1;
 	}
 	if(!strcmp(type, "przedmiot", true))
@@ -26068,7 +26405,7 @@ cmd:kogut(playerid, params[])
 	
 	GetVehicleModelInfo(CarInfo[vehid][cModel], VEHICLE_MODEL_INFO_FRONTSEAT, PosX, PosY, PosZ);
 	
-	object_id = CreateDynamicObject(18646, 0.0, 0.0, 0.0, 0.0, 0.00, 0.0, -1, -1, -1, MAX_DRAW_DISTANCE);
+	object_id = CreateDynamicObject(-2055, 0.0, 0.0, 0.0, 0.0, 0.00, 0.0, -1, -1, -1, MAX_DRAW_DISTANCE);
 	AttachDynamicObjectToVehicle(object_id, vehid, PosX, PosY, PosZ + 0.95, -2.0, 0.0, 4.0);
 		
 	Streamer_Update(playerid, STREAMER_TYPE_OBJECT);
@@ -27470,7 +27807,7 @@ cmd:silownia(playerid, params[])
 	    SetPlayerAttachedObject(playerid, SLOT_TRAIN, 2913, 6, 0.0, 0.0, -0.2);
 
         ShowPlayerInfoDialog(playerid, D_TYPE_HELP, "Rozpocz¹³eœ trening na ³aweczce wyciskanej.\n\nWciœnij i przytrzymaj klawisz sprintu, aby wykonaæ pe³ne powtórzenie,\nje¿eli zobaczysz, ¿e wycisn¹³eœ sztangê maksymalnie, upuœæ klawisz.\n\nPowtarzaj opisan¹ czynnoœæ, by zdobyæ wiêksz¹ iloœæ punktów si³y.\nAby zakoñczyæ trening wciœnij ENTER.");
-		TD_ShowSmallInfo(playerid, 0, "Powtorzenia: ~b~~h~%d~n~~n~Mozesz sprobowac tez ~r~treningu ~w~po uzyciu ~y~odzywek~w~, ktore zakupisz w silowni.", PlayerCache[playerid][pGymRepeat]);
+		TD_ShowHint(playerid, HINT_NONE, 0, "Powtorzenia: ~b~~h~%d~n~~n~Mozesz sprobowac tez ~r~treningu ~w~po uzyciu ~y~odzywek~w~, ktore zakupisz w silowni.", PlayerCache[playerid][pGymRepeat]);
 	    return 1;
 	}
 	
@@ -27511,7 +27848,7 @@ cmd:silownia(playerid, params[])
 	    SetPlayerAttachedObject(playerid, SLOT_TRAIN, 2915, 6, 0.0, 0.0, -0.45, 0.0, 90.0, 0.0);
 	    
 	    ShowPlayerInfoDialog(playerid, D_TYPE_HELP, "Rozpocz¹³eœ trening za pomoc¹ hantli.\n\nWciœnij i przytrzymaj klawisz sprintu, aby wykonaæ pe³ne powtórzenie,\nje¿eli zobaczysz, ¿e wycisn¹³eœ hantle maksymalnie, upuœæ klawisz.\n\nPowtarzaj opisan¹ czynnoœæ, by zdobyæ wiêksz¹ iloœæ punktów si³y.\nAby zakoñczyæ trening wciœnij ENTER.");
-	    TD_ShowSmallInfo(playerid, 0, "Powtorzenia: ~b~~h~%d~n~~n~Mozesz sprobowac tez ~r~treningu ~w~po uzyciu ~y~odzywek~w~, ktore zakupisz w silowni.", PlayerCache[playerid][pGymRepeat]);
+	    TD_ShowHint(playerid, HINT_NONE, 0, "Powtorzenia: ~b~~h~%d~n~~n~Mozesz sprobowac tez ~r~treningu ~w~po uzyciu ~y~odzywek~w~, ktore zakupisz w silowni.", PlayerCache[playerid][pGymRepeat]);
 		return 1;
 	}
 	return 1;
@@ -28029,42 +28366,6 @@ cmd:warn(playerid, params[])
 	}
 	reason[0] = chrtoupper(reason[0]);
 	GivePlayerPunish(giveplayer_id, playerid, PUNISH_WARN, reason, 0, 0);
-	return 1;
-}
-
-cmd:unwarn(playerid, params[])
-{
-    if(!(PlayerCache[playerid][pAdmin] & A_PERM_PUNISH))
-	{
-	    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie mo¿esz nadawaæ kar.");
-	    return 1;
-	}
-	new giveplayer_id;
-	if(sscanf(params, "u", giveplayer_id))
-	{
-	    ShowTipForPlayer(playerid, "/unwarn [ID gracza]");
-		return 1;
-	}
-	if(giveplayer_id == INVALID_PLAYER_ID)
-	{
-		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Podano b³êdne ID gracza.");
-		return 1;
-	}
-	if(!PlayerCache[giveplayer_id][pLogged])
-	{
-		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Gracz o podanym ID nie jest zalogowany.");
-    	return 1;
-	}
-	if(PlayerCache[giveplayer_id][pWarns] <= 0)
-	{
-	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ten gracz nie ma na swoim koncie ¿adnych warnów.");
-	    return 1;
-	}
-	PlayerCache[giveplayer_id][pWarns] --;
-	mysql_query_format("UPDATE `ipb_members` SET member_game_warns = '%d' WHERE member_id = '%d' LIMIT 1", PlayerCache[giveplayer_id][pWarns], PlayerCache[giveplayer_id][pGID]);
-
-	SendClientFormatMessage(giveplayer_id, COLOR_INFO, "%s zdj¹³ Ci warna. Obecny stan ostrze¿eñ: %d", PlayerName(playerid), PlayerCache[giveplayer_id][pWarns]);
-	ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zdj¹³eœ warna graczowi %s. Obecny stan ostrze¿eñ: %d", PlayerName(giveplayer_id), PlayerCache[giveplayer_id][pWarns]);
 	return 1;
 }
 
@@ -28683,11 +28984,11 @@ cmd:setskin(playerid, params[])
 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Gracz o podanym ID nie jest zalogowany.");
     	return 1;
 	}
-	if(skin_id < 0 || skin_id > 300)
+	/*if(skin_id < 0 || skin_id > 300)
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³owe ID skina.");
 	    return 1;
-	}
+	}*/
 	crp_SetPlayerSkin(giveplayer_id, skin_id);
 	ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Skin gracza %s zosta³ pomyœlnie zmieniony. Nowy skin: %d", PlayerName(giveplayer_id), skin_id);
 	return 1;
@@ -28850,10 +29151,8 @@ cmd:ac(playerid, params[])
 		Float:PosX, Float:PosY, Float:PosZ,
 		virtual_world = GetPlayerVirtualWorld(playerid), interior_id = GetPlayerInterior(playerid);
 		
-   	if(!(PlayerCache[playerid][pAdmin] & A_PERM_OBJECTS))
+   	if(!(PlayerCache[playerid][pAdmin] & A_PERM_ACTORS))
 	{
-
-
 		GetPlayerPos(playerid, PosX, PosY, PosZ);
 
 		new ActorData[MAX_VIS_ACTORS],
@@ -28886,7 +29185,7 @@ cmd:ac(playerid, params[])
 			        return 1;
 			    }
 			}
-			if(count_actors >= (IsPlayerPremium(playerid) ? 4 : 3))
+			if(count_actors >= (IsPlayerPremium(playerid) ? 4 : 2))
 			{
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz stworzyæ tutaj wiêcej aktorów.\nOsoby z aktywnym kontem premium mog¹ stworzyæ 4 aktorów w strefie/drzwiach (normalnie 3).");
 			    return 1;
@@ -28937,7 +29236,7 @@ cmd:ac(playerid, params[])
 		    	}
 			}
 
-			if(count_actors >= (IsPlayerPremium(playerid) ? 4 : 3))
+			if(count_actors >= (IsPlayerPremium(playerid) ? 4 : 2))
 			{
 			    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz stworzyæ tutaj wiêcej aktorów.\nOsoby z aktywnym kontem premium mog¹ stworzyæ 4 aktorów w strefie/drzwiach (normalnie 3).");
 			    return 1;
@@ -28947,14 +29246,79 @@ cmd:ac(playerid, params[])
 	
   	GetPlayerPos(playerid, PosX, PosY, PosZ);
 	GetXYInFrontOfPlayer(playerid, PosX, PosY, 1.0);
-	new actor_uid = crp_CreateActor(actor_name, modelid, PosX, PosY, PosZ, 0.0, virtual_world, interior_id);
 	
+	new actor_uid = crp_CreateActor(actor_name, modelid, PosX, PosY, PosZ, 0.0, virtual_world, interior_id);
 	TD_ShowSmallInfo(playerid, 5, "Aktor zostal ~g~pomyslnie ~w~utworzony ~y~(UID: %d)~w~.~n~Skorzystaj z komendy ~p~/asel~w~, by dokonac jego modyfikacji.", actor_uid);
 	return 1;
 }
 
 cmd:asel(playerid, params[])
 {
+	if(!(PlayerCache[playerid][pAdmin] & A_PERM_ACTORS))
+	{
+		new doorid = GetPlayerDoorID(playerid);
+		if(doorid != INVALID_DOOR_ID)
+		{
+			new DoorData[sDoorInfo];
+			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+
+			if(DoorData[dOwnerType] == OWNER_NONE)
+			{
+				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
+				return 1;
+			}
+			if(DoorData[dOwnerType] == OWNER_PLAYER)
+			{
+				if(DoorData[dOwner] != PlayerCache[playerid][pUID])
+				{
+					ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
+					return 1;
+				}
+			}
+			if(DoorData[dOwnerType] == OWNER_GROUP)
+			{
+	  			if(!HavePlayerGroupPerm(playerid, DoorData[dOwner], G_PERM_LEADER))
+	  			{
+	     			ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
+	        		return 1;
+		    	}
+			}
+
+		}
+		else
+		{
+	 		new areaid = GetPlayerAreaID(playerid);
+	  		if(areaid == INVALID_AREA_ID)
+	  		{
+	    		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc edytowaæ aktora, musisz znajdowaæ siê w budynku lub strefie.");
+	      		return 1;
+	    	}
+		    new AreaData[sAreaData];
+		    Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+
+			if(AreaData[aOwnerType] == OWNER_NONE)
+			{
+				ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
+				return 1;
+	   		}
+		    if(AreaData[aOwnerType] == OWNER_PLAYER)
+		    {
+	     		if(AreaData[aOwner] != PlayerCache[playerid][pUID])
+	       		{
+	         		ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
+	           		return 1;
+		        }
+		    }
+		    if(AreaData[aOwnerType] == OWNER_GROUP)
+		    {
+	     		if(!HavePlayerGroupPerm(playerid, AreaData[aOwner], G_PERM_LEADER))
+	       		{
+	         		ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Ten budynek lub strefa nie nale¿y do Ciebie.");
+	           		return 1;
+		        }
+		    }
+		}
+	}
 	new actorid = GetPlayerCameraTargetDynActor(playerid);
 	if(actorid == INVALID_ACTOR_ID)
 	{
@@ -29021,10 +29385,11 @@ cmd:atype(playerid, params[])
 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie edytujesz aktualnie ¿adnego aktora.");
 		return 1;
 	}
+	
 	new list_actor_type[256];
 	for (new i = 0; i < sizeof(ActorTypeInfo); i++)
 	{
-	    if(!(PlayerCache[playerid][pAdmin] & A_PERM_MAX))
+	    if(!(PlayerCache[playerid][pAdmin] & A_PERM_ACTORS))
 	    {
 			if(i >= 2)
 			{
@@ -29149,6 +29514,64 @@ cmd:attach(playerid, params[])
 	}
 	if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 	EditAttachedObject(playerid, SLOT_TRYING);
+	return 1;
+}
+
+CMD:corner(playerid, params[])
+{
+	new areaid = GetPlayerAreaID(playerid);
+	if(areaid == INVALID_AREA_ID)
+	{
+	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w strefie z flag¹ handlu narkotykami.");
+	    return 1;
+	}
+	new AreaData[sAreaData];
+	Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+	
+	/*if(!(AreaData[aFlags] & A_FLAG_CORNER))
+	{
+	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w strefie z flag¹ handlu narkotykami.");
+	    return 1;
+	}*/
+	if(!HavePlayerItemType(playerid, ITEM_DRUG))
+	{
+	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie posiadasz w swoim ekwipunku narkotyków.");
+	    return 1;
+	}
+	new object_id = INVALID_OBJECT_ID,
+		Float:PosX, Float:PosY, Float:PosZ, virtual_world = GetPlayerVirtualWorld(playerid);
+
+	GetPlayerPos(playerid, PosX, PosY, PosZ);
+
+	new ObjectData[MAX_VIS_OBJECTS],
+		count_objects = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, 3.0, virtual_world);
+
+	for (new object = 0; object < count_objects; object++)
+	{
+		if(GetObjectModel(ObjectData[object]) == OBJECT_CORNER_GREEN || GetObjectModel(ObjectData[object]) == OBJECT_CORNER_BLUE || GetObjectModel(ObjectData[object]) == OBJECT_CORNER_RED)
+		{
+			object_id = ObjectData[object];
+			break;
+		}
+	}
+	if(object_id == INVALID_OBJECT_ID)
+	{
+		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz znajdowaæ siê w pobli¿u znacznika do handlowania (strza³ka: zielona, niebieska lub czerwona).");
+		return 1;
+	}
+	foreach(new i : Player)
+	{
+	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+	    {
+	        if(PlayerCache[i][pCornerObject] == object_id)
+	        {
+	            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ktoœ aktualnie handluje ju¿ w tym miejscu.");
+	            return 1;
+	        }
+	    }
+	}
+	PlayerCache[playerid][pCornerObject] = object_id;
+	TD_ShowHint(playerid, HINT_NONE, 15, "Rozpoczales ~y~handel ~w~narkotykami. Oczekuj cierpliwie na klienta i ~r~nie oddalaj ~w~sie od tego miejsca.~n~~n~Klient zaoferuje Ci swoja cene, Ty mozesz z nim negocjowac lekko ja zawyzajac, lub po prostu ~g~zaakceptowac ~w~oferte i przytulic gotowke.~n~~n~Pamietaj, by posiadac w swoim ~p~ekwipunku ~w~narkotyki (nie w torbie), w innym wypadku handel zostanie przerwany.");
 	return 1;
 }
 
@@ -29709,6 +30132,15 @@ stock TD_ShowHint(playerid, hintType, showTime = 0, infoString[], va_args<>)
 						}
 				    }
 				}
+			}
+	    }
+	    case HINT_BANK:
+	    {
+	        // Samouczek przydziela trochê kasy
+	        if(PlayerCache[playerid][pBankCash] <= 0)
+			{
+				PlayerCache[playerid][pBankCash] += 400;
+				orm_update(PlayerCache[playerid][pOrm]);
 			}
 	    }
 	}
@@ -30676,9 +31108,13 @@ stock GetPlayerItemWeight(playerid, itemid)
 	    {
 	        item_weight = WeaponInfoData[item_value1][wWeight];
 	    }
-	    case ITEM_DRUG, ITEM_CIGGY:
+	    case ITEM_CIGGY:
 	    {
 	        item_weight = ItemTypeInfo[item_type][iTypeWeight] + item_value2;
+	    }
+	    case ITEM_DRUG:
+	    {
+	        item_weight = ItemTypeInfo[item_type][iTypeWeight] * item_value2;
 	    }
 	    case ITEM_BAG, ITEM_NOTEBOOK, ITEM_CHECKBOOK:
 		{
