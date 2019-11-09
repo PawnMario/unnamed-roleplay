@@ -12,7 +12,7 @@
 // native DynamicGui_GetDataInt(listitem)
 
 
-#define DYNAMIC_GUI_MAX_ROWS 400 // Max rows in gui
+#define DYNAMIC_GUI_MAX_ROWS 200 // Max rows in gui
 
 #define DG_NO_ACTION 0  // Value of no action row
 #define INVALID_ROW_VALUE -198744124 // Do not touch
