@@ -3,6 +3,10 @@
 Autorem skryptu jest Mario. Wszelkie prawa zastrze¿one.
 G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
+UPDATE ipb_characters SET char_hours = 0, char_minutes = (SELECT SUM(session_end - session_start) FROM ipb_game_sessions WHERE session_type = 1 AND session_owner = char_uid) WHERE char_episode = 1
+
+UPDATE ipb_characters SET char_hours = char_minutes / 3600, char_minutes = (char_minutes / 60) % 60 WHERE char_minutes > 60
+
 */
 
 // Includes
@@ -23,7 +27,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 // Main config
 #define GAMEMODE		"MRP ©"
-#define VERSION			"0.1"
+#define VERSION			"0.3"
 #define SERVER_NAME 	"Mighty RolePlay"
 #define WEB_URL         "www.m-rp.net"
 
@@ -70,7 +74,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define MAX_VIS_OBJECTS 	500
 #define MAX_VIS_LABELS      500
 #define MAX_VIS_DOORS       100
-#define MAX_VIS_ACTORS      20
+#define MAX_VIS_ACTORS      50
 
 #define ACTIVITY_LIMIT      1000
 
@@ -151,7 +155,9 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define COLOR_DESC          0xC2A2DAFF
 #define COLOR_CB_RADIO      0xEFF291FF
 
-#define COLOR_NICK          0xC7C7C788
+#define COLOR_NICK          0xC7C7C700
+#define COLOR_NICK_PACC     0xFFFFFF00
+
 #define COLOR_PUNISH        0x9C9C9CFF
 
 #define MAKE_COLOUR(%0,%1,%2) \
@@ -373,8 +379,9 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define ITEM_CRAFT              38  // Crafting (value1 = binarka, value2 = typ przedmiotu)
 #define ITEM_FLASHLIGHT         39  // Latarka
 #define ITEM_NEWSPAPER          40  // Gazeta (value1 = uid z bazy)
+#define ITEM_WOOD               41
 
-#define ITEM_COUNT              40
+#define ITEM_COUNT              41
 
 // Typy list produktów
 #define PRODUCT_LIST_NONE       1
@@ -439,6 +446,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define NUMBER_TAXI             777
 #define NUMBER_ALARM            911
 #define NUMBER_NEWS             444
+#define NUMBER_GASTRONOMY       888
 
 // Rodzaje audio
 #define AUDIO_NONE              0
@@ -460,7 +468,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define SLOT_TRYING             6
 #define SLOT_TRAIN              7
 #define SLOT_BOOMBOX            8
-#define SLOT_FLASHLIGHT         9
+#define SLOT_EXTRA	         	9
 
 // Typy broni
 #define WEAPON_TYPE_NONE    	0
@@ -486,6 +494,9 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define VEH_ACCESS_RADIO        8
 #define VEH_ACCESS_DIM          16
 #define VEH_ACCESS_GAS          32
+#define VEH_ACCESS_TURBO        64
+#define VEH_ACCESS_COMPRESSOR   128
+#define VEH_ACCESS_ECU          256
 
 // U¿ywalne obiekty
 #define OBJECT_ATM         	 	2942
@@ -504,6 +515,8 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define OBJECT_CORNER_GREEN     19606
 #define OBJECT_CORNER_BLUE      19607
 #define OBJECT_CORNER_RED       19605
+#define OBJECT_TREE             657
+#define OBJECT_SMUGGLE_CRATE    2969
 
 // Typy lakierowania
 #define SPRAY_TYPE_NONE     	0
@@ -551,6 +564,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define CHECKPOINT_ACTOR    	4
 #define CHECKPOINT_BUSSTOP  	5
 #define CHECKPOINT_NEWSPAPER    6
+#define CHECKPOINT_MISSION      7
 
 // Typy narkotyków
 #define DRUG_NONE           0
@@ -667,6 +681,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define ACTOR_VICTIM            3
 #define ACTOR_SPECIAL           4
 #define ACTOR_CORPSE            5
+#define ACTOR_TRADER            6
 
 // Samouczek
 #define HINT_NONE       		0
@@ -693,6 +708,29 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define A_FLAG_MONITORING       16
 #define A_FLAG_CORNER           32
 #define A_FLAG_SERVICE          64
+#define A_FLAG_LUMBERJACK       128
+#define A_FLAG_MISSION          256
+
+// Typy misji
+#define MISSION_NOTIFICATION    1
+#define MISSION_FIRE_BUILD      2
+#define MISSION_FIRE_VEHICLE    3
+#define MISSION_ROBBERY         4
+#define MISSION_GRAB            5
+#define MISSION_KILLING         6
+#define MISSION_THEFT			7
+#define MISSION_SMUGGLE         8
+#define MISSION_CHASE           9
+
+// Interakcje (GII)
+#define GII_OPTION_INFO     	0
+#define GII_OPTION_CARP     	1
+#define GII_OPTION_CART         2
+#define GII_OPTION_KEYS     	3
+#define GII_OPTION_HANDCUFF 	4
+#define GII_OPTION_WELCOME  	5
+#define GII_OPTION_GIVE         6
+#define GII_OPTION_GET          7
 
 // Dialogs
 #define D_NONE      			0
@@ -729,7 +767,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define D_ITEM_FAVORITE         26
 #define D_ITEM_OFFER            27
 #define D_ITEM_OFFER_PRICE      28
-#define D_ITEM_OFFER_FREE      	113
+#define D_ITEM_OFFER_FREE       220
 #define D_ITEM_RAISE            29
 #define D_ITEM_PUT_BAG          30
 #define D_ITEM_REMOVE_BAG       31
@@ -752,7 +790,7 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define D_PHONE_OPTIONS         45
 #define D_PHONE_CALL_NUMBER     46
 #define D_PHONE_SMS_NUMBER      47
-#define D_PHONE_SEND_SMS        46
+#define D_PHONE_SEND_SMS        48
 #define D_PHONE_SEND_VCARD      49
 
 #define D_CONTACT_LIST          50
@@ -813,11 +851,10 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 
 #define D_HELP_MAIN             91
 
-#define D_TAXI_CORP_SELECT      92
-#define D_ALARM_SELECT          93
+#define D_GROUP_SELECT          93
 
 #define D_CALL_TAXI             94
-#define D_CALL_ALARM            95
+#define D_CALL_GROUP            95
 #define D_CALL_NEWS             96
 
 #define D_SALON_CATEGORY        97
@@ -836,14 +873,19 @@ G³ównym pomys³odawc¹ rozwi¹zañ jest autor we w³asnej osobie.
 #define D_ACTOR_GOV             107
 #define D_ACTOR_CORPSE          108
 #define D_ACTOR_CARDEALER       109
+#define D_ACTOR_TRADER          110
+#define D_ACTOR_TRADER_SELL     111
 
-#define D_OBJECT_PRIORITY       110
+#define D_OBJECT_PRIORITY       112
 
-#define D_CORNER_OFFER          111
+#define D_CORNER_OFFER          113
 
-#define D_AREA_FLAGS            112
+#define D_AREA_FLAGS            114
 
-#define D_TAG_TEXT              113
+#define D_TAG_TEXT              115
+
+#define D_MISSION_DESC          116
+#define D_MISSION_START         117
 
 // Forward's
 forward OnPlayerLogin(playerid);
@@ -911,7 +953,7 @@ forward SaveObjectPos(object_id);
 forward DeleteObject(object_id);
 forward query_OnLoadObjects();
 
-forward Add3DTextLabel(LabelDesc[128], LabelColor, Float:LabelPosX, Float:LabelPosY, Float:LabelPosZ, Float:LabelDrawDistance, LabelWorld, LabelInteriorID);
+forward Add3DTextLabel(LabelDesc[256], LabelColor, Float:LabelPosX, Float:LabelPosY, Float:LabelPosZ, Float:LabelDrawDistance, LabelWorld, LabelInteriorID);
 forward query_OnLoad3DTextLabels();
 forward crp_Delete3DTextLabel(label_id);
 forward Save3DTextLabel(label_id);
@@ -951,6 +993,12 @@ forward SaveActor(actorid);
 forward OnPlayerInteractActor(playerid, actorid);
 
 forward CheckPlayerPayday(playerid);
+
+forward OnPlayerStartMission(playerid, mission_uid);
+forward OnPlayerStopMission(playerid);
+
+forward CreateGroupMission(group_id, group_type, mission_type, mission_desc[], mission_victim, mission_members, mission_award, mission_time);
+forward DeleteMission(mission_uid);
 
 // New's
 
@@ -994,12 +1042,19 @@ new AdminColor[20][12];
 new WorldTime;
 new Cache:external_items_cache[MAX_PLAYERS][10];
 
+new PlayerText:GII_VisualItem[MAX_PLAYERS];
+new Text:GII_Option[10];
+
+new PlayerText:TextDrawScreenShot[MAX_PLAYERS];
+
 // Iterators
 new Iterator:Groups<MAX_GROUPS>;
 new Iterator:Vehicles<MAX_VEHICLES>;
 
 new Iterator:PlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
 new Iterator:CheckedPlayerItem[MAX_PLAYERS]<MAX_ITEM_CACHE>;
+
+new Iterator:MissionPlayer[MAX_PLAYERS]<20>;
 
 new Iterator:Product<MAX_PRODUCTS>;
 new Iterator:Access<MAX_ACCESS>;
@@ -1112,6 +1167,8 @@ enum sPlayer
 	
 	Float:pMileage,
 	
+	bool:pEpisode,
+	
 	pAudioHandle,
 	pStatus,
 	
@@ -1159,6 +1216,7 @@ enum sPlayer
 	pItemPass,
 	pItemMask,
 	pItemBoombox,
+	pItemGloves,
 	
 	bool: pPuttingBag,
 	
@@ -1217,7 +1275,6 @@ enum sPlayer
 	
 	bool: pRoll,
 	bool: pBelts,
-	bool: pGlove,
 	bool: pFlashLight,
 	
 	bool: pLogged,
@@ -1235,11 +1292,16 @@ enum sPlayer
 	
 	Text3D:pNameTag,
 	Text3D:pDescTag,
+	Text3D:vDescTag,
 	
 	pFirstPersonObject,
 	pIgnored[MAX_PLAYERS],
 	
 	Float:pPRVelocity[3],
+	bool: pScreenShot,
+	
+	pGII_Type,
+	pGII_Option,
 	
 	ORM: pOrm
 }
@@ -1262,6 +1324,7 @@ enum sGroupInfo
 	gValue2,
 	
 	gColor,
+	gAdvertise[128],
 	
 	gTag[5],
 	gLastTax,
@@ -1297,43 +1360,46 @@ enum sGroupTypeInfo
 	gTypeName[24],
 	gTypeMaxDotation,
 	
+	gTypeMapIcon,
+	bool:gIconStatic,
+	
 	gTypePrice,
 	gTypeFlags
 }
 new GroupTypeInfo[][sGroupTypeInfo] =
 {
-	{"Nieokreœlony",			0,		2000,		G_FLAG_OOC | G_FLAG_TAX},
-	{"Police",					900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_911 | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
-	{"Medical",					1100,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
-	{"San News",				700,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR},
-	{"Ochrona",					700,	11000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Gang",					100,	0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_TAG | G_FLAG_SEARCHING},
-	{"Stacja benzynowa",		700,	12000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Gastronomia",				700,	9000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Firma taksówkarska",		700,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Warsztat",				700,	10000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Si³ownia",				700,	7000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Government",				900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
+	{"Nieokreœlony",			0,		0,		false,		2000,		G_FLAG_OOC | G_FLAG_TAX},
+	{"Police",					900,	30,		true,		0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_911 | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
+	{"Medical",					1100,	22,		true,		0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
+	{"San News",				700,	48,		true,		0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR},
+	{"Ochrona",					700,	0,		false,		11000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Gang",					100,	0,		false,		0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_TAG | G_FLAG_SEARCHING},
+	{"Stacja benzynowa",		700,	0,		true,		12000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Gastronomia",				700,	50,		false,		9000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Firma taksówkarska",		700,	0,		false,		12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Warsztat",				700,	27,		false,		10000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Si³ownia",				700,	54,		false,		7000,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Government",				900,	34,		true,		0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT},
 	
-	{"Armia",					900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
-	{"Fire Department",			1100,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_BLOCADE},
-	{"FBI",						900,	0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
+	{"Armia",					900,	0,		false,		0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
+	{"Fire Department",			1100,	20,		true,		0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_BLOCADE},
+	{"FBI",						900,	0,		false,		0,			G_FLAG_IC | G_FLAG_OOC | G_FLAG_COLOR | G_FLAG_DEPARTMENT | G_FLAG_ARREST | G_FLAG_BLOCADE | G_FLAG_WEAPONS | G_FLAG_MASK | G_FLAG_SEARCHING | G_FLAG_HANDCUFFS},
 
-	{"Mafia",					0,		0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_SEARCHING},
+	{"Mafia",					0,		0,		false,		0,			G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_MASK | G_FLAG_SEARCHING},
 
-	{"Rodzina",                 0,      0,          G_FLAG_OOC | G_FLAG_SPAWN},
-	{"Zmotoryzowana",           0,      0,          G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_RACE},
+	{"Rodzina",                 0,      0,		false,		0,          G_FLAG_OOC | G_FLAG_SPAWN},
+	{"Zmotoryzowana",           0,      0,		false,		0,          G_FLAG_OOC | G_FLAG_SPAWN | G_FLAG_RACE},
 	
-	{"Szko³a jazdy",            700,    9000,       G_FLAG_OOC | G_FLAG_TAX},
+	{"Szko³a jazdy",            700,    38,		false,		9000,       G_FLAG_OOC | G_FLAG_TAX},
 	
-	{"Wypo¿yczalnia",           700,    9800,      	G_FLAG_OOC | G_FLAG_TAX},
-	{"24/7",					700,	5000,		G_FLAG_OOC | G_FLAG_TAX},
+	{"Wypo¿yczalnia",           700,    0,		false,		9800,      	G_FLAG_OOC | G_FLAG_TAX},
+	{"24/7",					700,	25,		true,		5000,		G_FLAG_OOC | G_FLAG_TAX},
 
-	{"Salon samochodowy",		700,	12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
-	{"Ciucholand",				0,		8000,		G_FLAG_OOC | G_FLAG_TAX},
+	{"Salon samochodowy",		700,	55,		true,		12500,		G_FLAG_IC | G_FLAG_OOC | G_FLAG_TAX},
+	{"Ciucholand",				0,		45,		true,		8000,		G_FLAG_OOC | G_FLAG_TAX},
 
-	{"Hotel",					150,	5500,		G_FLAG_OOC | G_FLAG_TAX},
-	{"Bank",					0,		6000,		G_FLAG_OOC | G_FLAG_TAX}
+	{"Hotel",					150,	32,		true,		5500,		G_FLAG_OOC | G_FLAG_TAX},
+	{"Bank",					0,		52,		true,		6000,		G_FLAG_OOC | G_FLAG_TAX}
 
 };
 
@@ -1348,7 +1414,8 @@ new ActorTypeInfo[][sActorTypeInfo] =
 	{"Prostytutka"},
 	{"Ofiara"},
 	{"Specjalny"},
-	{"Zw³oki"}
+	{"Zw³oki"},
+	{"Kupiec"}
 };
 
 enum sCarInfo
@@ -1384,6 +1451,8 @@ enum sCarInfo
 	
 	cOwner,
 	cOwnerType,
+	
+	Float:cHandling,
 	
 	cDistTicker,
 	cSavePoint,
@@ -1830,7 +1899,8 @@ new ItemTypeInfo[][sItemTypeInfo] =
 	{"Boombox",         1350,   2226,   0.0,    0.0},
 	{"Craft",           320,    328,    90.0,   0.0},
 	{"Latarka",         150,    18641,  90.0,   0.0},
-	{"Gazeta",          20,     328,    90.0,   0.0}
+	{"Gazeta",          20,     328,    90.0,   0.0},
+	{"Drewno",          400,    19793,  0.0,    0.0}
 };
 
 
@@ -2056,16 +2126,16 @@ enum sPosData
 }
 new PosInfo[][sPosData] =
 {
-	{1759.1573,	-1950.0715,	14.1096,	305.4562, 	0, 0},
+	{2601.3408,	47.9605,	26.3509,	89.2542, 	0, 0},
 	{154.1221, 	-1951.9156, 47.8750,	  	0.0, 	0, 0},
 	{2233.6584,	-1113.2397,	1050.8828,	 2.7833,  	5, 0}
 };
 
 new Float:SalonSpawnPos[3][4] =
 {
-	{901.3408, -1208.8365, 16.8620, 178.8416},
-	{866.7073, -1209.3844, 16.8687, 176.9288},
-	{830.8945, -1208.5759, 16.8481, 177.3645}
+	{2408.2136, 89.0735, 26.4746, 89.7015},
+	{2408.1182, 96.5752, 26.4723, 89.0024},
+	{2409.4045, 84.2846, 26.4730, 84.5432}
 };
 
 enum sDrugTypeInfo
@@ -2264,7 +2334,12 @@ enum sDoorInfo
 	dHour,
 	
 	dFireData[3],
-	bool:dObjectsLoaded
+	bool:dObjectsLoaded,
+	
+	dMapIcon,
+	Text3D:d3DLabel,
+	
+	dExtraID
 };
 
 enum sWorkData
@@ -2293,7 +2368,7 @@ enum sAreaFlag
 	fName[32],
 	fType
 }
-new AreaFlag[7][sAreaFlag] =
+new AreaFlag[9][sAreaFlag] =
 {
 	{"Skakanie na BMX",			A_FLAG_BMX},
 	{"U¿ywanie boomboxa",		A_FLAG_BOOMBOX},
@@ -2301,7 +2376,9 @@ new AreaFlag[7][sAreaFlag] =
 	{"Ograniczone parkowanie",	A_FLAG_PARKING},
 	{"Monitoring",				A_FLAG_MONITORING},
 	{"Zbyt narkotyków",			A_FLAG_CORNER},
-	{"Serwis pojazdów",         A_FLAG_SERVICE}
+	{"Serwis pojazdów",         A_FLAG_SERVICE},
+	{"Wycinka drzew",           A_FLAG_LUMBERJACK},
+	{"Aktywne zadanie",         A_FLAG_MISSION}
 };
 
 enum sAdminPerm
@@ -2322,6 +2399,51 @@ new AdminPerm[10][sAdminPerm] =
 	{"Przedmioty",      A_PERM_ITEMS},
 	{"Aktorzy",         A_PERM_ACTORS}
 };
+
+enum sMissionTypeInfo
+{
+	mName[32],
+	
+	mMinHour,
+	mMaxHour
+}
+new MissionTypeInfo[9][sMissionTypeInfo] =
+{
+	{"Zg³oszenie",			0,	0},
+	{"Po¿ar budynku", 		18,	22},
+	{"Po¿ar pojazdu",		18,	22},
+	{"Rabunek",				18,	22},
+	{"Porwanie",			18,	22},
+	{"Zabójstwo",			18,	22},
+	{"Kradzie¿",			18,	22},
+	{"Przemyt",         	18, 22},
+	{"Poœcig", 				0,  0}
+};
+
+enum sMissionData
+{
+	mUID,
+	mType,
+	
+	mVictim,
+	mMembers,
+	
+	mAward,
+	
+	mDate,
+	mTime,
+	
+	mPoints,
+	mNeedPoints,
+	
+	mGroup,
+	mLevel,
+	
+	mValue[2],
+	bool: mLeader
+}
+new MissionData[MAX_PLAYERS][sMissionData];
+
 
 new BlockadeType[8] = {3578, 1228, 1238, 1425, -2060, -2061, 2892, 1437};
 
@@ -2346,6 +2468,7 @@ public OnGameModeInit()
 	
 	Iter_Init(PlayerItem);
 	Iter_Init(CheckedPlayerItem);
+	Iter_Init(MissionPlayer);
 	
 	Iter_Add(Vehicles, 0);
 	
@@ -2400,7 +2523,7 @@ public OnGameModeInit()
 	AllowInteriorWeapons(false);
 	ShowNameTags(false);
 
-    ShowPlayerMarkers(false);
+    ShowPlayerMarkers(PLAYER_MARKERS_MODE_STREAMED);
 	EnableStuntBonusForAll(false);
 	
 	DisableInteriorEnterExits();
@@ -2517,6 +2640,129 @@ public OnGameModeInit()
 	TextDrawUseBox(TextDrawPunishDesc, 1);
 	TextDrawBoxColor(TextDrawPunishDesc, 68);
 	TextDrawTextSize(TextDrawPunishDesc, 181.000000, 20.000000);
+	
+
+	// GII
+	GII_Option[0] = TextDrawCreate(210.000000, 160.000000, "lupa:szary");
+	TextDrawBackgroundColor(GII_Option[0], 0xFFFFFF00);
+	TextDrawFont(GII_Option[0], 5);
+	TextDrawLetterSize(GII_Option[0], 0.500000, 23.000000);
+	TextDrawColor(GII_Option[0], -1);
+	TextDrawSetOutline(GII_Option[0], 0);
+	TextDrawSetProportional(GII_Option[0], 1);
+	TextDrawSetShadow(GII_Option[0], 1);
+	TextDrawUseBox(GII_Option[0], 1);
+	TextDrawBoxColor(GII_Option[0], 0xFFFFFF00);
+	TextDrawTextSize(GII_Option[0], 50.000000, 52.000000);
+	TextDrawSetPreviewModel(GII_Option[0], -2079);
+	TextDrawSetPreviewRot(GII_Option[0], 90.000000, 360.000000, 0.000000, 0.10000);
+	TextDrawSetSelectable(GII_Option[0], 1);
+
+	GII_Option[1] = TextDrawCreate(260.000000, 110.000000, "carp:szary");
+	TextDrawBackgroundColor(GII_Option[1], 0xFFFFFF00);
+	TextDrawFont(GII_Option[1], 5);
+	TextDrawLetterSize(GII_Option[1], 0.500000, 23.000000);
+	TextDrawColor(GII_Option[1], -1);
+	TextDrawSetOutline(GII_Option[1], 0);
+	TextDrawSetProportional(GII_Option[1], 1);
+	TextDrawSetShadow(GII_Option[1], 1);
+	TextDrawUseBox(GII_Option[1], 1);
+	TextDrawBoxColor(GII_Option[1], 0xFFFFFF00);
+	TextDrawTextSize(GII_Option[1], 50.000000, 52.000000);
+	TextDrawSetPreviewModel(GII_Option[1], -2076);
+	TextDrawSetPreviewRot(GII_Option[1], 90.000000, 0.000000, 0.000000, 0.10000);
+	TextDrawSetSelectable(GII_Option[1], 1);
+
+	GII_Option[2] = TextDrawCreate(320.000000, 110.000000, "cart:szary");
+	TextDrawBackgroundColor(GII_Option[2], 0xFFFFFF00);
+	TextDrawFont(GII_Option[2], 5);
+	TextDrawLetterSize(GII_Option[2], 0.500000, 23.000000);
+	TextDrawColor(GII_Option[2], -1);
+	TextDrawSetOutline(GII_Option[2], 0);
+	TextDrawSetProportional(GII_Option[2], 1);
+	TextDrawSetShadow(GII_Option[2], 1);
+	TextDrawUseBox(GII_Option[2], 1);
+	TextDrawBoxColor(GII_Option[2], 0xFFFFFF00);
+	TextDrawTextSize(GII_Option[2], 50.000000, 52.000000);
+	TextDrawSetPreviewModel(GII_Option[2], -2077);
+	TextDrawSetPreviewRot(GII_Option[2], 90.000000, 0.000000, 0.000000, 0.10000);
+	TextDrawSetSelectable(GII_Option[2], 1);
+	
+
+	GII_Option[3] = TextDrawCreate(370.000000, 160.000000, "klucz:szary");
+	TextDrawBackgroundColor(GII_Option[3], 0xFFFFFF00);
+	TextDrawFont(GII_Option[3], 5);
+	TextDrawLetterSize(GII_Option[3], 0.500000, 23.000000);
+	TextDrawColor(GII_Option[3], -1);
+	TextDrawSetOutline(GII_Option[3], 0);
+	TextDrawSetProportional(GII_Option[3], 1);
+	TextDrawSetShadow(GII_Option[3], 1);
+	TextDrawUseBox(GII_Option[3], 1);
+	TextDrawBoxColor(GII_Option[3], 0xFFFFFF00);
+	TextDrawTextSize(GII_Option[3], 50.000000, 52.000000);
+	TextDrawSetPreviewModel(GII_Option[3], -2081);
+	TextDrawSetPreviewRot(GII_Option[3], 90.000000, 180.000000, 180.000000, 0.05000);
+	TextDrawSetSelectable(GII_Option[3], 1);
+
+	GII_Option[4] = TextDrawCreate(370.000000, 240.000000, "kajdanki:szary");
+	TextDrawBackgroundColor(GII_Option[4], 0xFFFFFF00);
+	TextDrawFont(GII_Option[4], 5);
+	TextDrawLetterSize(GII_Option[4], 0.500000, 23.000000);
+	TextDrawColor(GII_Option[4], COLOR_GREY);
+	TextDrawSetOutline(GII_Option[4], 0);
+	TextDrawSetProportional(GII_Option[4], 1);
+	TextDrawSetShadow(GII_Option[4], 1);
+	TextDrawUseBox(GII_Option[4], 1);
+	TextDrawBoxColor(GII_Option[4], 0xFFFFFF00);
+	TextDrawTextSize(GII_Option[4], 50.000000, 52.000000);
+	TextDrawSetPreviewModel(GII_Option[4], -2084);
+	TextDrawSetPreviewRot(GII_Option[4], 90.000000, 360.000000, 90.000000, 0.05000);
+	TextDrawSetSelectable(GII_Option[4], 1);
+
+	GII_Option[5] = TextDrawCreate(320.000000, 290.000000, "hands:szary");
+	TextDrawBackgroundColor(GII_Option[5], 0xFFFFFF00);
+	TextDrawFont(GII_Option[5], 5);
+	TextDrawLetterSize(GII_Option[5], 0.500000, 23.000000);
+	TextDrawColor(GII_Option[5], -1);
+	TextDrawSetOutline(GII_Option[5], 0);
+	TextDrawSetProportional(GII_Option[5], 1);
+	TextDrawSetShadow(GII_Option[5], 1);
+	TextDrawUseBox(GII_Option[5], 1);
+	TextDrawBoxColor(GII_Option[5], 0xFFFFFF00);
+	TextDrawTextSize(GII_Option[5], 50.000000, 52.000000);
+	TextDrawSetPreviewModel(GII_Option[5], -2078);
+	TextDrawSetPreviewRot(GII_Option[5], 90.000000, 180.000000, 0.000000, 0.10000);
+	TextDrawSetSelectable(GII_Option[5], 1);
+
+	GII_Option[6] = TextDrawCreate(260.000000, 290.000000, "rekado:szary");
+	TextDrawBackgroundColor(GII_Option[6], 0xFFFFFF00);
+	TextDrawFont(GII_Option[6], 5);
+	TextDrawLetterSize(GII_Option[6], 0.200000, 1.000000);
+	TextDrawColor(GII_Option[6], -1);
+	TextDrawSetOutline(GII_Option[6], 0);
+	TextDrawSetProportional(GII_Option[6], 1);
+	TextDrawSetShadow(GII_Option[6], 1);
+	TextDrawUseBox(GII_Option[6], 1);
+	TextDrawBoxColor(GII_Option[6], 0xFFFFFF00);
+	TextDrawTextSize(GII_Option[6], 50.000000, 52.000000);
+	TextDrawSetPreviewModel(GII_Option[6], -2082);
+	TextDrawSetPreviewRot(GII_Option[6], 90.000000, 180.000000, 180.000000, 0.10000);
+	TextDrawSetSelectable(GII_Option[6], 1);
+
+	GII_Option[7] = TextDrawCreate(210.000000, 250.000000, "rekaz:szary");
+	TextDrawBackgroundColor(GII_Option[7], 0xFFFFFF00);
+	TextDrawFont(GII_Option[7], 5);
+	TextDrawLetterSize(GII_Option[7], 0.200000, 1.000000);
+	TextDrawColor(GII_Option[7], -1);
+	TextDrawSetOutline(GII_Option[7], 0);
+	TextDrawSetProportional(GII_Option[7], 1);
+	TextDrawSetShadow(GII_Option[7], 1);
+	TextDrawUseBox(GII_Option[7], 1);
+	TextDrawBoxColor(GII_Option[7], 0xFFFFFF00);
+	TextDrawTextSize(GII_Option[7], 50.000000, 52.000000);
+	TextDrawSetPreviewModel(GII_Option[7], -2083);
+	TextDrawSetPreviewRot(GII_Option[7], 90.000000, 180.000000, 180.000000, 0.10000);
+	TextDrawSetSelectable(GII_Option[7], 1);
 
 	// Pêtla na sloty grup
 	new Float:posX, Float:posY;
@@ -2557,6 +2803,7 @@ public OnGameModeInit()
 	{
   		PlayerCache[i][pNameTag] = CreateDynamic3DTextLabel(" ", COLOR_NICK, 0.0, 0.0, 0.0, 15.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, -1, -1, -1, 50.0);
 		PlayerCache[i][pDescTag] = CreateDynamic3DTextLabel(" ", COLOR_DESC, 0.0, 0.0, 0.0, 10.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, -1, -1, -1, 50.0);
+		PlayerCache[i][vDescTag] = CreateDynamic3DTextLabel(" ", COLOR_DESC, 0.0, 0.0, 0.0, 10.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 1, -1, -1, -1, 50.0);
 	}
 	
 	// Pela na grupy
@@ -2739,7 +2986,7 @@ task OnMinuteTask[60000]()
 				            {
                 				crp_SetPlayerHealth(i, 10);
                 			}
-                			TD_ShowSmallInfo(i, 5, "Twoja postac odczuwa chec zazycia ~b~narkotyku~w~. Pasek ~r~stanu zdrowia ~w~ulegl zmianie z tego powodu.");
+                			TD_ShowHint(i, HINT_NONE, 5, "Twoja postac odczuwa chec zazycia ~b~narkotyku~w~. Pasek ~r~stanu zdrowia ~w~ulegl zmianie z tego powodu.");
 
 							if(depend >= 35)
 							{
@@ -2769,10 +3016,62 @@ task OnMinuteTask[60000]()
 	{
 	    new DoorData[sDoorInfo];
   		Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
-		    
+  		
+  		if(DoorData[dMapIcon] != 0)
+  		{
+  		    new count_players[2] = {0, 0};
+			foreach(new i : Player)
+			{
+				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+				{
+				    if(GetPlayerDoorID(i) == doorid)
+				    {
+						// Pracownik
+						if(PlayerCache[i][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
+						{
+	    					new group_id = PlayerCache[i][pDuty][DUTY_GROUP];
+	    					if(DoorData[dOwner] == GroupData[group_id][gUID])
+							{
+							    count_players[0] ++;
+				    		}
+					    }
+					    count_players[1] ++;
+					}
+				}
+			}
+			
+			// Ikona
+			new map_icon = DoorData[dMapIcon];
+			if(count_players[0] > 0)
+			{
+   				Streamer_SetIntData(STREAMER_TYPE_MAP_ICON, map_icon, E_STREAMER_WORLD_ID, 0);
+			}
+			else
+			{
+			    if(!Streamer_GetIntData(STREAMER_TYPE_MAP_ICON, map_icon, E_STREAMER_EXTRA_ID))	Streamer_SetIntData(STREAMER_TYPE_MAP_ICON, map_icon, E_STREAMER_WORLD_ID, 9999);
+			}
+			
+			// Ile osób w œrodku
+			if(IsValidDynamic3DTextLabel(DoorData[d3DLabel]))
+			{
+			    new Text3D:label_id = DoorData[d3DLabel];
+				if(count_players[1] > 0)
+				{
+				    new string[128];
+				    format(string, sizeof(string), "** %d osób w œrodku (w tym %d pracowników) **", count_players[1], count_players[0]);
+					UpdateDynamic3DTextLabelText(label_id, COLOR_DO, string);
+				}
+				else
+				{
+                    UpdateDynamic3DTextLabelText(label_id, COLOR_DO, " ");
+				}
+			}
+  		}
+  		
 		if(DoorData[dFireData][FIRE_TIME] > 0)
 	 	{
-			new string[128], group_id;
+			new string[128], group_id,
+			    Float:PosX, Float:PosY, Float:PosZ;
 
 			DoorData[dFireData][FIRE_TIME] ++;
 			Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
@@ -2794,6 +3093,12 @@ task OnMinuteTask[60000]()
 									{
 		    							DoorData[dFireData][FIRE_TIME] --;
 			   							Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+
+										GetPlayerPos(i, PosX, PosY, PosZ);
+										GetXYInFrontOfPlayer(i, PosX, PosY, 8.0);
+										
+										CreateExplosion(PosX, PosY, PosZ, 9, 5.0);
+										CreateExplosion(PosX, PosY, PosZ, 13, 10.0);
 									}
 								}
 							}
@@ -2802,24 +3107,23 @@ task OnMinuteTask[60000]()
 		    	}
 			}
 			
- 			new color, Float:percent = (float(DoorData[dFireData][FIRE_TIME]) / 10.0) * 100, fire_label = DoorData[dFireData][FIRE_LABEL],
+ 			new color, Float:percent = (float(DoorData[dFireData][FIRE_TIME]) / 15.0) * 100, fire_label = DoorData[dFireData][FIRE_LABEL],
 				Float:door_enter[3];
 
 			Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, door_enter[0], door_enter[1], door_enter[2]);
    			format(string, sizeof(string), "Ten budynek stan¹³ w p³omieniach!\nSzacowane zniszczenia: %d%", floatround(percent));
 
-			if(DoorData[dFireData][FIRE_TIME] < 2)			color = 0x33AA33FF;
-	      	else if(DoorData[dFireData][FIRE_TIME] >= 4 && DoorData[dFireData][FIRE_TIME] < 8)
+			if(DoorData[dFireData][FIRE_TIME] < 4)			color = 0x33AA33FF;
+	      	else if(DoorData[dFireData][FIRE_TIME] >= 5 && DoorData[dFireData][FIRE_TIME] < 10)
 			{
 				color = 0xFF9900FF;
-       			CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 9, 5.0);
+       			CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 2, 5.0);
 			}
   			else
   			{
 			  	color = 0xAA3333FF;
-			  	CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 2, 8.0);
+			  	CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 2, 10.0);
 			}
-			printf("2 DOOR: %d", DoorData[dUID]);
 
 			UpdateDynamic3DTextLabelText(Text3D:fire_label, color, string);
 
@@ -2837,7 +3141,7 @@ task OnMinuteTask[60000]()
 				DestroyDynamic3DTextLabel(Text3D:DoorData[dFireData][FIRE_LABEL]);
 
 				DoorData[dFireData][FIRE_TIME] = 0;
-				CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 6, 8.0);
+				CreateExplosion(door_enter[0], door_enter[1], door_enter[2], 2, 10.0);
 
 				Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 				SaveDoor(doorid);
@@ -2947,6 +3251,18 @@ task OnSecondTask[1000]()
 			
 			PlayerCache[i][pLastKey] = keysa;
 			
+			// Timer misji
+			if(MissionData[i][mUID] != 0)
+			{
+			    if(MissionData[i][mLeader])
+			    {
+					foreach(new member : MissionPlayer[i])
+					{
+
+					}
+			    }
+			}
+			
 			// Czas freeze
 			if(PlayerCache[i][pFreeze] > 0)
 			{
@@ -2973,13 +3289,16 @@ task OnSecondTask[1000]()
 			{
    				new vehid = GetPlayerVehicleID(i),
 					speed = GetPlayerSpeed(i, true), componentid;
-					
+
    				// Anty SpeedHack
-				if(speed >= VehicleModelData[CarInfo[vehid][cModel] - 400][vMaxSpeed] + 40)
-				{
-					GivePlayerPunish(i, INVALID_PLAYER_ID, PUNISH_KICK, "SpeedHack.", 0, 0);
-					continue;
-				}
+   				//if(!IsPlayerUsingCHandling(i))
+   				//{
+					if(speed >= VehicleModelData[CarInfo[vehid][cModel] - 400][vMaxSpeed] + 40)
+					{
+						GivePlayerPunish(i, INVALID_PLAYER_ID, PUNISH_KICK, "SpeedHack.", 0, 0);
+						continue;
+					}
+				//}
 
 				// Kierowca
 	   			if(GetPlayerState(i) == PLAYER_STATE_DRIVER || GetPlayerVehicleSeat(i) == 0)
@@ -2996,10 +3315,11 @@ task OnSecondTask[1000]()
 		            {
 		                if(speed >= 55)
 						{
-		                    SetPlayerSpeed(i, 45.0);
+                      		SetPlayerSpeed(i, 45.0);
 		                }
 		            }
 		        
+		            /*
 		            // GPS
 		            if(CarInfo[vehid][cGPS])
 		            {
@@ -3033,6 +3353,7 @@ task OnSecondTask[1000]()
 							}
 						}
 		            }
+		            */
 
 					if(GetVehicleEngineStatus(vehid) == 1 && !IsVehicleBike(vehid))
 					{
@@ -3073,7 +3394,7 @@ task OnSecondTask[1000]()
 						}
 
 						CarInfo[vehid][cDistTicker] += floatround(floatsqroot(floatpower(floatabs(floatsub(PosX, PlayerCache[i][pPosX])), 2)+ floatpower(floatabs(floatsub(PosY, PlayerCache[i][pPosY])), 2)+floatpower(floatabs(floatsub(PosZ, PlayerCache[i][pPosZ])), 2)));
-
+						
 						// Przejecha³ 100 metrów
 						if(CarInfo[vehid][cDistTicker] >= 100)
 	     				{
@@ -3161,6 +3482,19 @@ task OnSecondTask[1000]()
 
 	 					// Zapisz statsy
 						if(CarInfo[vehid][cSavePoint] >= 70)	orm_update(CarInfo[vehid][cOrm]);
+
+						// Tuning mechaniczny
+						//if(!IsPlayerUsingCHandling(i))
+						//{
+						if(second % 2 == 0)
+						{
+						    speed = speed + (speed * CarInfo[vehid][cHandling]);
+							if(speed < GetVehicleMaxSpeed(CarInfo[vehid][cModel]) + (CarInfo[vehid][cHandling] * 100))
+							{
+								SetPlayerSpeed(i, speed);
+							}
+      					}
+						//}
 					}
 
 					// Anty tuning
@@ -3342,7 +3676,7 @@ task OnSecondTask[1000]()
 			    {
 			        PlayerCache[i][pHealing] = INVALID_PLAYER_ID;
 
-					ShowPlayerInfoDialog(i, D_TYPE_ERROR, "Proces leczenia gracza zosta³o anulowane.\nPowód: Gracz znajduje siê zbyt daleko od Ciebie.");
+					ShowPlayerInfoDialog(i, D_TYPE_ERROR, "Proces leczenia gracza zosta³ anulowany.\nPowód: Gracz znajduje siê zbyt daleko od Ciebie.");
                     GameTextForPlayer(patient_id, "~r~~h~Leczenie zostalo przerwane.", 4500, 3);
 				}
 			}
@@ -3595,7 +3929,7 @@ task OnSecondTask[1000]()
 
 			    if(distance <= 3.0)
 				{
-    				new itemid = PlayerCache[i][pItemWeapon];
+        			new itemid = PlayerCache[i][pItemWeapon];
 					if(itemid != INVALID_ITEM_ID && (keysa & KEY_FIRE) && PlayerItemCache[i][itemid][iType] == ITEM_WEAPON && PlayerItemCache[i][itemid][iValue][0] == 41 && GetPlayerState(i) == PLAYER_STATE_ONFOOT)
 					{
      					if(IsPlayerFacingObject(i, object_id))
@@ -3608,25 +3942,7 @@ task OnSecondTask[1000]()
 
 								if(PlayerCache[i][pTaggingTime] <= 0)
         						{
-									new group_id = PlayerCache[i][pMainTable];
-
-									PlayerCache[i][pTaggingObject] 	= INVALID_OBJECT_ID;
-         							PlayerCache[i][pTaggingTime]    = 0;
-         							
-									format(string, sizeof(string), "{%06x}%s", GroupData[group_id][gColor] >>> 8, GroupData[group_id][gTag]);
-
-									new query[512];
-									mysql_format(connHandle, query, sizeof(query), "UPDATE `"SQL_PREF"materials` SET material_texture = '1^0:60:40:1:%x:0:1:times:%e' WHERE material_owner = %d AND material_index = 0", COLOR_WHITE, string, GetObjectUID(object_id));
-									mysql_query(connHandle, query);
-
-									if(cache_affected_rows() <= 0)
-									{
-									    mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"materials` SET material_texture = '1^0:60:40:1:%x:0:1:times:%e', material_owner = %d, material_index = 0", COLOR_WHITE, string, GetObjectUID(object_id));
-									    mysql_query(connHandle, query);
-									}
-
-									SetDynamicObjectMaterialText(object_id, 0, string, 60, "Times", 40, 1, COLOR_WHITE, 0, 1);
-									TD_ShowSmallInfo(i, 5, "Tagowanie zostalo ~g~pomyslnie ~w~zakonczone.");
+									ShowPlayerDialog(i, D_TAG_TEXT, DIALOG_STYLE_INPUT, "Stwórz TAG", "Dokoñczy³eœ zamalowywanie TAGU. Mo¿esz poni¿ej wprowadziæ swój\nw³asny tekst, który zobacz¹ wszyscy inni bêd¹cy w jego pobli¿u.\nNie wprowadzaj zbyt du¿ej iloœci znaków, by tekst by³ widoczny.\n\nFormatowanie tekstu:\n\n| - nowy wiersz\n(RRGGBB) - kolorowanie\n\nWprowadŸ nazwê czcionki i oddziel go dwukropkiem od treœci, np:\nTahoma:Grove Street|HOME!", "Dalej", "Anuluj");
 								}
 					        }
 						}
@@ -3638,6 +3954,7 @@ task OnSecondTask[1000]()
 					PlayerCache[i][pTaggingTime]    = 0;
 
 					TD_ShowSmallInfo(i, 3, "Tagowanie zostalo ~r~anulowane~w~.");
+					CancelEdit(i);
 				}
 			}
 			
@@ -3703,6 +4020,33 @@ task OnSecondTask[1000]()
 				    PlayerCache[i][pCornerPrice] = 0;
 				    
 				    TD_ShowSmallInfo(i, 3, "Handel zostal ~r~zakonczony~w~.");
+				}
+			}
+			
+			// Drwal
+			if(WorkInfo[i][wID] == JOB_LUMBERJACK && WorkInfo[i][wValue][0] != 0)
+			{
+			    if(WorkInfo[i][wExtraID] != 0)
+			    {
+			        if(time - WorkInfo[i][wValue][1] > 15)
+			        {
+ 						new object_id = WorkInfo[i][wExtraID], objData[sObjectData],
+    						Float:x, Float:y, Float:z, Float:rx, Float:ry, Float:rz;
+
+						Streamer_GetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
+
+						GetDynamicObjectPos(object_id, x, y, z);
+						GetDynamicObjectRot(object_id, rx, ry, rz);
+
+						MoveDynamicObject(object_id, x, y, z + 0.03, 0.025, rx, ry -80.0, rz);
+						objData[objExtraID] = gettime();
+
+						Streamer_SetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
+						WorkInfo[i][wExtraID] = 0;
+
+	                    TD_ShowSmallInfo(i, 5, "Drzewo zostalo ~g~pomyslnie ~w~sciete. Uzyj komendy ~p~/p podnies~w~, by podniesc drewno.");
+                        ApplyAnimation(i, "CARRY", "crry_prtial", 4.0, 0, 0, 0, 0, 0, 1);
+					}
 				}
 			}
 			
@@ -3978,11 +4322,13 @@ public OnPlayerConnect(playerid)
 {
 	for(new session_id = 0; session_id != SESSION_COUNT; session_id++)	PlayerCache[playerid][pSession][session_id] = 0;
    	for(new sWorkData:e; e < sWorkData; ++e)							WorkInfo[playerid][e] = 0;
+   	for(new sMissionData:e; e < sMissionData; ++e)                      MissionData[playerid][e] = 0;
 
 	for(new sPlayer:e; e < sPlayer; ++e)
 	{
 	    if(e == pNameTag)   continue;
 	    if(e == pDescTag)   continue;
+	    if(e == vDescTag)   continue;
 	    
 		PlayerCache[playerid][e] = 0;
 	}
@@ -4019,6 +4365,7 @@ public OnPlayerConnect(playerid)
 	PlayerCache[playerid][pItemPass]                = INVALID_ITEM_ID;
 	PlayerCache[playerid][pItemMask]                = INVALID_ITEM_ID;
 	PlayerCache[playerid][pItemBoombox]             = INVALID_ITEM_ID;
+	PlayerCache[playerid][pItemGloves]              = INVALID_ITEM_ID;
 	
 	PlayerCache[playerid][pSearches]                = INVALID_PLAYER_ID;
 	
@@ -4056,7 +4403,9 @@ public OnPlayerConnect(playerid)
 	
 	PlayerCache[playerid][pFirstPersonObject]       = INVALID_OBJECT_ID;
 	
-	for(new icon_id = 0; icon_id < 100; icon_id++)	RemovePlayerMapIcon(playerid, icon_id);
+	PlayerCache[playerid][pScreenShot]              = false;
+	
+	//for(new icon_id = 0; icon_id < 100; icon_id++)	RemovePlayerMapIcon(playerid, icon_id);
 	
 	// Tymczasowa edycja
 	AttachEdit[playerid][aUID] = 0;
@@ -4105,10 +4454,10 @@ public OnPlayerConnect(playerid)
 	// Odkryj ukryte tagi & ignorowanie
 	for (new i = 0; i < MAX_PLAYERS; i++)
 	{
-	    if(!Streamer_IsInArrayData(STREAMER_TYPE_3D_TEXT_LABEL, PlayerCache[i][pDescTag], E_STREAMER_PLAYER_ID, playerid))
-	    {
-	        Streamer_AppendArrayData(STREAMER_TYPE_3D_TEXT_LABEL, PlayerCache[i][pDescTag], E_STREAMER_PLAYER_ID, playerid);
-	    }
+		if(!Streamer_IsInArrayData(STREAMER_TYPE_3D_TEXT_LABEL, PlayerCache[i][pDescTag], E_STREAMER_PLAYER_ID, playerid))
+		{
+      		Streamer_AppendArrayData(STREAMER_TYPE_3D_TEXT_LABEL, PlayerCache[i][pDescTag], E_STREAMER_PLAYER_ID, playerid);
+		}
 	    
 	    if(!Streamer_IsInArrayData(STREAMER_TYPE_3D_TEXT_LABEL, PlayerCache[i][pNameTag], E_STREAMER_PLAYER_ID, playerid))
 	    {
@@ -4200,10 +4549,18 @@ public OnPlayerPasswordChecked(playerid)
 		    defer OnKickPlayer(playerid);
 		    return 1;
 		}
+		
+		// Epizod
+		if(!PlayerCache[playerid][pEpisode])
+		{
+			ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Aktualnie trwa Epizod Palomino Creek. Nie mo¿esz zalogowaæ siê na t¹ postaæ.\nStwórz now¹ postaæ specjalnie pod grê w trakcie trwania epizodu.\n\nWejdŸ na "WEB_URL", by poznaæ szczegó³y.");
+		    defer OnKickPlayer(playerid);
+			return 1;
+		}
 
 		if(IsPlayerPremium(playerid))
 	 	{
-			SetPlayerColor(playerid, COLOR_WHITE);
+			SetPlayerColor(playerid, COLOR_NICK_PACC);
 			TextDrawShowForPlayer(playerid, TextDrawPremium);
 		}
 		else
@@ -4212,7 +4569,7 @@ public OnPlayerPasswordChecked(playerid)
 		}
 
 		SetPlayerScore(playerid, PlayerCache[playerid][pPoints]);
-	    PlayerCache[playerid][pNickColor] = COLOR_NICK;
+	    PlayerCache[playerid][pNickColor] = (COLOR_NICK & ~0xFF) | clamp(0x88, 0x00, 0xFF);
 
 		format(string, sizeof(string), "%s (%d)", PlayerName(playerid), playerid);
 		UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][pNameTag], PlayerCache[playerid][pNickColor], string);
@@ -4226,7 +4583,12 @@ public OnPlayerPasswordChecked(playerid)
 
 		Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_ATTACHED_PLAYER, playerid);
 		Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_DRAW_DISTANCE, 10.0);
+		
+		UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][vDescTag], COLOR_PURPLE, " ");
 
+		Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][vDescTag], E_STREAMER_ATTACHED_PLAYER, playerid);
+		Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][vDescTag], E_STREAMER_DRAW_DISTANCE, 10.0);
+		
 	    ResetPlayerWeaponsEx(playerid);
 
 		SetPlayerFightingStyle(playerid, PlayerCache[playerid][pFightStyle]);
@@ -4258,8 +4620,6 @@ public OnPlayerPasswordChecked(playerid)
 
 		//gpci(playerid, string, sizeof(string));
 	 	printf("[part] %s (UID: %d, GID: %d, SERIAL: %s) zalogowa³ siê pomyœlnie (%d/3).", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], string, PlayerCache[playerid][pLogTries]);
-
-		PlayerCache[playerid][pSession][SESSION_GAME] = gettime();
 
 		mysql_format(connHandle, string, sizeof(string), "INSERT INTO `"SQL_PREF"logged_players` VALUES ('%d', '%d', '%d')", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pSession][SESSION_GAME]);
         mysql_query(connHandle, string);
@@ -4516,6 +4876,16 @@ public OnPlayerDisconnect(playerid, reason)
 		else													DeletePlayerItem(playerid, itemid);
  	}
  	
+ 	// Rêkawiczki
+ 	if(PlayerCache[playerid][pItemGloves] != INVALID_ITEM_ID)
+ 	{
+ 	    new itemid = PlayerCache[playerid][pItemGloves];
+		PlayerItemCache[playerid][itemid][iValue][0] --;
+
+		if(PlayerItemCache[playerid][itemid][iValue][0] > 0)	orm_update(PlayerItemCache[playerid][itemid][iOrm]);
+		else													DeletePlayerItem(playerid, itemid);
+ 	}
+ 	
  	// Boombox
  	if(PlayerCache[playerid][pItemBoombox] != INVALID_ITEM_ID)
  	{
@@ -4544,6 +4914,24 @@ public OnPlayerDisconnect(playerid, reason)
  	    new object_id = PlayerCache[playerid][pBasketBall];
  	    DestroyDynamicObject(object_id);
  	}
+ 	
+  	// Zadanie
+  	if(MissionData[playerid][mUID] != 0)
+   	{
+    	if(MissionData[playerid][mLeader])
+   		{
+     		foreach(new i : MissionPlayer[playerid])
+       		{
+         		TD_ShowHint(i, HINT_NONE, 10, "Lider grupy wykonujacej zadanie ~r~wyszedl z gry~w~. Zadanie ~r~nie zostalo ~w~wykonanie prawidlowo.");
+           	}
+			DeleteMission(MissionData[playerid][mUID]);
+   		}
+   		else
+   		{
+   		    new mission_leader = GetMissionLeader(MissionData[playerid][mUID]);
+   		    Iter_Remove(MissionPlayer[mission_leader], playerid);
+   		}
+   	}
 
 	mysql_format(connHandle, string, sizeof(string),  "DELETE FROM `"SQL_PREF"logged_players` WHERE char_uid = '%d'", PlayerCache[playerid][pUID]);
     mysql_query(connHandle, string);
@@ -4627,7 +5015,9 @@ public SetPlayerSpawn(playerid)
 		OnPlayerFreeze(playerid, true, 3);
 
 		PlayerCache[playerid][pSpectate] = INVALID_PLAYER_ID;
+		
 		TD_ShowSmallInfo(playerid, 3, "Podglad gracza zostal ~r~anulowany~w~.");
+		TD_HideLargeInfo(playerid);
 	    return 1;
 	}
 	
@@ -4775,7 +5165,15 @@ public SetPlayerSpawn(playerid)
 	SetPlayerVirtualWorld(playerid, PosInfo[MAIN_SPAWN_POS][sPosVirtualWorld]);
 	
 	ResetPlayerCamera(playerid);
-	ShowPlayerDialog(playerid, D_INTRO, DIALOG_STYLE_MSGBOX, "Wprowadzenie (1/2)", "Witaj na serwerze "SERVER_NAME"!\n\nNa sam pocz¹tek zalecane jest zapoznanie siê z komend¹ /pomoc,\ndowiesz siê tam wielu ciekawych rzeczy zwi¹zanych z tutejsz¹ rozgrywk¹.\n\nJak widaæ, pojawi³eœ siê na Unity Station, aby jednak dostaæ\nsiê do Urzêdu bêdziesz musia³ wykorzystaæ autobus, b¹dŸ taksówkê.", "Dalej", "Zamknij");
+	
+	if(PlayerCache[playerid][pEpisode])
+	{
+	
+	}
+	else
+	{
+		ShowPlayerDialog(playerid, D_INTRO, DIALOG_STYLE_MSGBOX, "Wprowadzenie (1/2)", "Witaj na serwerze "SERVER_NAME"!\n\nNa sam pocz¹tek zalecane jest zapoznanie siê z komend¹ /pomoc,\ndowiesz siê tam wielu ciekawych rzeczy zwi¹zanych z tutejsz¹ rozgrywk¹.\n\nJak widaæ, pojawi³eœ siê na Unity Station, aby jednak dostaæ\nsiê do Urzêdu bêdziesz musia³ wykorzystaæ autobus, b¹dŸ taksówkê.", "Dalej", "Zamknij");
+	}
 	return 1;
 }
 
@@ -4794,13 +5192,46 @@ public OnPlayerDeath(playerid, killerid, reason)
 		
 		new killer_uid, weapon_uid;
 		
-		killer_uid = (PlayerCache[killerid][pGlove] == false) ? PlayerCache[killerid][pUID] : 0;
+		killer_uid = (PlayerCache[killerid][pItemGloves] == INVALID_ITEM_ID) ? PlayerCache[killerid][pUID] : 0;
 		weapon_uid = (PlayerCache[killerid][pItemWeapon] != INVALID_ITEM_ID) ? PlayerItemCache[killerid][PlayerCache[killerid][pItemWeapon]][iUID] : 0;
 
 		PlayerCache[playerid][pDeathKiller] = killer_uid;
 		PlayerCache[playerid][pDeathWeapon] = weapon_uid;
 
 		PlayerCache[playerid][pDeathType] 	= (weapon_uid != 0) ? DEATH_SHOOTING : DEATH_BEATING;
+		
+		// Zadanie
+		if(MissionData[killerid][mUID] != 0)
+		{
+		    if(MissionData[killerid][mType] == MISSION_CHASE)
+		    {
+		        if(MissionData[killerid][mVictim] == PlayerCache[playerid][pUID])
+		        {
+					new mission_leader = GetMissionLeader(MissionData[killerid][mUID]), group_id = MissionData[killerid][mGroup];
+					foreach(new i : MissionPlayer[mission_leader])
+					{
+						TD_ShowHint(i, HINT_NONE, 10, "Zadanie zostalo wykonane ~g~pomyslnie~w~.Na konto grupy ~y~%s (UID: %d) ~w~dodano ~g~%d", GroupData[group_id][gName], GroupData[group_id][gUID], MissionData[killerid][mAward]);
+					}
+					GroupData[group_id][gCash] += MissionData[killerid][mAward];
+					orm_update(GroupData[group_id][gOrm]);
+					
+					DeleteMission(MissionData[killerid][mUID]);
+		        }
+		    }
+		}
+		
+		// Jeœli lider zadania "zginie"
+		if(MissionData[playerid][mUID] != 0)
+		{
+		    if(MissionData[playerid][mLeader])
+			{
+				foreach(new i : MissionPlayer[playerid])
+				{
+				    TD_ShowHint(i, HINT_NONE, 10, "Lider grupy wykonujacej zadanie zostal ~r~obezwladniony~w~. Zadanie ~r~nie zostalo ~w~wykonanie prawidlowo.");
+				}
+				DeleteMission(MissionData[playerid][mUID]);
+			}
+		}
 	}
 	else
 	{
@@ -4876,6 +5307,15 @@ public OnVehicleSpawn(vehicleid)
 	// Nie mo¿e wybuchaæ
     if(CarInfo[vehicleid][cHealth] < 350)	CarInfo[vehicleid][cHealth] = 350;
 
+	/*
+    new Float:handling;
+    GetDefaultHandlingFloat(CarInfo[vehicleid][cModel], HANDL_TR_FENGINEACCELERATION, handling);
+    SetVehicleHandlingFloat(vehicleid, HANDL_TR_FENGINEACCELERATION, handling + CarInfo[vehicleid][cHandling]);
+
+    GetDefaultHandlingFloat(CarInfo[vehicleid][cModel], HANDL_TR_FMAXVELOCITY, handling);
+    SetVehicleHandlingFloat(vehicleid, HANDL_TR_FMAXVELOCITY, handling + CarInfo[vehicleid][cHandling]);
+	*/
+	
 	SetVehicleLock(vehicleid, CarInfo[vehicleid][cLocked]);
 	SetVehicleHealth(vehicleid, CarInfo[vehicleid][cHealth]);
 
@@ -5628,6 +6068,15 @@ public OnPlayerStateChange(playerid, newstate, oldstate)
 				PlayerTextDrawShow(playerid, TextDrawRadioCB[playerid]);
 	        }
 	    }
+	    /*
+	    if(CarInfo[vehid][cAccess] & VEH_ACCESS_TURBO || CarInfo[vehid][cAccess] & VEH_ACCESS_COMPRESSOR || CarInfo[vehid][cAccess] & VEH_ACCESS_ECU)
+	    {
+	        if(!IsPlayerUsingCHandling(playerid))
+	        {
+	        	TD_ShowHint(playerid, HINT_NONE, 5, "Ten pojazd jest ~y~ulepszony ~w~pod wzgledem osiagow mechanicznych. Zeby moc korzystac z ~b~pelnych modyfikacji ~w~osiagow pojazdu, pobierz plugin z naszej strony: ~y~https://m-rp.net");
+			}
+	    }
+	    */
 	    
      	if(PlayerCache[playerid][pLastVeh] != vehid)
       	{
@@ -5681,8 +6130,17 @@ public OnPlayerStateChange(playerid, newstate, oldstate)
 			PlayerCache[playerid][pTaxiPassenger] 	= INVALID_PLAYER_ID;
 	    }
 	    
-   		// GPS
-		if(CarInfo[vehid][cGPS])	for(new icon_id = 0; icon_id < 100; icon_id++) RemovePlayerMapIcon(playerid, icon_id);
+	    // GPS
+	    if(CarInfo[vehid][cGPS])
+	    {
+		    foreach(new i : Player)
+		    {
+		        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+		        {
+		    		SetPlayerMarkerForPlayer(playerid, i, COLOR_NICK);
+		        }
+		    }
+		}
 	    
 	    // Pasy
 		PlayerCache[playerid][pBelts] = false;
@@ -5743,6 +6201,26 @@ public OnPlayerStateChange(playerid, newstate, oldstate)
 			Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_DRAW_DISTANCE, 5.0);
 	    }
 	    
+	    // GPS
+	    if(CarInfo[vehid][cGPS])
+	    {
+		    foreach(new i : Player)
+		    {
+		        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+		        {
+		            if(IsPlayerInAnyVehicle(i))
+		            {
+						vehid = GetPlayerVehicleID(i);
+						if(CarInfo[vehid][cGPS])
+						{
+						    SetPlayerMarkerForPlayer(playerid, i, COLOR_BLUE);
+						    SetPlayerMarkerForPlayer(i, playerid, COLOR_BLUE);
+						}
+		            }
+		        }
+		    }
+		}
+	    
 	    if(PlayerCache[playerid][pAFK] > 0)
 	    {
 	        GivePlayerPunish(playerid, INVALID_PLAYER_ID, PUNISH_KICK, "Nieautoryzowane wejscie do pojazdu.", 0, 0);
@@ -5766,6 +6244,8 @@ public OnPlayerStateChange(playerid, newstate, oldstate)
 			Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_DRAW_DISTANCE, 15.0);
 			Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_DRAW_DISTANCE, 10.0);
 	    }
+	    
+	    PlayerCache[playerid][pCheckWeapon] = (gettime() + 5);
 	}
 	return 1;
 }
@@ -5821,7 +6301,7 @@ public OnPlayerEnterCheckpoint(playerid)
 	    case CHECKPOINT_DOOR:
 		{
 		    new package_uid = PlayerCache[playerid][pPackage],
-		        price = floatround(PlayerCache[playerid][pPackageDistance]) / 100;
+		        price = floatround(PlayerCache[playerid][pPackageDistance]) / 20;
 		        
 		    DisablePlayerCheckpoint(playerid);
 		    
@@ -5875,7 +6355,7 @@ public OnPlayerEnterCheckpoint(playerid)
 		}
 		case CHECKPOINT_BUSSTOP:
 		{
-		    TD_ShowHint(playerid, HINT_BUSSTOP, 0, "~y~Bardzo dobrze! ~w~Udalo Ci sie dotrzec do ~r~przystanku~w~, skorzystaj teraz z komendy ~p~/bus 143761~w~, by dostac sie do Urzedu Miasta.~n~~n~Mozesz pominac wpisywanie ~p~numeru przystanku ~w~i wybrac swoj cel z ~y~lotu ptaka~w~, jednak jesli nie znasz dokladnie mapy i polozenia jakiegos miejsca, zalecamy jego uzycie.~n~~n~Jako nowy gracz nie zaplacisz za kurs, jednak w przyszlosci bedzie to troche kosztowac, w zaleznosci od odleglosci.");
+		    TD_ShowHint(playerid, HINT_BUSSTOP, 0, "~y~Bardzo dobrze! ~w~Udalo Ci sie dotrzec do ~r~przystanku~w~, skorzystaj teraz z komendy ~p~/bus 143833~w~, by dostac sie do Ratusza.~n~~n~Mozesz pominac wpisywanie ~p~numeru przystanku ~w~i wybrac swoj cel z ~y~lotu ptaka~w~, jednak jesli nie znasz dokladnie mapy i polozenia jakiegos miejsca, zalecamy jego uzycie.~n~~n~Jako nowy gracz nie zaplacisz za kurs, jednak w przyszlosci bedzie to troche kosztowac, w zaleznosci od odleglosci.");
 
 			DisablePlayerCheckpoint(playerid);
 			PlayerCache[playerid][pCheckpoint] = CHECKPOINT_NONE;
@@ -5884,10 +6364,13 @@ public OnPlayerEnterCheckpoint(playerid)
 		{
 			if(WorkInfo[playerid][wValue][0] > 0)
 			{
-				new doorid = WorkInfo[playerid][wExtraID] = GetRandomDoorID(OWNER_PLAYER);
+			    new Float:PosX, Float:PosY, Float:PosZ;
+			    GetPlayerPos(playerid, PosX, PosY, PosZ);
+			    
+				new doorid = WorkInfo[playerid][wExtraID] = GetNearRandomDoorID(PosX, PosY, PosZ, OWNER_PLAYER);
 
 				WorkInfo[playerid][wValue][0] --;
-				crp_GivePlayerMoney(playerid, 4);
+				crp_GivePlayerMoney(playerid, 8);
 				
 				if(WorkInfo[playerid][wValue][0] <= 0)
 				{
@@ -5898,13 +6381,107 @@ public OnPlayerEnterCheckpoint(playerid)
 				}
 				else
 				{
-				    new Float:PosX, Float:PosY, Float:PosZ;
-					TD_ShowSmallInfo(playerid, 3, "Gazeta dostarczona!~n~Otrzymales ~g~$4~w~, pozostalo gazet: ~y~%d~w~.", WorkInfo[playerid][wValue][0]);
+					TD_ShowSmallInfo(playerid, 3, "Gazeta dostarczona!~n~Otrzymales ~g~$8~w~, pozostalo gazet: ~y~%d~w~.", WorkInfo[playerid][wValue][0]);
 
 					Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, PosX, PosY, PosZ);
 					SetPlayerCheckpoint(playerid, PosX, PosY, PosZ, 2.0);
 				}
 			}
+		}
+		case CHECKPOINT_MISSION:
+		{
+		    new mission_uid = MissionData[playerid][mUID], mission_type = MissionData[playerid][mType],
+		        mission_leader = GetMissionLeader(mission_uid);
+		        
+			if(MissionData[playerid][mDate] + MissionData[playerid][mTime] < gettime())
+			{
+				foreach(new i : MissionPlayer[mission_leader])
+				{
+					TD_ShowHint(i, HINT_NONE, 15, "Czas wykonania zadania zostal ~r~przekroczony~w~. Niestety ~r~nie udalo ~w~sie go prawidlowo wykonac.");
+
+					DisablePlayerCheckpoint(i);
+					PlayerCache[i][pCheckpoint] = CHECKPOINT_NONE;
+				}
+				DeleteMission(mission_uid);
+			    return 1;
+			}
+		        
+			if(MissionData[playerid][mMembers] > 0)
+			{
+				new count_members;
+			    foreach(new i : MissionPlayer[mission_leader])
+			    {
+       				if(PlayerToPlayer(10.0, i, playerid))
+			        {
+						count_members ++;
+      				}
+		    	}
+			    if(count_members < MissionData[playerid][mMembers])
+			    {
+					TD_ShowSmallInfo(playerid, 5, "Zaczekaj, az wszyscy ~y~czlonkowie ~w~zadania pojawia sie na ~r~miejscu~w~.");
+     				return 1;
+		    	}
+			}
+
+		    if(mission_type == MISSION_FIRE_BUILD)
+		    {
+		        new group_id = MissionData[playerid][mGroup];
+				foreach(new i : MissionPlayer[mission_leader])
+				{
+				    TD_ShowHint(i, HINT_NONE, 15, "Zadanie zostalo wykonane ~g~poprawnie!~n~~n~~w~Na konto grupy ~y~%s (UID: %d) ~w~zostalo dodane: ~g~$%d", GroupData[group_id][gName], GroupData[group_id][gUID], MissionData[i][mAward]);
+
+					DisablePlayerCheckpoint(i);
+					PlayerCache[i][pCheckpoint] = CHECKPOINT_NONE;
+				}
+				
+				GroupData[group_id][gCash] += MissionData[playerid][mAward];
+				orm_update(GroupData[group_id][gOrm]);
+				
+				DeleteMission(mission_uid);
+		        return 1;
+		    }
+		    
+		    if(mission_type == MISSION_SMUGGLE)
+		    {
+				// Przyniós³ pakunek
+				if(MissionData[playerid][mLevel] == 2)
+				{
+					RemovePlayerAttachedObject(playerid, SLOT_EXTRA);
+					SetPlayerSpecialAction(playerid, SPECIAL_ACTION_NONE);
+					
+					DisablePlayerCheckpoint(playerid);
+					MissionData[playerid][mLevel] = 1;
+					
+					foreach(new i : MissionPlayer[mission_leader])
+					{
+						MissionData[i][mPoints] ++;
+						
+						if(MissionData[i][mPoints] < MissionData[i][mNeedPoints])
+						{
+					    	TD_ShowHint(i, HINT_NONE, 0, "Musicie teraz zapakowac ~y~towar ~w~na busa. Na minimapie pokazano miejsca, w ktorych znajduja sie ~r~skrzynki~w~.~n~~n~Podejdz do skrzynki i wcisnij klawisz ~y~Y~w~, by ja podniesc.~n~~n~Zapakowane towary: %d~n~Pozostalo: %d", MissionData[i][mPoints], MissionData[i][mNeedPoints]);
+						}
+						else
+						{
+						    if(GetPlayerSpecialAction(i) == SPECIAL_ACTION_CARRY)
+						    {
+						        SetPlayerSpecialAction(i, SPECIAL_ACTION_NONE);
+						        DisablePlayerCheckpoint(i);
+						        
+						        RemovePlayerAttachedObject(i, SLOT_EXTRA);
+						    }
+						
+						    MissionData[i][mLevel] = 3;
+						    SetPlayerMarkerForPlayer(mission_leader, i, COLOR_WHITE);
+						    
+							// Wysy³amy zadanie do PD
+						    CreateGroupMission(INVALID_GROUP_ID, G_TYPE_POLICE, MISSION_CHASE, "Pewna grupa osób próbuje przemyciæ Towar. Musicie z³apaæ lidera tej grupy (skuæ go, lub obezw³adniæ), by odbiæ przemyt.", PlayerCache[mission_leader][pUID], MissionData[i][mMembers], MissionData[i][mMembers] * 300, 30 * 60);
+						    TD_ShowHint(i, HINT_NONE, 15, "Towar zostal w pelni ~g~zaladowany~w~! Udajcie sie teraz do swojej ~y~siedziby ~w~(budynek grupowy).~n~~n~Ktos ~r~powiadomil ~w~policje o mozliwym przemycie.~n~~n~Oslaniajcie ~w~~h~lidera ~w~grupy (bialy znacznik na mapie).");
+						}
+					}
+				    return 1;
+				}
+		        return 1;
+		    }
 		}
 		default:
 		{
@@ -6036,6 +6613,36 @@ public OnPlayerObjectMoved(playerid, objectid)
 
 public OnDynamicObjectMoved(objectid)
 {
+	// Wyciête drzewo
+	if(GetObjectModel(objectid) == OBJECT_TREE)
+	{
+		new objData[sObjectData],
+			Float:objX, Float:objY, Float:objZ;
+
+		GetDynamicObjectPos(objectid, objX, objY, objZ);
+
+		mysql_query_format("INSERT INTO `"SQL_PREF"items` (item_name, item_type, item_value1, item_ownertype) VALUES ('Drewno', '%d', '%d', '%d')", ITEM_WOOD, random(400), PLACE_NONE);
+		new item_uid = (cache_insert_id() * -1);
+
+		new object_id = CreateDynamicObject(ItemTypeInfo[ITEM_WOOD][iTypeObjModel], objX, objY, objZ, ItemTypeInfo[ITEM_WOOD][iTypeObjRotX], ItemTypeInfo[ITEM_WOOD][iTypeObjRotY], random(360), 0, -1, -1, MAX_DRAW_DISTANCE);
+		objData[objUID] = item_uid;
+
+		Streamer_SetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
+		Streamer_SetIntData(STREAMER_TYPE_OBJECT, objectid, E_STREAMER_WORLD_ID, 9999);
+		
+		foreach(new i : Player)
+		{
+		    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+		    {
+				if(IsPlayerInRangeOfPoint(i, MAX_DRAW_DISTANCE, objX, objY, objZ))
+				{
+				    Streamer_Update(i, STREAMER_TYPE_OBJECT);
+				}
+		    }
+		}
+		return 1;
+	}
+	
 	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
@@ -6747,7 +7354,196 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 		    ListPlayerFavoriteItems(playerid);
 		    
 		    TD_HideHint(playerid);
-		    TD_ShowHint(playerid, HINT_KEY_NO, 0, "Tym klawiszem bedziesz mogl ~r~zamknac ~w~kazda wyswietlona ~p~informacje ~w~w tym oknie, ale sluzy to rowniez do ~y~manipulowania ~w~ulubionymi przedmiotami, o ktorych dowiesz sie w dalszym etapie gry.~n~~n~Udaj sie teraz do najblizszego ~r~przystanku ~w~i wyrusz stamtad do Urzedu Miasta, by wyrobic niezbedne do gry ~y~dokumenty ~w~Twojej postaci.~n~~n~Na mapie zostal zaznaczony najblizszy ~r~przystanek~w~, udaj sie tam.");
+		    TD_ShowHint(playerid, HINT_KEY_NO, 0, "Tym klawiszem bedziesz mogl ~r~zamknac ~w~kazda wyswietlona ~p~informacje ~w~w tym oknie, ale sluzy to rowniez do ~y~manipulowania ~w~ulubionymi przedmiotami, o ktorych dowiesz sie w dalszym etapie gry.~n~~n~Udaj sie teraz do najblizszego ~r~przystanku ~w~i wyrusz stamtad do Ratusza, by wyrobic niezbedne do gry ~y~dokumenty ~w~Twojej postaci.~n~~n~Na mapie zostal zaznaczony najblizszy ~r~przystanek~w~, udaj sie tam.");
+		}
+		
+		// Drwal
+		if(WorkInfo[playerid][wID] == JOB_LUMBERJACK && WorkInfo[playerid][wValue][0] != 0)
+  		{
+			if(newkeys & KEY_FIRE)
+			{
+				new areaid = WorkInfo[playerid][wValue][0], AreaData[sAreaData];
+				Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+				
+				if(AreaData[aFlags] & A_FLAG_LUMBERJACK)
+				{
+				    new object_id = GetClosestObjectType(playerid, OBJECT_TREE, 2.0);
+				    if(object_id == INVALID_OBJECT_ID)
+					{
+						TD_ShowSmallInfo(playerid, 3, "Musisz znajdowac sie w poblizu ~y~drzewa~w~.");
+						return 1;
+					}
+					
+					foreach(new i : Player)
+					{
+					    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+					    {
+					        if(WorkInfo[i][wID] == JOB_LUMBERJACK && WorkInfo[i][wValue][0] == areaid)
+					        {
+					            if(WorkInfo[i][wExtraID] == object_id)
+					            {
+					                TD_ShowSmallInfo(playerid, 3, "Ktos aktualnie ~r~scina ~w~to drzewo.");
+					                return 1;
+					            }
+					        }
+					    }
+					}
+					
+					WorkInfo[playerid][wExtraID] = object_id;
+					WorkInfo[playerid][wValue][1] = gettime();
+					
+					ApplyAnimation(playerid, "CHAINSAW", "WEAPON_csaw", 4.1, 1, 0, 0, 1, 0, 1);
+					TD_ShowSmallInfo(playerid, 5, "Trzymaj przycisk, dopoki drzewo nie zostanie ~r~sciete~w~.");
+				}
+			}
+			
+			if(oldkeys & KEY_FIRE)
+			{
+				if(WorkInfo[playerid][wExtraID] != 0)
+				{
+				    if(gettime() - WorkInfo[playerid][wValue][1] < 15)
+				    {
+				        TD_ShowSmallInfo(playerid, 5, "Za krotko trwalo ~r~scinanie ~w~drzewa. Musisz dluzej ~y~trzymac ~w~przycisk!");
+                        WorkInfo[playerid][wExtraID] = 0;
+					}
+				    ApplyAnimation(playerid, "CARRY", "crry_prtial", 4.0, 0, 0, 0, 0, 0, 1);
+				}
+		    }
+		}
+		
+		// Przemyt
+		if(MissionData[playerid][mType] == MISSION_SMUGGLE)
+		{
+			if(MissionData[playerid][mLevel] == 1)
+			{
+			    if(newkeys & KEY_YES)
+			    {
+			        new object_id = GetClosestObjectType(playerid, OBJECT_SMUGGLE_CRATE, 2.0);
+					if(object_id == INVALID_OBJECT_ID)
+					{
+						return 1;
+					}
+					if(!Streamer_IsInArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_PLAYER_ID, playerid))
+					{
+					    return 1;
+					}
+					new mission_leader = GetMissionLeader(MissionData[playerid][mUID]);
+					
+					foreach(new i : MissionPlayer[mission_leader])
+					{
+						Streamer_RemoveArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_PLAYER_ID, i);
+						Streamer_Update(i, STREAMER_TYPE_OBJECT);
+					}
+					
+					SetPlayerAttachedObject(playerid, SLOT_EXTRA, 2969, 6, 0.077999, 0.043999, -0.170999, -13.799953, 79.70, 0.0);
+                    SetPlayerSpecialAction(playerid, SPECIAL_ACTION_CARRY);
+                    
+                    MissionData[playerid][mLevel] = 2;
+                    
+                    new vehid = MissionData[playerid][mValue][0],
+                        Float:vehPosX, Float:vehPosY, Float:vehPosZ;
+                        
+					GetVehiclePos(vehid, vehPosX, vehPosY, vehPosZ);
+                        
+					SetPlayerCheckpoint(playerid, vehPosX, vehPosY, vehPosZ, 5.0);
+					PlayerCache[playerid][pCheckpoint] = CHECKPOINT_MISSION;
+					
+					TD_ShowSmallInfo(playerid, 5, "Zanies ten ladunek w ~r~okolice ~w~pojazdu dostawczego.");
+			    }
+			}
+		}
+
+		if((((newkeys & (KEY_CTRL_BACK)) == (KEY_CTRL_BACK)) && ((oldkeys & (KEY_CTRL_BACK)) != (KEY_CTRL_BACK))))
+		{
+			new giveplayer_id = GetPlayerCameraTargetPlayer(playerid), string[128];
+			if(giveplayer_id != INVALID_PLAYER_ID)
+			{
+			    if(!PlayerToPlayer(2.0, playerid, giveplayer_id))
+			    {
+			        return 1;
+			    }
+				for(new o = 0; o < 8; o++)
+				{
+					if(o == GII_OPTION_CARP || o == GII_OPTION_CART || o == GII_OPTION_KEYS)
+					{
+					    continue;
+					}
+					
+					if(o == GII_OPTION_HANDCUFF)
+					{
+    					if(PlayerCache[playerid][pDuty][DUTY_GROUP] != INVALID_GROUP_ID && HavePlayerItemType(playerid, ITEM_HANDCUFFS))
+						{
+							new group_id = PlayerCache[playerid][pDuty][DUTY_GROUP];
+							if(!(GroupData[group_id][gFlags] & G_FLAG_HANDCUFFS) || (PlayerCache[giveplayer_id][pCuffedTo] != INVALID_PLAYER_ID && PlayerCache[giveplayer_id][pCuffedTo] != playerid))
+							{
+								continue;
+							}
+					 	}
+					 	else
+					 	{
+					 	    continue;
+						}
+					}
+					
+	   				TextDrawShowForPlayer(playerid, Text:GII_Option[o]);
+	   				format(string, sizeof(string), "Interakcja~n~%s (%d)", PlayerName(giveplayer_id), giveplayer_id);
+
+					PlayerCache[playerid][pMainTable] = giveplayer_id;
+					PlayerCache[playerid][pGII_Type] = 1;
+				}
+			}
+			else
+			{
+			    new vehid = GetPlayerCameraTargetVehicle(playerid);
+			    if(vehid == INVALID_VEHICLE_ID)
+				{
+				    return 1;
+				}
+				if(GetDistanceToVehicle(playerid, vehid) >= 4.0)
+				{
+				    return 1;
+				}
+				
+				for(new o = 0; o < 8; o++)
+				{
+					if(o == GII_OPTION_HANDCUFF || o == GII_OPTION_WELCOME)
+					{
+					    continue;
+					}
+					
+					if(o == GII_OPTION_CARP || o == GII_OPTION_CART || o == GII_OPTION_KEYS)
+					{
+				    	if(!(PlayerCache[playerid][pAdmin] & A_PERM_CARS))
+					    {
+						    if(CarInfo[vehid][cOwnerType] == OWNER_NONE || CarInfo[vehid][cOwnerType] == OWNER_WORK)
+						    {
+						        continue;
+						    }
+					   		if(CarInfo[vehid][cOwnerType] == OWNER_PLAYER && CarInfo[vehid][cOwner] != PlayerCache[playerid][pUID])
+							{
+								continue;
+							}
+							if(CarInfo[vehid][cOwnerType] == OWNER_GROUP)
+							{
+							    if(!HavePlayerGroupPerm(playerid, CarInfo[vehid][cOwner], G_PERM_CARS))
+							    {
+							        continue;
+							    }
+							}
+						}
+					}
+	   				TextDrawShowForPlayer(playerid, Text:GII_Option[o]);
+				}
+				
+ 				PlayerCache[playerid][pGII_Type] = 2;
+				format(string, sizeof(string), "Interakcja~n~%s (%d)", GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cUID]);
+
+            	PlayerCache[playerid][pMainTable] = vehid;
+			}
+			PlayerTextDrawSetString(playerid, PlayerText:GII_VisualItem[playerid], string);
+			PlayerTextDrawShow(playerid, PlayerText:GII_VisualItem[playerid]);
+			
+			SelectTextDraw(playerid, COLOR_YELLOW);
 		}
 	    return 1;
 	}
@@ -6862,6 +7658,11 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 				SetPlayerVirtualWorld(playerid, GetPlayerVirtualWorld(spectate_player));
 				
                 PlayerCache[playerid][pSpectate] = spectate_player;
+                
+               	new sp = spectate_player, year, month, day, hour, minute, second;
+				TimestampToDate(PlayerCache[sp][pSession][SESSION_GAME], year, month, day, hour, minute, second, 1);
+
+				TD_ShowLargeInfo(playerid, 0, "Postac: ~y~%s (%d)    ~w~Globalny: ~g~%s (%d)~w~~n~Zalogowany od: ~y~%02d:%02d~w~     Czas gry: ~b~%dh %dm~w~~n~~n~HP: ~r~%.0f%%~w~     Gotowka: ~g~$%d~w~     Bank: ~g~$%d~w~", PlayerName(sp), PlayerCache[sp][pUID], PlayerCache[sp][pGlobName], PlayerCache[sp][pGID], hour, minute, PlayerCache[sp][pHours], PlayerCache[sp][pMinutes], PlayerCache[sp][pHealth], PlayerCache[sp][pCash], PlayerCache[sp][pBankCash]);
 	        }
 	        
 	        if(newkeys & KEY_SPRINT)
@@ -6879,6 +7680,20 @@ public OnPlayerKeyStateChange(playerid, newkeys, oldkeys)
 				SetPlayerVirtualWorld(playerid, GetPlayerVirtualWorld(spectate_player));
 
                 PlayerCache[playerid][pSpectate] = spectate_player;
+                
+               	new sp = spectate_player, year, month, day, hour, minute, second;
+				TimestampToDate(PlayerCache[sp][pSession][SESSION_GAME], year, month, day, hour, minute, second, 1);
+
+				TD_ShowLargeInfo(playerid, 0, "Postac: ~y~%s (%d)    ~w~Globalny: ~g~%s (%d)~w~~n~Zalogowany od: ~y~%02d:%02d~w~     Czas gry: ~b~%dh %dm~w~~n~~n~HP: ~r~%.0f%%~w~     Gotowka: ~g~$%d~w~     Bank: ~g~$%d~w~", PlayerName(sp), PlayerCache[sp][pUID], PlayerCache[sp][pGlobName], PlayerCache[sp][pGID], hour, minute, PlayerCache[sp][pHours], PlayerCache[sp][pMinutes], PlayerCache[sp][pHealth], PlayerCache[sp][pCash], PlayerCache[sp][pBankCash]);
+	        }
+	        
+	        // Odœwie¿anie
+	        if(newkeys & KEY_JUMP)
+	        {
+	            new params[11], spectate_player = PlayerCache[playerid][pSpectate];
+	            format(params, sizeof(params), "%d", spectate_player);
+	            
+				pc_cmd_spec(playerid, params);
 	        }
 	    }
 	}
@@ -7306,8 +8121,9 @@ public OnPlayerWeaponShot(playerid, weaponid, hittype, hitid, Float:fX, Float:fY
 				return 0;
 				
 			}
-
-            PlayerItemCache[playerid][itemid][iValue][1] --;
+			
+  			PlayerItemCache[playerid][itemid][iValue][1] -= (PlayerItemCache[playerid][itemid][iValue][1] - weapon_ammo);
+  			
 			if(PlayerItemCache[playerid][itemid][iValue][1] <= 0)
 			{
 				ResetPlayerWeaponsEx(playerid);
@@ -7340,15 +8156,6 @@ public OnPlayerStreamIn(playerid, forplayerid)
 
 public OnPlayerStreamOut(playerid, forplayerid)
 {
-	if(PlayerCache[forplayerid][pSpectate] == playerid)
-	{
-	    new interior_id = GetPlayerInterior(playerid),
-			world_id = GetPlayerVirtualWorld(playerid);
-
-		SetPlayerInterior(forplayerid, interior_id);
-		SetPlayerVirtualWorld(forplayerid, world_id);
-		return 1;
-	}
 	return 1;
 }
 
@@ -9460,8 +10267,8 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				mysql_format(connHandle, query, sizeof(query), "SELECT `contact_number`, `contact_name` FROM `"SQL_PREF"contacts` WHERE contact_owner = '%d'", PlayerCache[playerid][pPhoneNumber]);
 				tmp_cache = mysql_query(connHandle, query);
 				
-				format(list_contacts, sizeof(list_contacts), "911\t\tNumer alarmowy\n333\t\tHurtownia\n777\t\tTaxi\n444\t\tLos Santos News\n-----");
-				
+				format(list_contacts, sizeof(list_contacts), "911\t\tNumer alarmowy\n333\t\tHurtownia\n777\t\tTaxi\n444\t\tLos Santos News\n888\t\tGastronomie\n-----");
+
 				cache_get_row_count(rows);
 				for(new row = 0; row != rows; row++)
 				{
@@ -9471,7 +10278,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				    cache_get_value_index(row, 1, contact_name, 24);
 				
 					format(list_contacts, sizeof(list_contacts), "%s\n%d\t\t%s", list_contacts, contact_number, contact_name);
-				}
+    }
 				if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 				
 				if(strlen(list_contacts))
@@ -9535,8 +10342,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		        return 1;
 			}
 			
-			DynamicGui_Init(playerid);
-			DynamicGui_SetDialogValue(playerid, phone_number);
+			PlayerCache[playerid][pMainTable] = phone_number;
 
    			format(string, sizeof(string), "WprowadŸ treœæ wiadomoœci SMS, która zostanie wys³ana na numer %d.", phone_number);
      		ShowPlayerDialog(playerid, D_PHONE_SEND_SMS, DIALOG_STYLE_INPUT, "Telefon » Wyœlij SMS", string, "Wyœlij", "Anuluj");
@@ -9551,7 +10357,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-     		new phone_number = DynamicGui_GetDialogValue(playerid), string[256];
+     		new phone_number = PlayerCache[playerid][pMainTable], string[128];
 	        format(string, sizeof(string), "%d %s", phone_number, inputtext);
 
 	        pc_cmd_sms(playerid, string);
@@ -9596,7 +10402,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        new phone_number = strval(inputtext);
 	        if(!strval(inputtext)) return 1;
 	        
-	        if(phone_number == NUMBER_WHOLESALE || phone_number == NUMBER_TAXI || phone_number == NUMBER_ALARM || phone_number == NUMBER_NEWS)
+	        if(phone_number == NUMBER_WHOLESALE || phone_number == NUMBER_TAXI || phone_number == NUMBER_ALARM || phone_number == NUMBER_NEWS || phone_number == NUMBER_GASTRONOMY)
 	        {
 	            pc_cmd_tel(playerid, inputtext);
 	            return 1;
@@ -9604,8 +10410,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        new string[128], contact_name[32];
 	        sscanf(inputtext, "ds[32]", phone_number, contact_name);
 	        
-	        DynamicGui_Init(playerid);
-	        DynamicGui_SetDialogValue(playerid, phone_number);
+	        PlayerCache[playerid][pMainTable] = phone_number;
 	        
 	        format(string, sizeof(string), "%s (%d) » Opcje kontaktu", contact_name, phone_number);
 	        ShowPlayerDialog(playerid, D_CONTACT_OPTIONS, DIALOG_STYLE_LIST, string, "1. Po³¹cz\n2. Wyœlij SMS\n3. Usuñ kontakt", "Wybierz", "Anuluj");
@@ -9621,7 +10426,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	    if(response)
 	    {
 	        new list_items = strval(inputtext), string[128],
-	            phone_number = DynamicGui_GetDialogValue(playerid);
+	            phone_number = PlayerCache[playerid][pMainTable];
 	        
 	        if(list_items == 1)
 	        {
@@ -9654,7 +10459,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 	    if(response)
 	    {
-     		new phone_number = DynamicGui_GetDialogValue(playerid), query[256];
+     		new phone_number = PlayerCache[playerid][pMainTable], query[256];
      		
 	        mysql_format(connHandle, query, sizeof(query), "DELETE FROM `"SQL_PREF"contacts` WHERE contact_number = '%d' AND contact_owner = '%d' LIMIT 1", phone_number, PlayerCache[playerid][pPhoneNumber]);
 			mysql_query(connHandle, query);
@@ -11013,9 +11818,9 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			{
 			    case PACKAGE_PRODUCT:
 			    {
-					pointX = -535.8355;
-					pointY = -542.9414;
-					pointZ = 25.5234;
+					pointX = 1333.5702;
+					pointY = 287.2783;
+					pointZ = 19.4063;
 				}
 				case PACKAGE_DRUGS:
 				{
@@ -11067,6 +11872,11 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	            {
 	                PlayerCache[playerid][pMainTable] = JOB_NEWSPAPER;
 	                ShowPlayerDialog(playerid, D_WORK_ACCEPT, DIALOG_STYLE_MSGBOX, "Dorywcza » Rozwoziciel gazet", "W ka¿dym mieœcie codziennie pojawia siê gazeta lokalna, w której znajduj¹ siê\nwydarzenia z okolicy. Twoim zadaniem bêdzie takie gazety dostarczyæ\ndo mieszkañców, mo¿esz to robiæ piechot¹, albo za pomoc¹ roweru.\n\nNajpierw bêdziesz musia³ jednak udaæ siê do siedziby\nredakcji i odebraæ gazety od stoj¹cego tam aktora.\nCzy chcesz spróbowaæ swoich si³ w tej pracy dorywczej?", "Tak", "Nie");
+	            }
+	            case 4:
+	            {
+					PlayerCache[playerid][pMainTable] = JOB_LUMBERJACK;
+					ShowPlayerDialog(playerid, D_WORK_ACCEPT, DIALOG_STYLE_MSGBOX, "Dorywcza » Drwal", "Drwale zdobywaj¹ drewno potrzebne na opa³\ni nie tylko. Jest to jedna z najciê¿szych (fizycznie) prac.\n\nDo Twoich obowi¹zków nale¿eæ bêdzie œcinanie drzew,\na zdobyte drewno bêdziesz móg³ sprzedaæ u pobliskiego aktora.\nPo dotarciu na miejsce wycinki drzwi otrzymasz sprzêt niezbêdny do pracy.\n\nCzy chcesz podj¹æ siê tej pracy dorywczej?", "Tak", "Nie");
 	            }
 	        }
 	        return 1;
@@ -11133,10 +11943,20 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 				    {
 						switch(WorkInfo[playerid][wID])
 						{
-							case JOB_MECHANIC:
+							case JOB_MECHANIC, JOB_LUMBERJACK:
 							{
-							    ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Pomoc » Praca dorywcza", "Jako mechanik mo¿esz naprawiaæ pojazdy innych graczy,\ntankowaæ je oraz przelakierowywaæ (potrzebny lakier).\n\n¯eby móc dokonywaæ interakcji jako mechanik, musisz\nznajdowaæ siê w strefie, która na to pozwala (flaga serwisu).\n\nNa mapie powinieneœ ujrzeæ strefy, w których mo¿esz pracowaæ jako mechanik." , "OK", "");
-
+							    new flag_type;
+							    if(WorkInfo[playerid][wID] == JOB_MECHANIC)
+								{
+								    flag_type = A_FLAG_SERVICE;
+									ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Pomoc » Praca dorywcza", "Jako mechanik mo¿esz naprawiaæ pojazdy innych graczy,\ntankowaæ je oraz przelakierowywaæ (potrzebny lakier).\n\n¯eby móc dokonywaæ interakcji jako mechanik, musisz\nznajdowaæ siê w strefie, która na to pozwala (flaga serwisu).\n\nNa mapie powinieneœ ujrzeæ strefy, w których mo¿esz pracowaæ jako mechanik." , "OK", "");
+								}
+								else
+								{
+								    flag_type = A_FLAG_LUMBERJACK;
+								    ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Pomoc » Praca dorywcza", "Praca drwala polega na wycince drzew, a nastêpnie\nzbiorze materia³ów i sprzeda¿y ich u pobliskiego pracownika.\n\nPo wejœciu w strefê wycinki drzew otrzymasz\nodpowiednie narzêdzia, którymi bêdziesz móg³ pracowaæ (flaga wycinki drzew).\n\nNa mapie powinieneœ ujrzeæ strefy, w których mo¿esz pracowaæ jako drwal,\nznajdziesz tam miêdzy innymi drzewa, które mo¿esz œci¹æ oraz pracownika.", "OK", "");
+								}
+								
 								new AreaData[sAreaData],
 									count_areas = Streamer_GetUpperBound(STREAMER_TYPE_PICKUP);
 
@@ -11145,7 +11965,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 					   				if(IsValidDynamicArea(area))
 								    {
 										Streamer_GetArrayData(STREAMER_TYPE_AREA, area, E_STREAMER_EXTRA_ID, AreaData);
-										if(AreaData[aFlags] & A_FLAG_SERVICE)
+										if(AreaData[aFlags] & flag_type)
 										{
 										    GangZoneShowForPlayer(playerid, AreaData[aExtraID], COLOR_GREEN);
 											GangZoneFlashForPlayer(playerid, AreaData[aExtraID], COLOR_RED);
@@ -11259,43 +12079,22 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        return 1;
 	    }
 	}
-	if(dialogid == D_TAXI_CORP_SELECT)
-	{
-	    if(response)
-	    {
-     		new group_id = strval(inputtext), string[256];
-			PlayerCache[playerid][pCallingTo] = group_id;
-
-			format(string, sizeof(string), "Dodzwoni³eœ siê do %s znajdujacego siê w Los Santos.\nPodaj szczegó³owo miejsce po³o¿enia w jakim siê znajdujesz, a my wyœlemy do Ciebie taksówkê.", GroupData[group_id][gName]);
-			ShowPlayerDialog(playerid, D_CALL_TAXI, DIALOG_STYLE_INPUT, "Taxi", string, "Dalej", "Anuluj");
-	        return 1;
-	    }
-	    else
-	    {
-	        TD_ShowSmallInfo(playerid, 3, "Zamawianie taksowki zostalo ~r~anulowane~w~.");
-			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
-
-			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
-			RemovePlayerAttachedObject(playerid, SLOT_PHONE);
-	        return 1;
-	    }
-	}
-	if(dialogid == D_ALARM_SELECT)
+	if(dialogid == D_GROUP_SELECT)
 	{
 		if(response)
 		{
 		    new group_id = DynamicGui_GetDataInt(playerid, listitem), title[128], string[256];
 		    PlayerCache[playerid][pCallingTo] = group_id;
 		    
-		    format(title, sizeof(title), "Numer alarmowy » %s", GroupData[group_id][gName]);
-		    format(string, sizeof(string), "Witam, mówi dyspozytor %s, co siê sta³o?\nProszê szczegó³owo opisaæ sytuacje oraz podaæ miejsce po³o¿enia.", GroupData[group_id][gName]);
+		    format(title, sizeof(title), "Telefon do %s", GroupData[group_id][gName]);
+		    format(string, sizeof(string), "Opisz proszê rodzaj zg³oszenia oraz jego sytuacjê.", GroupData[group_id][gName]);
 		    
-			ShowPlayerDialog(playerid, D_CALL_ALARM, DIALOG_STYLE_INPUT, title, string, "Dalej", "Anuluj");
+			ShowPlayerDialog(playerid, D_CALL_GROUP, DIALOG_STYLE_INPUT, title, string, "Dalej", "Anuluj");
 		    return 1;
 		}
 		else
 		{
-			TD_ShowSmallInfo(playerid, 3, "Zakonczono ~r~polaczenie ~w~z numerem alarmowym.");
+			TD_ShowSmallInfo(playerid, 3, "Zakonczono ~r~polaczenie ~w~z tym numerem.");
 			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
 
 			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
@@ -11303,63 +12102,12 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		    return 1;
 		}
 	}
-	if(dialogid == D_CALL_TAXI)
-	{
-	    if(response)
-	    {
-  			new string[256], group_id = PlayerCache[playerid][pCallingTo];
-			format(string, sizeof(string), "Wzywaj¹cy: %d, treœæ: %s", PlayerCache[playerid][pPhoneNumber], inputtext);
-
-			foreach(new i : Player)
-			{
-			    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
-			    {
-			        if(PlayerCache[i][pDuty][DUTY_GROUP] == group_id)
-			        {
-						SendClientMessage(i, COLOR_GREEN, "Centrala: Do wszystkich jednostek, otrzymaliœmy wezwanie:");
- 						SendClientMessage(i, COLOR_GREEN, string);
-					}
-			    }
-			}
-			format(string, sizeof(string), "%s (telefon): %s",  PlayerName(playerid), inputtext);
-          	ProxDetector(10.0, playerid, string, COLOR_FADE1, COLOR_FADE2, COLOR_FADE3, COLOR_FADE4, COLOR_FADE5);
-
-			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
-
-			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
-			RemovePlayerAttachedObject(playerid, SLOT_PHONE);
-
-			SendClientMessage(playerid, COLOR_YELLOW, "Sekretarka: Zg³oszenie zosta³o przyjête do realizacji, ju¿ wysy³amy tam jednostkê.");
-	        return 1;
-	    }
-	    else
-	    {
-     		TD_ShowSmallInfo(playerid, 3, "Zamawianie taksowki zostalo ~r~anulowane~w~.");
-			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
-
-			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
-			RemovePlayerAttachedObject(playerid, SLOT_PHONE);
-	        return 1;
-	    }
-	}
-	if(dialogid == D_CALL_ALARM)
+	if(dialogid == D_CALL_GROUP)
 	{
 	    if(response)
 	    {
   			new group_id = PlayerCache[playerid][pCallingTo], string[256];
-			format(string, sizeof(string), "Zg³aszaj¹cy: %d, treœæ: %s", PlayerCache[playerid][pPhoneNumber], inputtext);
-
-			foreach(new i : Player)
-			{
-   				if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
-			    {
-					if(PlayerCache[i][pDuty][DUTY_GROUP] == group_id)
-					{
-						SendClientMessage(i, COLOR_GREEN, "Centrala: Do wszystkich jednostek, otrzymaliœmy zg³oszenie:");
- 						SendClientMessage(i, COLOR_GREEN, string);
-					}
-				}
-			}
+  			CreateGroupMission(group_id, G_TYPE_NONE, MISSION_NOTIFICATION, inputtext, PlayerCache[playerid][pUID], 0, 0, 5 * 60);
 			
 			format(string, sizeof(string), "%s (telefon): %s",  PlayerName(playerid), inputtext);
           	ProxDetector(10.0, playerid, string, COLOR_FADE1, COLOR_FADE2, COLOR_FADE3, COLOR_FADE4, COLOR_FADE5);
@@ -11372,53 +12120,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	    }
 	    else
 	    {
-  			TD_ShowSmallInfo(playerid, 3, "Zakonczono ~r~polaczenie ~w~z numerem alarmowym.");
-			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
-
-			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
-			RemovePlayerAttachedObject(playerid, SLOT_PHONE);
-	        return 1;
-	    }
-	}
-	if(dialogid == D_CALL_NEWS)
-	{
-	    if(response)
-	    {
-  			new string[256], header[128], text[256];
-			format(header, sizeof(header), "Nowe zg³oszenie od numeru %d (%s):", PlayerCache[playerid][pPhoneNumber], PlayerName(playerid));
-            format(text, sizeof(text), "Treœæ zg³oszenia: %s", inputtext);
-
-			new group_id;
-			foreach(new i : Player)
-			{
-			    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
-			    {
-			        if(PlayerCache[i][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
-			        {
-			            group_id = PlayerCache[i][pDuty][DUTY_GROUP];
-			            if(GroupData[group_id][gType] == G_TYPE_NEWS)
-			            {
-       						SendClientMessage(i, COLOR_GREEN, header);
-       						SendClientMessage(i, COLOR_GREEN, text);
-			            }
-			        }
-			    }
-			}
-
-			format(string, sizeof(string), "%s (telefon): %s",  PlayerName(playerid), inputtext);
-          	ProxDetector(10.0, playerid, string, COLOR_FADE1, COLOR_FADE2, COLOR_FADE3, COLOR_FADE4, COLOR_FADE5);
-
-			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
-
-			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
-			RemovePlayerAttachedObject(playerid, SLOT_PHONE);
-
-			SendClientMessage(playerid, COLOR_YELLOW, "Sekretarka: Dziêkujemy za wys³ane zg³oszenie!");
-	        return 1;
-	    }
-	    else
-	    {
-  			TD_ShowSmallInfo(playerid, 3, "Polacznie z radiostacja zostalo ~r~przerwane~w~.");
+  			TD_ShowSmallInfo(playerid, 3, "Zakonczono ~r~polaczenie ~w~z tym numerem.");
 			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
 
 			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
@@ -11757,7 +12459,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	{
 		if(response)
 		{
-		    new actorid = PlayerCache[playerid][pMainTable], string[128],
+		    new actorid = PlayerCache[playerid][pMainTable],
 				veh_uid = DynamicGui_GetValue(playerid, listitem), price = DynamicGui_GetDataInt(playerid, listitem);
 			
 			OnPlayerSendOffer((actorid * -1), playerid, "Naprawa", OFFER_REPAIR, veh_uid, listitem, price);
@@ -11785,7 +12487,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	        }
 	        if(listitem == 2)
 	        {
-	        	ShowPlayerDialog(playerid, D_WORK_SELECT, DIALOG_STYLE_LIST, "Dostêpne prace dorywcze:", "1. Mechanik\n2. Kurier\n3. Sprzedawca\n4. Rozwoziciel gazet", "Wybierz", "Anuluj");
+	        	ShowPlayerDialog(playerid, D_WORK_SELECT, DIALOG_STYLE_LIST, "Dostêpne prace dorywcze:", "1. Mechanik\n2. Kurier\n3. Sprzedawca\n4. Rozwoziciel gazet\n5. Drwal\n6. Rybak", "Wybierz", "Anuluj");
 				return 1;
 			}
 			
@@ -11854,6 +12556,62 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 		{
 		    return 1;
 		}
+	}
+	if(dialogid == D_ACTOR_TRADER)
+	{
+	    if(response)
+	    {
+	        new item_type;
+	        switch(listitem)
+	        {
+	            case 0: item_type = ITEM_WOOD;
+	        }
+	        
+	        new weight_sum, next_player_item;
+	        foreach(new itemid : PlayerItem[playerid])
+	        {
+	            if(PlayerItemCache[playerid][itemid][iType] == item_type)
+	            {
+	                weight_sum += GetPlayerItemWeight(playerid, itemid);
+	                
+					orm_delete(PlayerItemCache[playerid][itemid][iOrm]);
+					for(new sPlayerItem:e; e < sPlayerItem; ++e)	PlayerItemCache[playerid][itemid][e] = 0;
+
+					next_player_item = itemid;
+					Iter_SafeRemove(PlayerItem[playerid], next_player_item, itemid);
+	            }
+	        }
+	        
+	        new price;
+			if(item_type == ITEM_WOOD)
+			{
+			    price = weight_sum / 20;
+			}
+			
+			/*
+			if(item_type == ITEM_FISH)
+			{
+			    // TODO
+			}
+			*/
+	        
+	        if(weight_sum > 0)
+	        {
+	            crp_GivePlayerMoney(playerid, price);
+	            orm_update(PlayerCache[playerid][pOrm]);
+	            
+	            TD_ShowHint(playerid, HINT_NONE, 10, "Pomyslnie ~g~sprzedano ~y~%dg ~w~przedmiotu ~y~%s ~w~za ~g~$%d~w~.~n~~n~Pieniadze zostaly dodane do Twojego ~p~portfela~w~.", weight_sum, ItemTypeInfo[item_type][iTypeName], price);
+			}
+	        else
+	        {
+	            TD_ShowSmallInfo(playerid, 5, "Nie posiadasz ~r~tego typu ~w~przedmiotow przy sobie.");
+	        }
+	        return 1;
+	    }
+	    else
+	    {
+			return 1;
+	    }
 	}
 	if(dialogid == D_OBJECT_PRIORITY)
 	{
@@ -11995,6 +12753,128 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
   			return 1;
 		}
 	}
+	if(dialogid == D_TAG_TEXT)
+	{
+	    if(response)
+	    {
+	        new fontface[24], text[256], object_id = PlayerCache[playerid][pTaggingObject];
+	        if(sscanf(inputtext, "p<:>s[24]s[128]", fontface, text))
+	        {
+	            fontface = "Times";
+	            text = "ERROR";
+	        }
+	        new fontsize = 100 - strlen(text);
+
+			new query[512];
+			mysql_format(connHandle, query, sizeof(query), "UPDATE `"SQL_PREF"materials` SET material_texture = '1^0:140:%d:1:%x:0:1:%e:%e' WHERE material_owner = %d AND material_index = 0", fontsize, COLOR_WHITE, fontface, text, GetObjectUID(object_id));
+			mysql_query(connHandle, query);
+
+			if(cache_affected_rows() <= 0)
+			{
+				mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"materials` SET material_texture = '1^0:140:%d:1:%x:0:1:%e:%e', material_owner = %d, material_index = 0", fontsize, COLOR_WHITE, fontface, text, GetObjectUID(object_id));
+    			mysql_query(connHandle, query);
+			}
+			format(text, sizeof(text), "%s", WordWrap(text, WRAP_MANUAL));
+
+			SetDynamicObjectMaterialText(object_id, 0, text, 140, fontface, fontsize, 1, COLOR_WHITE, 0, 1);
+			new modelid = GetObjectModel(object_id), Float:PosX, Float:PosY, Float:PosZ;
+			
+			GetDynamicObjectPos(object_id, PosX, PosY, PosZ);
+			OnPlayerSelectDynamicObject(playerid, object_id, modelid, PosX, PosY, PosZ);
+			
+			TD_ShowSmallInfo(playerid, 5, "Tagowanie zostalo ~g~pomyslnie ~w~zakonczone. Mozesz teraz ustawic ~y~rotacje ~w~TAG'u.");
+	        return 1;
+	    }
+	    else
+	    {
+			PlayerCache[playerid][pTaggingObject] 	= INVALID_OBJECT_ID;
+			PlayerCache[playerid][pTaggingTime]    	= 0;
+			return 1;
+	    }
+	}
+	if(dialogid == D_MISSION_DESC)
+	{
+	    if(response)
+	    {
+	        new mission_uid = DynamicGui_GetDataInt(playerid, listitem), group_id = DynamicGui_GetDialogValue(playerid),
+	            query[512], Cache:tmp_cache;
+
+			if(mission_uid == 0)    return 1;
+
+			mysql_format(connHandle, query, sizeof(query), "SELECT `mission_desc`, `mission_type`, `mission_victim`, `mission_members`, `mission_award`, `mission_date`, `mission_limit`, `mission_time` FROM `"SQL_PREF"group_missions` WHERE mission_uid = '%d' LIMIT 1", mission_uid);
+			tmp_cache = mysql_query(connHandle, query);
+			
+			new mission_desc[256], mission_limit;
+
+			cache_get_value_index(0, 0, mission_desc, 256);
+			cache_get_value_index_int(0, 1, MissionData[playerid][mType]);
+			
+			cache_get_value_index_int(0, 2, MissionData[playerid][mVictim]);
+			cache_get_value_index_int(0, 3, MissionData[playerid][mMembers]);
+			
+			cache_get_value_index_int(0, 4, MissionData[playerid][mAward]);
+			
+			cache_get_value_index_int(0, 5, MissionData[playerid][mDate]);
+			cache_get_value_index_int(0, 6, mission_limit);
+			
+			cache_get_value_index_int(0, 7, MissionData[playerid][mTime]);
+			
+			
+            if(cache_is_valid(tmp_cache))	cache_delete(tmp_cache);
+			
+			new mission_string[512];
+			strcat(mission_string, WordWrap(mission_desc, WRAP_AUTO, 8), sizeof(mission_string));
+			
+			if(MissionData[playerid][mMembers] > 0)
+			{
+				format(mission_string, sizeof(mission_string), "%s\n\nIloœæ osób potrzebna do zadania: %d\n(wyznaczona grupa osób musi znajdowaæ siê w pobli¿u Ciebie na s³u¿bie)", mission_string, MissionData[playerid][mMembers]);
+			}
+			
+			if(MissionData[playerid][mAward] > 0)
+			{
+			    format(mission_string, sizeof(mission_string), "%s\n\nNagroda pieniê¿na: $%d\n(gotówka trafi do bud¿etu grupy)", mission_string, MissionData[playerid][mAward]);
+			}
+			
+			if(MissionData[playerid][mTime] > 0)
+			{
+			    format(mission_string, sizeof(mission_string), "%s\n\nCzas: %dh %dm\n(w tym czasie zadanie musi zostaæ wykonane)", mission_string, MissionData[playerid][mTime] / 3600, (MissionData[playerid][mTime] / 60) % 60);
+			}
+			
+			switch(MissionData[playerid][mType])
+			{
+			    case MISSION_SMUGGLE:
+			    {
+			        strcat(mission_string, "\n\nDo tego typu zadania wymagany jest pojazd o typie BUS (np. Rumpo).", sizeof(mission_string));
+			    }
+			}
+			
+			// Jeœli zadanie codzienne
+			if(mission_limit > 0)   MissionData[playerid][mDate] = gettime();
+			
+			MissionData[playerid][mGroup] = group_id;
+			PlayerCache[playerid][pMainTable] = mission_uid;
+			
+			ShowPlayerDialog(playerid, D_MISSION_START, DIALOG_STYLE_MSGBOX, "Zadanie", mission_string, "Start", "Anuluj");
+	        return 1;
+	    }
+	    else
+	    {
+	        return 1;
+		}
+	}
+	if(dialogid == D_MISSION_START)
+	{
+	    if(response)
+	    {
+	        new mission_uid = PlayerCache[playerid][pMainTable];
+	        OnPlayerStartMission(playerid, mission_uid);
+	        return 1;
+	    }
+	    else
+	    {
+	        return 1;
+	    }
+	}
 	return 1;
 }
 
@@ -12047,8 +12927,166 @@ public OnPlayerClickPlayer(playerid, clickedplayerid, source)
 	return 1;
 }
 
+public OnPlayerClickMap(playerid, Float:fX, Float:fY, Float:fZ)
+{
+	if(PlayerCache[playerid][pDuty][DUTY_ADMIN])
+	{
+	    SetPlayerPosFindZ(playerid, fX, fY, fZ);
+	    return 1;
+	}
+	return 1;
+}
+
 public OnPlayerClickTextDraw(playerid, Text:clickedid)
 {
+	// Screenshot
+	if(PlayerCache[playerid][pScreenShot])
+	{
+	    if(_:clickedid == INVALID_TEXT_DRAW)
+	    {
+			PlayerTextDrawHide(playerid, TextDrawScreenShot[playerid]);
+			PlayerCache[playerid][pScreenShot] = false;
+            return 1;
+		}
+	}
+	
+	if(PlayerCache[playerid][pGII_Type] != 0)
+	{
+	    if(_:clickedid != INVALID_TEXT_DRAW)
+	    {
+			for(new i = 0; i < 8; i++)
+			{
+			    if(clickedid == GII_Option[i])
+			    {
+					new interaction_id = PlayerCache[playerid][pMainTable];
+		     		if(PlayerCache[playerid][pGII_Option] == i)
+		       		{
+		         		// Interakcja
+						switch(i)
+						{
+						    case GII_OPTION_CARP:
+						    {
+						        ChangeVehicleBonnetStatus(interaction_id, !GetVehicleBonnetStatus(interaction_id));
+						    }
+						    case GII_OPTION_CART:
+						    {
+						        ChangeVehicleBootStatus(interaction_id, !GetVehicleBootStatus(interaction_id));
+						    }
+						    case GII_OPTION_KEYS:
+						    {
+						        pc_cmd_pojazd(playerid, "zamknij");
+						    }
+						    case GII_OPTION_WELCOME:
+						    {
+						        pc_cmd_yo(playerid, "1");
+						    }
+						    case GII_OPTION_HANDCUFF:
+						    {
+          						new params[6];
+          						format(params, sizeof(params), "%d", interaction_id);
+						            
+						        if(PlayerCache[interaction_id][pCuffedTo] == playerid)
+						        {
+									pc_cmd_rozkuj(playerid, params);
+						        }
+						        else
+						        {
+						            pc_cmd_skuj(playerid, params);
+						        }
+						    }
+						}
+		         		
+      					for(new o = 0; o < 8; o++)	TextDrawHideForPlayer(playerid, Text:GII_Option[o]);
+						PlayerTextDrawHide(playerid, PlayerText:GII_VisualItem[playerid]);
+
+						PlayerCache[playerid][pGII_Option] = 0;
+						CancelSelectTextDraw(playerid);
+		         	}
+		          	else
+		           	{
+						new string[256], info[32];
+						switch(i)
+						{
+						    case GII_OPTION_INFO:
+							{
+								info = "Pokaz informacje~n~";
+							}
+						    case GII_OPTION_CARP:
+							{
+							    if(GetVehicleBonnetStatus(interaction_id) == 1)
+							    {
+									info = "Zamknij maske~n~";
+								}
+								else
+								{
+								    info = "Otworz maske~n~";
+								}
+							}
+						    case GII_OPTION_CART:
+							{
+		   						if(GetVehicleBootStatus(interaction_id) == 1)
+			                	{
+									info = "Zamknij bagaznik~n~";
+								}
+								else
+								{
+								    info = "Otworz bagaznik~n~";
+								}
+							}
+						    case GII_OPTION_KEYS:
+							{
+							    if(CarInfo[interaction_id][cLocked])
+								{
+									info = "Otworz pojazd~n~";
+								}
+								else
+								{
+								    info = "Zamknij pojazd~n~";
+								}
+							}
+						    case GII_OPTION_HANDCUFF:
+							{
+								if(PlayerCache[interaction_id][pCuffedTo] == playerid)
+								{
+									info = "Rozkuj gracza~n~";
+								}
+								else
+								{
+								    info = "Skuj gracza~n~";
+								}
+							}
+						    case GII_OPTION_WELCOME:    info = "Przywitaj sie~n~";
+						    case GII_OPTION_GIVE:       info = "Podaj przedmiot~n~";
+						    case GII_OPTION_GET:        info = "Zabierz przedmiot~n~";
+						}
+
+						if(PlayerCache[playerid][pGII_Type] == 2)
+						{
+						    new vehid = PlayerCache[playerid][pMainTable];
+							format(string, sizeof(string), "%s%s (%d)", info, GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cUID]);
+						}
+						else
+						{
+						    new giveplayer_id = PlayerCache[playerid][pMainTable];
+						    format(string, sizeof(string), "%s%s (%d)", info, PlayerName(giveplayer_id), giveplayer_id);
+						}
+						PlayerTextDrawSetString(playerid, GII_VisualItem[playerid], string);
+						PlayerCache[playerid][pGII_Option] = i;
+					}
+			        return 1;
+			    }
+			}
+		}
+		else
+		{
+		
+			for(new o = 0; o < 8; o++)	TextDrawHideForPlayer(playerid, Text:GII_Option[o]);
+			PlayerTextDrawHide(playerid, PlayerText:GII_VisualItem[playerid]);
+			
+			PlayerCache[playerid][pGII_Option] = 0;
+		}
+	}
+
 	// Okno opcji grup
 	if(PlayerCache[playerid][pListPlayerGroups])
 	{
@@ -12212,6 +13250,27 @@ public OnPlayerEditDynamicObject(playerid, objectid, response, Float:x, Float:y,
           			TD_ShowSmallInfo(playerid, 3, "Ten ~b~obiekt ~w~wykracza poza granice ~r~strefy~w~.");
           			return 1;
 		        }
+			}
+			
+			if(PlayerCache[playerid][pTaggingObject] != INVALID_OBJECT_ID)
+			{
+				if(objectid == PlayerCache[playerid][pTaggingObject])
+				{
+				    new Float:ObjPosX, Float:ObjPosY, Float:ObjPosZ;
+
+   					Streamer_GetFloatData(STREAMER_TYPE_OBJECT, objectid, E_STREAMER_X, ObjPosX);
+					Streamer_GetFloatData(STREAMER_TYPE_OBJECT, objectid, E_STREAMER_Y, ObjPosY);
+					Streamer_GetFloatData(STREAMER_TYPE_OBJECT, objectid, E_STREAMER_Z, ObjPosZ);
+
+					if(x != ObjPosX || y != ObjPosY || z != ObjPosZ)
+					{
+					    SetDynamicObjectPos(objectid, ObjPosX, ObjPosY, ObjPosZ);
+					    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Podczas tagowania mo¿esz modyfikowaæ tylko rotacje.\nPozycja zosta³a przywrócona, rotacja zapisana.");
+					}
+
+					PlayerCache[playerid][pTaggingObject] 	= INVALID_OBJECT_ID;
+					PlayerCache[playerid][pTaggingTime]    	= 0;
+				}
 			}
 			
 			new player_object = Streamer_GetItemInternalID(playerid, STREAMER_TYPE_OBJECT, objectid);
@@ -12498,7 +13557,14 @@ public ShowPlayerStatsForPlayer(playerid, giveplayer_id)
 		    if(PlayerGroup[playerid][group_slot][gpUID])
 		    {
 				group_id = PlayerGroup[playerid][group_slot][gpID];
-          		format(list_groups, sizeof(list_groups), "%s » Slot %d\t\t\t%s (%d)\n", list_groups, group_slot + 1, GroupData[group_id][gName], GroupData[group_id][gUID]);
+				if(PlayerCache[playerid][pDuty][DUTY_GROUP] == group_id)
+				{
+					format(list_groups, sizeof(list_groups), "%s {7CB342}» Slot %d\t\t\t%s (%d)\n", list_groups, group_slot + 1, GroupData[group_id][gName], GroupData[group_id][gUID]);
+				}
+				else
+				{
+				    format(list_groups, sizeof(list_groups), "%s » Slot %d\t\t\t%s (%d)\n", list_groups, group_slot + 1, GroupData[group_id][gName], GroupData[group_id][gUID]);
+				}
 		    }
 		}
 		format(list_stats, sizeof(list_stats), "%sGrupy:\n%s", list_stats, list_groups);
@@ -12696,7 +13762,7 @@ public ShowPlayerGroupInfo(playerid, group_id)
 {
 	new list_stats[256], string[128];
 	format(list_stats, sizeof(list_stats), "Typ grupy:\t\t%s", GroupTypeInfo[GroupData[group_id][gType]][gTypeName]);
-    format(list_stats, sizeof(list_stats), "%s\nBud¿et:\t\t\t$%d", list_stats, GroupData[group_id][gCash]);
+	format(list_stats, sizeof(list_stats), "%s\nBud¿et:\t\t\t$%d", list_stats, GroupData[group_id][gCash]);
 
     format(list_stats, sizeof(list_stats), "%s\nMaksymalna pensja:\t$%d", list_stats, GroupData[group_id][gMaxPay]);
     format(list_stats, sizeof(list_stats), "%s\nKapita³:\t\t\t$%d", list_stats, GroupData[group_id][gCapital]);
@@ -12714,7 +13780,6 @@ public ShowPlayerGroupInfo(playerid, group_id)
 					
 	    format(list_stats, sizeof(list_stats), "%s\nCzas s³u¿by:\t\t%dh %dm", list_stats, duty_hours, duty_minutes);
 	}
-
 	format(list_stats, sizeof(list_stats), "%s\nTag:\t\t\t%s", list_stats, GroupData[group_id][gTag]);
 	
 	if(GroupData[group_id][gFlags] & G_FLAG_TAX)
@@ -12784,7 +13849,7 @@ public LoadPlayerGroups(playerid)
 	new query[1024], rows, Cache:tmp_cache,
 	    group_slot, group_id, group_uid, group_color[12];
 
-	mysql_format(connHandle, query, sizeof(query), "SELECT `group_uid`, `group_perm`, `group_title`, `group_payment`, `group_skin`, `group_tag`, `group_color`, `group_flags` FROM `"SQL_PREF"game_groups`, `"SQL_PREF"char_groups` WHERE "SQL_PREF"game_groups.group_uid = "SQL_PREF"char_groups.group_belongs AND char_uid = '%d' LIMIT %d", PlayerCache[playerid][pUID], MAX_GROUP_SLOTS);
+	mysql_format(connHandle, query, sizeof(query), "SELECT `group_uid`, `group_perm`, `group_title`, `group_payment`, `group_advertise`, `group_skin`, `group_tag`, `group_color`, `group_flags` FROM `"SQL_PREF"game_groups`, `"SQL_PREF"char_groups` WHERE "SQL_PREF"game_groups.group_uid = "SQL_PREF"char_groups.group_belongs AND char_uid = '%d' LIMIT %d", PlayerCache[playerid][pUID], MAX_GROUP_SLOTS);
 	tmp_cache = mysql_query(connHandle, query);
 	
 	cache_get_row_count(rows);
@@ -12800,12 +13865,14 @@ public LoadPlayerGroups(playerid)
 		cache_get_value_index(row, 2, PlayerGroup[playerid][group_slot][gpTitle], 32);
 
 		cache_get_value_index_int(row, 3, PlayerGroup[playerid][group_slot][gpPayment]);
-		cache_get_value_index_int(row, 4, PlayerGroup[playerid][group_slot][gpSkin]);
+		cache_get_value_index(row, 4, GroupData[group_id][gAdvertise], 128);
+		
+		cache_get_value_index_int(row, 5, PlayerGroup[playerid][group_slot][gpSkin]);
 
-        cache_get_value_index(row, 5, GroupData[group_id][gTag], 5);
+        cache_get_value_index(row, 6, GroupData[group_id][gTag], 5);
 
-        cache_get_value_index(row, 6, group_color, 12);
-        cache_get_value_index_int(row, 7, GroupData[group_id][gFlags]);
+        cache_get_value_index(row, 7, group_color, 12);
+        cache_get_value_index_int(row, 8, GroupData[group_id][gFlags]);
 
         sscanf(group_color, "x", GroupData[group_id][gColor]);
 
@@ -12818,21 +13885,26 @@ public LoadPlayerGroups(playerid)
 
 public CheckPlayerPayday(playerid)
 {
-	if(PlayerCache[playerid][pLastPayday] + 86400 > gettime())
+	if(gettime() - PlayerCache[playerid][pLastPayday] < 3600)
 	{
 	    return 1;
 	}
 	
  	if(IsPlayerInAnyGroup(playerid))
  	{
+ 	    if(PlayerCache[playerid][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
+ 	    {
+ 	        // Zaktualizuj sesje
+      		UpdatePlayerSession(playerid, SESSION_GROUP, GroupData[PlayerCache[playerid][pDuty][DUTY_GROUP]][gUID]);
+        	PlayerCache[playerid][pSession][SESSION_GROUP] = gettime();
+ 	    }
+ 	
 	    new query[1024], Cache:tmp_cache, rows, group_last_uid = 0,
-	        group_slot, group_id;
+	        group_slot, group_id, last_payday = PlayerCache[playerid][pLastPayday];
 
-		mysql_format(connHandle, query, sizeof(query), "SELECT g.group_belongs, g.group_payment, (s.session_end - s.session_start) FROM `"SQL_PREF"char_groups` g LEFT JOIN `"SQL_PREF"game_sessions` s on g.char_uid = s.session_owner WHERE s.session_type = 2 AND s.session_extraid = g.group_belongs AND s.session_end > %d AND s.session_start < (%d + 86400) AND g.char_uid = %d", PlayerCache[playerid][pLastPayday], PlayerCache[playerid][pLastPayday], PlayerCache[playerid][pUID]);
+		mysql_format(connHandle, query, sizeof(query), "SELECT g.group_belongs, g.group_payment, (s.session_end - s.session_start) FROM `"SQL_PREF"char_groups` g LEFT JOIN `"SQL_PREF"game_sessions` s on g.char_uid = s.session_owner WHERE s.session_type = 2 AND s.session_extraid = g.group_belongs AND s.session_end > %d AND s.session_start < (%d + %d) AND g.char_uid = %d", last_payday, last_payday, gettime() - last_payday, PlayerCache[playerid][pUID]);
  		tmp_cache = mysql_query(connHandle, query);
  		
- 		print(query);
-
 		cache_get_row_count(rows);
 		for(new row = 0; row != rows; row++)
 		{
@@ -12849,7 +13921,7 @@ public CheckPlayerPayday(playerid)
 			PlayerGroup[playerid][group_slot][gpPay] = group_payment;
 
 			// Maksymalnie 3h s³u¿by
-			if(PlayerGroup[playerid][group_slot][gpDutyMinute] >= 180)	PlayerGroup[playerid][group_slot][gpDutyMinute] = 180;
+			//if(PlayerGroup[playerid][group_slot][gpDutyMinute] >= 180)	PlayerGroup[playerid][group_slot][gpDutyMinute] = 180;
 
 			group_last_uid = group_belongs;
 		}
@@ -12858,10 +13930,10 @@ public CheckPlayerPayday(playerid)
 		new list_pay[512], year[2], month[2], day[2], hour[2], minute[2], second[2],
   			payday_sum, duty_hours_sum, duty_minutes_sum;
 
-		TimestampToDate(PlayerCache[playerid][pLastPayday] + 86400, year[0], month[0], day[0], hour[0], minute[0], second[0], 1);
-   		TimestampToDate(PlayerCache[playerid][pLastPayday], year[1], month[1], day[1], hour[1], minute[1], second[1], 1);
+		TimestampToDate(gettime(), year[0], month[0], day[0], hour[0], minute[0], second[0], 1);
+   		TimestampToDate(last_payday, year[1], month[1], day[1], hour[1], minute[1], second[1], 1);
 
-		format(list_pay, sizeof(list_pay), "~y~Wyplata za okres: ~n~%02d/%02d/%d - %02d/%02d/%d~w~~n~", day[1], month[1], year[1], day[0], month[0], year[0]);
+		format(list_pay, sizeof(list_pay), "~y~Wyplata za sluzby: ~n~%02d:%02d - %02d:%02d (%02d/%02d/%d)~w~~n~", hour[1], minute[1], hour[0], minute[0], day[1], month[1], year[1]);
 
 		for(new slot = 0; slot < MAX_GROUP_SLOTS; slot++)
 		{
@@ -12913,12 +13985,325 @@ public CheckPlayerPayday(playerid)
 			TD_ShowHint(playerid, HINT_NONE, 20, list_pay);
 			PlayerCache[playerid][pBankCash] += payday_sum;
 		}
-		
-		print(list_pay);
 	}
 
-	PlayerCache[playerid][pLastPayday] = (PlayerCache[playerid][pLastPayday] > 1573412400 && PlayerCache[playerid][pLastPayday] < 1573412400 + 86400) ? 1573412400 + 86400 : gettime();
+	PlayerCache[playerid][pLastPayday] = gettime();
 	mysql_query_format("UPDATE `"SQL_PREF"characters` SET char_lastpay = '%d' WHERE char_uid = '%d' LIMIT 1", PlayerCache[playerid][pLastPayday], PlayerCache[playerid][pUID]);
+	return 1;
+}
+
+public OnPlayerStartMission(playerid, mission_uid)
+{
+	if(MissionData[playerid][mUID] != 0)
+	{
+	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aktualnie wykonujesz ju¿ jakieœ zadanie.");
+	    return 1;
+	}
+	
+	foreach(new i : Player)
+	{
+	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+	    {
+	        if(MissionData[i][mUID] == mission_uid)
+	        {
+	            ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Ktoœ aktualnie wykonuje to zadanie.");
+	            return 1;
+	        }
+	    }
+	}
+	
+	new group_id = MissionData[playerid][mGroup], count_members;
+	if(MissionData[playerid][mMembers] > 0)
+	{
+	    foreach(new i : Player)
+	    {
+			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+			{
+			    if(PlayerCache[i][pDuty][DUTY_GROUP] == group_id)
+			    {
+					if(PlayerToPlayer(10.0, i, playerid))
+					{
+						count_members ++;
+						Iter_Add(MissionPlayer[playerid], i);
+					}
+			    }
+			}
+	    }
+	    if(count_members < MissionData[playerid][mMembers])
+	    {
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Do rozpoczêcia tego zadania potrzebujesz %d osób.\nOsoby te musz¹ znajdowaæ siê w pobli¿u Ciebie bêd¹c na s³u¿bie tej samej grupy.", MissionData[playerid][mMembers]);
+			Iter_Clear(MissionPlayer[playerid]);
+			return 1;
+	    }
+	    
+	    new list_members[128];
+	    
+	    // Rozpoczynamy zadanie wszystkim
+		foreach(new i : MissionPlayer[playerid])
+		{
+  			MissionData[i][mUID] = mission_uid;
+			MissionData[i][mType] = MissionData[playerid][mType];
+
+			MissionData[i][mVictim] = MissionData[playerid][mVictim];
+			MissionData[i][mMembers] = MissionData[playerid][mMembers];
+
+			MissionData[i][mAward] = MissionData[playerid][mAward];
+
+			MissionData[i][mDate] = MissionData[playerid][mDate];
+			MissionData[i][mTime] = MissionData[playerid][mTime];
+
+			MissionData[i][mGroup] = MissionData[playerid][mGroup];
+			MissionData[i][mLeader] = false;
+			
+			format(list_members, sizeof(list_members), "%s~n~~y~%s (%d)", list_members, PlayerName(i), i);
+			TD_ShowHint(i, HINT_NONE, 0, "~p~%s ~w~rozpoczal nowe ~g~zadanie. ~w~Lista czlonkow:~n~~n~%s~n~~n~~w~Podazajcie za ~r~znacznikami~w~, by otrzymywac dalsze ~b~wskazowki ~w~dotyczace zadania.", PlayerName(playerid), list_members);
+		}
+		
+		// Przywódca
+		MissionData[playerid][mLeader] = true;
+	}
+	
+	new mission_type = MissionData[playerid][mType], time = gettime();
+
+	// Zg³oszenie
+	if(mission_type == MISSION_NOTIFICATION)
+	{
+	    if(MissionData[playerid][mDate] + MissionData[playerid][mTime] < time)
+	    {
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "To zadanie przedawni³o siê.");
+	        DeleteMission(mission_uid);
+	        return 1;
+	    }
+		new giveplayer_id = GetPlayerID(MissionData[playerid][mVictim]);
+		if(giveplayer_id == INVALID_PLAYER_ID)
+		{
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "To zadanie przedawni³o siê.");
+		    DeleteMission(mission_uid);
+		    return 1;
+		}
+		new Float:posX, Float:posY, Float:posZ;
+		GetPlayerPos(giveplayer_id, posX, posY, posZ);
+		
+		SetPlayerCheckpoint(playerid, posX, posY, posZ, 2.0);
+		PlayerCache[playerid][pCheckpoint] = CHECKPOINT_MISSION;
+		
+		TD_ShowHint(giveplayer_id, HINT_NONE, 5, "Gracz ~y~%s ~w~zaakceptowal Twoje zgloszenie i juz do Ciebie jedzie.~n~~n~Czekaj tutaj cierpliwie.", PlayerName(playerid));
+		TD_ShowHint(playerid, HINT_NONE, 5, "Zaakceptowales zgloszenie od ~y~%s~w~.~n~~n~Udaj sie do ~r~zaznaczonego ~w~na mapie punktu.", PlayerName(giveplayer_id));
+
+		DeleteMission(mission_uid);
+		return 1;
+	}
+	
+	// Pal¹cy budynek
+	if(mission_type == MISSION_FIRE_BUILD)
+	{
+	    if(MissionData[playerid][mVictim] == 0)
+	    {
+  			new Float:PosX, Float:PosY, Float:PosZ,
+				virtual_world, interior_id;
+	    
+	        GetPlayerPos(playerid, PosX, PosY, PosZ);
+	    
+	        new doorid = GetNearRandomDoorID(PosX, PosY, PosZ, OWNER_NONE), DoorData[sDoorInfo];
+	        Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+
+			Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, PosX, PosY, PosZ);
+
+			virtual_world = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_WORLD_ID);
+			interior_id = Streamer_GetIntData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_INTERIOR_ID);
+
+			DoorData[dFireData][FIRE_OBJECT] = CreateDynamicObject(18690, PosX, PosY, PosZ - 2.0, 0.0, 0.0, 0.0, virtual_world, interior_id, -1, MAX_DRAW_DISTANCE);
+			DoorData[dFireData][FIRE_LABEL] = _:CreateDynamic3DTextLabel("Ten budynek stan¹³ w p³omieniach!\nSzacowane zniszczenia: 0%", 0x33AA33FF, PosX, PosY, PosZ + 0.3, 15.0);
+
+			foreach(new i : Player)
+			{
+	  			if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+	   			{
+	     			if(GetPlayerDoorID(i) == doorid)
+	        		{
+	          			SendClientMessage(i, COLOR_DO, "** W tym budynku z niewiadomych przyczyn wybucha po¿ar. Wszyscy powinni zacz¹æ siê ewakuowaæ. **");
+			        }
+			    }
+			}
+			
+			CreateExplosion(PosX, PosY, PosZ, 1, 10.0);
+
+			DoorData[dFireData][FIRE_TIME] = 1;
+			Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+			
+			foreach(new i : MissionPlayer[playerid])    MissionData[i][mVictim] = DoorData[dUID];
+	    }
+	    else
+	    {
+   			// Budynek podpalony
+   			if(MissionData[playerid][mDate] + MissionData[playerid][mTime] < time)
+		    {
+		        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "To zadanie przedawni³o siê.");
+		        DeleteMission(mission_uid);
+		        return 1;
+			}
+	    }
+		new doorid = GetDoorID(MissionData[playerid][mVictim]), Float:door_enter[3];
+  		Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, door_enter[0], door_enter[1], door_enter[2]);
+
+		foreach(new i : MissionPlayer[playerid])
+		{
+  			ShowPlayerInfoDialog(i, D_TYPE_INFO, "Na mapie zaznaczono punkt, w którym prawdopodobnie p³onie budynek.\nUdaj siê tam razem z dru¿yn¹, by otrzymywaæ dalsze wskazówki.\n\n\t\t\t\tNagroda: $%d\n\t\t\t\tCzas: %dh %dm", MissionData[playerid][mAward], MissionData[playerid][mTime] / 3600, MissionData[playerid][mTime] / 60 % 60);
+
+			SetPlayerCheckpoint(i, door_enter[0], door_enter[1], door_enter[2], 5.0);
+			PlayerCache[i][pCheckpoint] = CHECKPOINT_MISSION;
+		}
+	    return 1;
+	}
+
+	if(mission_type == MISSION_SMUGGLE)
+	{
+	    new areaid = (MissionData[playerid][mVictim] != 0) ? GetAreaID(MissionData[playerid][mVictim]) : GetRandomAreaID(A_FLAG_MISSION);
+	    if(areaid == INVALID_AREA_ID)
+	    {
+	    	ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "To zadanie przedawni³o siê.");
+		    DeleteMission(mission_uid);
+	        return 1;
+	    }
+	    new AreaData[sAreaData];
+	    Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
+
+		foreach(new i : MissionPlayer[playerid])
+		{
+		    MissionData[i][mVictim] = AreaData[aUID];
+  			ShowPlayerInfoDialog(i, D_TYPE_INFO, "Dostañcie siê w strefê, któr¹ zaznaczono na mapie.\nNa miejscu dostaniecie wskazówki odnoœnie przemytu.\n\n\t\t\t\tNagroda: $%d (+ rzeczy z przemytu)\n\t\t\t\tCzas: %dh %dm", MissionData[playerid][mAward], MissionData[playerid][mTime] / 3600, MissionData[playerid][mTime] / 60 % 60);
+
+		   	GangZoneShowForPlayer(i, AreaData[aExtraID], COLOR_GREEN);
+			GangZoneFlashForPlayer(i, AreaData[aExtraID], COLOR_RED);
+		}
+	    return 1;
+	}
+	
+	if(mission_type == MISSION_CHASE)
+	{
+ 		if(MissionData[playerid][mDate] + MissionData[playerid][mTime] < time)
+	    {
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "To zadanie przedawni³o siê.");
+	        DeleteMission(mission_uid);
+	        return 1;
+	    }
+	    new giveplayer_id = GetPlayerID(MissionData[playerid][mVictim]);
+	    if(giveplayer_id == INVALID_PLAYER_ID)
+	    {
+    		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "To zadanie przedawni³o siê.");
+		    DeleteMission(mission_uid);
+	        return 1;
+	    }
+	    new string[256];
+     	format(string, sizeof(string), "Musicie obezw³adniæ (lub skuæ w kajdanki) lidera grupy.\nPoni¿ej przedstawiono potrzebne dane nt. poœcigu:\n\nCz³onkowie grupy:");
+
+		foreach(new g : MissionPlayer[giveplayer_id])
+  		{
+    		if(g == giveplayer_id)
+      		{
+        		format(string, sizeof(string), "%s\n\t%s (lider)", string, PlayerName(g));
+          	}
+           	else
+           	{
+				format(string, sizeof(string), "%s\n\t%s", string, PlayerName(g));
+			}
+  		}
+
+		if(MissionData[giveplayer_id][mValue][0] != 0)
+		{
+			new vehid = MissionData[giveplayer_id][mValue][0];
+
+			strcat(string, "\n\nPojazd:", sizeof(string));
+			format(string, sizeof(string), "%s\n\t%s (NR. Rej: %s)", string, GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cRegister]);
+		}
+	    
+	    format(string, sizeof(string), "%s\n\n\t\t\t\tNagroda: $%d\n\t\t\t\tCzas: %dh %dm", string,  MissionData[playerid][mAward], MissionData[playerid][mTime] / 3600, MissionData[playerid][mTime] / 60 % 60);
+	    
+	    foreach(new i : MissionPlayer[playerid])
+	    {
+	        ShowPlayerInfoDialog(i, D_TYPE_INFO, string);
+	    }
+	    return 1;
+	}
+	return 1;
+}
+
+public OnPlayerStopMission(playerid)
+{
+	//new mission_type = MissionData[playerid][mType];
+    if(MissionData[playerid][mPoints] >= MissionData[playerid][mNeedPoints])
+    {
+        // Zadanie przebieg³o pomyœlnie
+    }
+    else
+    {
+        // Zadanie nie przebieg³o pomyœlnie
+    }
+
+	// Wyczyœciæ i ukryæ znacznik
+	new mission_leader = GetMissionLeader(MissionData[playerid][mUID]);
+    if(mission_leader != playerid)	for(new sMissionData:e; e < sMissionData; ++e)                      MissionData[playerid][e] = 0;
+	return 1;
+}
+
+public CreateGroupMission(group_id, group_type, mission_type, mission_desc[], mission_victim, mission_members, mission_award, mission_time)
+{
+	new query[512];
+	mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"group_missions` VALUES ('', '%d', '%d', '%d', '%e', '%d', '%d', '%d', '%d', '0', '%d')", mission_type, group_type, (group_id != INVALID_GROUP_ID) ? GroupData[group_id][gUID] : 0, mission_desc, mission_victim, mission_members, mission_award, gettime(), mission_time);
+	mysql_query(connHandle, query);
+
+	// Wyœwietlamy info o zadaniu
+	foreach(new i : Player)
+	{
+ 		if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+	    {
+     		if(PlayerCache[i][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
+       		{
+	        	if(group_id != INVALID_GROUP_ID)
+	        	{
+		            if(PlayerCache[i][pDuty][DUTY_GROUP] == group_id)
+		            {
+						SendClientFormatMessage(i, COLOR_GREEN, "Grupa %s (UID: %d) ma nowe zadanie! SprawdŸ /g %d zadania, po wiêcej szczegó³ów.", GroupData[group_id][gName], GroupData[group_id][gUID], GetPlayerGroupSlot(i, GroupData[group_id][gUID]) + 1);
+					}
+				}
+				else
+				{
+				    group_id = PlayerCache[i][pDuty][DUTY_GROUP];
+				    if(GroupData[group_id][gType] == group_type)
+				    {
+				        SendClientFormatMessage(i, COLOR_GREEN, "Grupa %s (UID: %d) ma nowe zadanie! SprawdŸ /g %d zadania, po wiêcej szczegó³ów.", GroupData[group_id][gName], GroupData[group_id][gUID], GetPlayerGroupSlot(i, GroupData[group_id][gUID]) + 1);
+				    }
+				}
+			}
+	    }
+	}
+	return 1;
+}
+
+public DeleteMission(mission_uid)
+{
+	mysql_query_format("UPDATE `"SQL_PREF"group_missions` SET mission_date = '%d' WHERE mission_uid = %d AND mission_limit != 0 LIMIT 1", gettime(), mission_uid);
+
+	if(cache_affected_rows() <= 0)
+	{
+		mysql_query_format("DELETE FROM `"SQL_PREF"group_missions` WHERE mission_uid = '%d' LIMIT 1", mission_uid);
+	}
+	
+	foreach(new i : Player)
+	{
+	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+	    {
+	        if(MissionData[i][mUID] == mission_uid)
+	        {
+				OnPlayerStopMission(i);
+			}
+	    }
+	}
+	
+	new mission_leader = GetMissionLeader(mission_uid);
+	
+	for(new sMissionData:e; e < sMissionData; ++e)                      MissionData[mission_leader][e] = 0;
+	Iter_Clear(MissionPlayer[mission_leader]);
 	return 1;
 }
 
@@ -12995,14 +14380,19 @@ public query_OnLoadVehicles()
 		// Usuñ opis
 		for (new i = 0; i < MAX_PLAYERS; i++)
 		{
-			if(Streamer_GetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][pDescTag], E_STREAMER_ATTACHED_VEHICLE) == vehid)
+			if(Streamer_GetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][vDescTag], E_STREAMER_ATTACHED_VEHICLE) == vehid)
 			{
-				UpdateDynamic3DTextLabelText(Text3D:PlayerCache[i][pDescTag], COLOR_DESC, " ");
-				Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][pDescTag], E_STREAMER_ATTACHED_PLAYER, i);
+				UpdateDynamic3DTextLabelText(Text3D:PlayerCache[i][vDescTag], COLOR_DESC, " ");
+				Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][vDescTag], E_STREAMER_ATTACHED_PLAYER, i);
 			}
 		}
 
 		for(new i = 0; i < 14; i++)	CarInfo[vehid][cComponent][i] = 0;
+		
+		// Tuning mechaniczny
+		if(CarInfo[vehid][cAccess] & VEH_ACCESS_TURBO)		CarInfo[vehid][cHandling] += 2.0;
+		if(CarInfo[vehid][cAccess] & VEH_ACCESS_COMPRESSOR)	CarInfo[vehid][cHandling] += 2.0;
+		if(CarInfo[vehid][cAccess] & VEH_ACCESS_ECU)		CarInfo[vehid][cHandling] += 3.0;
 
 		CarInfo[vehid][cDistTicker] = 0;
 		CarInfo[vehid][cSavePoint] = 0;
@@ -13102,14 +14492,19 @@ public LoadVehicle(veh_uid)
 		// Usuñ opis
 		for (new i = 0; i < MAX_PLAYERS; i++)
 		{
-			if(Streamer_GetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][pDescTag], E_STREAMER_ATTACHED_VEHICLE) == vehid)
+			if(Streamer_GetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][vDescTag], E_STREAMER_ATTACHED_VEHICLE) == vehid)
 			{
-				UpdateDynamic3DTextLabelText(Text3D:PlayerCache[i][pDescTag], COLOR_DESC, " ");
-				Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][pDescTag], E_STREAMER_ATTACHED_PLAYER, i);
+				UpdateDynamic3DTextLabelText(Text3D:PlayerCache[i][vDescTag], COLOR_DESC, " ");
+				Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][vDescTag], E_STREAMER_ATTACHED_PLAYER, i);
 			}
 		}
 
 		for(new i = 0; i < 14; i++)	CarInfo[vehid][cComponent][i] = 0;
+		
+		// Tuning mechaniczny
+		if(CarInfo[vehid][cAccess] & VEH_ACCESS_TURBO)		CarInfo[vehid][cHandling] += 2.0;
+		if(CarInfo[vehid][cAccess] & VEH_ACCESS_COMPRESSOR)	CarInfo[vehid][cHandling] += 2.0;
+		if(CarInfo[vehid][cAccess] & VEH_ACCESS_ECU)		CarInfo[vehid][cHandling] += 3.0;
 
 		CarInfo[vehid][cDistTicker] = 0;
 		CarInfo[vehid][cSavePoint] = 0;
@@ -13369,6 +14764,23 @@ public query_OnLoadDoors()
 		cache_get_value_index(row, 22, DoorData[dHour]);
 		
 		doorid = CreateDynamicPickup(door_pickupid, 2, door_enter[0], door_enter[1], door_enter[2], door_entervw, door_enterint);
+
+		if(door_entervw == 0)
+		{
+			if(DoorData[dOwnerType] == OWNER_GROUP)
+			{
+			    new group_id = GetGroupID(DoorData[dOwner]),
+					group_type = GroupData[group_id][gType];
+
+			    if(GroupTypeInfo[group_type][gTypeMapIcon] != 0)
+			    {
+					DoorData[dMapIcon] = CreateDynamicMapIcon(door_enter[0], door_enter[1], door_enter[2], GroupTypeInfo[group_type][gTypeMapIcon], 0, (GroupTypeInfo[group_type][gIconStatic]) ? 0 : 9999, door_enterint, -1);
+					if(GroupTypeInfo[group_type][gIconStatic])	Streamer_SetIntData(STREAMER_TYPE_MAP_ICON, DoorData[dMapIcon], E_STREAMER_EXTRA_ID, true);
+
+					DoorData[d3DLabel] = CreateDynamic3DTextLabel(" ", COLOR_DO, door_enter[0], door_enter[1], door_enter[2], 10.0, INVALID_PLAYER_ID, INVALID_PLAYER_ID, 1, door_entervw, door_enterint);
+				}
+			}
+		}
 		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
 	}
 	return 1;
@@ -14176,7 +15588,7 @@ public OnPlayerUseItem(playerid, itemid)
 	
 	if(item_type == ITEM_CHIT)
 	{
- 		new chit_uid, chit_desc[128], chit_writer[24], chit_time[24];
+ 		new chit_uid, chit_desc[256], chit_writer[24], chit_time[24];
 	    new rows, Cache:tmp_cache, query[128];
 
 		mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"chits` WHERE chit_uid = '%d' LIMIT 1", PlayerItemCache[playerid][itemid][iValue][0]);
@@ -14418,8 +15830,8 @@ public OnPlayerUseItem(playerid, itemid)
 			PlayerCache[playerid][pItemPlayer] = itemid;
 			PlayerItemCache[playerid][itemid][iUsed] = true;
 
-   			new format_url[128];
-			new rows, Cache:tmp_cache, query[128];
+   			new format_url[128],
+			   Cache:tmp_cache, query[128];
 
 			mysql_format(connHandle, query, sizeof(query), "SELECT `audio_url` FROM `"SQL_PREF"audiourls` WHERE audio_uid = '%d' LIMIT 1", PlayerItemCache[playerid][itemid][iValue][0]);
             tmp_cache = mysql_query(connHandle, query);
@@ -14772,27 +16184,30 @@ public OnPlayerUseItem(playerid, itemid)
 	
 	if(item_type == ITEM_GLOVES)
 	{
-		if(PlayerCache[playerid][pGlove] && !PlayerItemCache[playerid][itemid][iUsed])
+		if(PlayerCache[playerid][pItemGloves] != INVALID_ITEM_ID && PlayerCache[playerid][pItemGloves] != itemid)
 	 	{
-			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Obecnie masz ju¿ za³o¿one jakieœ rêkawiczki.");
+			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Obecnie masz ju¿ za³o¿one jakieœ inne rêkawiczki.");
    			return 0;
    		}
 	    if(!PlayerItemCache[playerid][itemid][iUsed])
 	    {
 	        PlayerItemCache[playerid][itemid][iUsed] = true;
-	        PlayerCache[playerid][pGlove] = true;
-	        
+	        PlayerCache[playerid][pItemGloves] = itemid;
+
   			format(string, sizeof(string), "* %s zak³ada %s na d³onie.", PlayerName(playerid), PlayerItemCache[playerid][itemid][iName]);
 			ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
-	    }
+		}
 	    else
 	    {
 	        PlayerItemCache[playerid][itemid][iUsed] = false;
-			PlayerCache[playerid][pGlove] = false;
-	    
+			PlayerCache[playerid][pItemGloves] = itemid;
+			
+			PlayerItemCache[playerid][itemid][iValue][0] --;
+
    			format(string, sizeof(string), "* %s zdejmuje %s z d³oni.", PlayerName(playerid), PlayerItemCache[playerid][itemid][iName]);
 			ProxDetector(10.0, playerid, string, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE, COLOR_PURPLE);
 	    }
+	    if(PlayerItemCache[playerid][itemid][iValue][0] <= 0)   DeletePlayerItem(playerid, itemid);
 	    return 1;
 	}
 	
@@ -14864,10 +16279,11 @@ public OnPlayerUseItem(playerid, itemid)
 		        }
 		    }
 		}
+		CreateExplosion(PosX, PosY, PosZ, 1, 10.0);
 		GetPlayerPos(playerid, PosX, PosY, PosZ);
 		
 		GetXYInFrontOfPlayer(playerid, PosX, PosY, 8.0);
-		CreateExplosion(PosX, PosY, PosZ, 12, 5.0);
+		CreateExplosion(PosX, PosY, PosZ, 1, 10.0);
 
 		DoorData[dFireData][FIRE_TIME] = 1;
 		Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
@@ -14993,7 +16409,7 @@ public OnPlayerUseItem(playerid, itemid)
 	    if(PlayerItemCache[playerid][itemid][iUsed])
 	    {
 	        PlayerCache[playerid][pFlashLight] = false;
-	        RemovePlayerAttachedObject(playerid, SLOT_FLASHLIGHT);
+	        RemovePlayerAttachedObject(playerid, SLOT_EXTRA);
 	        
 	        RemovePlayerAttachedObject(playerid, 0);
 	        PlayerItemCache[playerid][itemid][iUsed] = false;
@@ -15001,7 +16417,7 @@ public OnPlayerUseItem(playerid, itemid)
 	    else
 	    {
 	        PlayerCache[playerid][pFlashLight] = true;
-	        SetPlayerAttachedObject(playerid, SLOT_FLASHLIGHT, 18641, 6, 0.092000, 0.020000, -0.062999, 0.099999, -10.700075, 0.299999);
+	        SetPlayerAttachedObject(playerid, SLOT_EXTRA, 18641, 6, 0.092000, 0.020000, -0.062999, 0.099999, -10.700075, 0.299999);
 
 	        SetPlayerAttachedObject(playerid, 0, 18656, 6, 0.107000, -0.009000, -0.117999, -90.900054, -3.299999, -6.399999, 0.034000, 0.024999, 0.035000);
             PlayerItemCache[playerid][itemid][iUsed] = true;
@@ -15021,6 +16437,32 @@ public OnPlayerUseItem(playerid, itemid)
 		
 		ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, title, NewsPaperWrap(text), "Zamknij", "");
 		if(cache_is_valid(tmp_cache))	cache_delete(tmp_cache);
+	    return 1;
+	}
+	
+	if(item_type == ITEM_WOOD)
+	{
+	    new Float:PosX, Float:PosY, Float:PosZ;
+		GetPlayerPos(playerid, PosX, PosY, PosZ);
+	
+		new ActorData[sActorData], NearActors[MAX_VIS_ACTORS], actorid,
+			actor_count = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_ACTOR, NearActors, MAX_VIS_ACTORS, 1000.0, 0);
+
+		for (new actor = 0; actor < actor_count; actor++)
+		{
+			actorid = NearActors[actor];
+			Streamer_GetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
+			
+			if(ActorData[aType] == ACTOR_TRADER)
+			{
+			    Streamer_GetItemPos(STREAMER_TYPE_ACTOR, actorid, PosX, PosY, PosZ);
+			    SetPlayerCheckpoint(playerid, PosX, PosY, PosZ, 2.0);
+			
+				TD_ShowHint(playerid, HINT_NONE, 10, "Ten przedmiot mozesz ~g~sprzedac ~w~u kupcow. Na mapie ~r~zaznaczono ~w~najblizej znajdujacego sie kupca.~n~~n~Udaj sie do niego i dokonaj ~y~interakcji ~w~za pomoca klawisza ~p~Y");
+			    return 1;
+			}
+		}
+		TD_ShowHint(playerid, HINT_NONE, 10, "Ten przedmiot mozesz ~g~sprzedac ~w~u kupcow w miescie.~n~~n~Udaj sie do jednego i dokonaj ~y~interakcji ~w~za pomoca klawisza ~p~Y~w~.");
 	    return 1;
 	}
 	return 1;
@@ -15239,6 +16681,7 @@ public OnPlayerRaiseItems(playerid)
 			}
 		}
 		strcat(main_query, query, sizeof(main_query));
+		print(main_query);
 
 		// Usuñ obiekt przedmiotu
 		if(item_place == PLACE_NONE)
@@ -15327,17 +16770,38 @@ public LoadPlayerItems(playerid)
 			orm_setkey(orm_id, "item_uid");
 			orm_apply_cache(orm_id, row);
 			
-
-			if(PlayerItemCache[playerid][itemid][iType] == ITEM_PHONE)
+			// Prze³adowanie przedmiotwó - przypisz ineksy u¿ywanych
+			switch(PlayerItemCache[playerid][itemid][iType])
 			{
-				if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pPhoneNumber] = PlayerItemCache[playerid][itemid][iValue][0];
+			    case ITEM_PHONE:
+			    {
+			        if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pPhoneNumber] = PlayerItemCache[playerid][itemid][iValue][0];
+			    }
+				case ITEM_WEAPON, ITEM_INHIBITOR, ITEM_PAINT:
+				{
+                    if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pItemWeapon] = itemid;
+				}
+				case ITEM_MASK:
+				{
+				    if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pItemMask] = itemid;
+				}
+				case ITEM_GLOVES:
+				{
+				    if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pItemGloves] = itemid;
+				}
+				case ITEM_PASS:
+				{
+				    if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pItemPass] = itemid;
+				}
+				case ITEM_PLAYER:
+				{
+				    if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pItemPlayer] = itemid;
+				}
+				case ITEM_BOOMBOX:
+				{
+				    if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pItemBoombox] = itemid;
+				}
 			}
-
-			if(PlayerItemCache[playerid][itemid][iType] == ITEM_WEAPON || PlayerItemCache[playerid][itemid][iType] == ITEM_INHIBITOR || PlayerItemCache[playerid][itemid][iType] == ITEM_PAINT)
-			{
-				if(PlayerItemCache[playerid][itemid][iUsed])	PlayerCache[playerid][pItemWeapon] = itemid;
-			}
-
 			Iter_Add(PlayerItem[playerid], itemid);
 		}
 	}
@@ -15519,7 +16983,7 @@ public query_OnLoadAreas()
 		area_id = CreateDynamicPolygon(pointes, (point1[2] == 0.0) ? -FLOAT_INFINITY : point1[2], (point2[2] == 0.0) ? FLOAT_INFINITY : point2[2], 8, area_world);
 
 		// Serwis
-		if(AreaData[aFlags] & A_FLAG_SERVICE || AreaData[aFlags] & A_FLAG_CORNER)
+		if(AreaData[aFlags] & A_FLAG_SERVICE || AreaData[aFlags] & A_FLAG_CORNER || AreaData[aFlags] & A_FLAG_LUMBERJACK || AreaData[aFlags] & A_FLAG_MISSION)
 		{
 			AreaData[aExtraID] = GangZoneCreate(pointes[0], pointes[1], pointes[4], pointes[3]);
 		}
@@ -15650,7 +17114,7 @@ public ListGroupProductsForPlayer(group_id, playerid, list_type)
 	tmp_cache = mysql_query(connHandle, query);
 	
 	if(list_type == PRODUCT_LIST_PRICE)	format(list_products, sizeof(list_products), "Nazwa produktu\tCena\n");
-	else								format(list_products, sizeof(list_products), "Nazwa produkut\tCena\tIloœæ\n");
+	else								format(list_products, sizeof(list_products), "Nazwa produktu\tCena\tIloœæ\n");
 	
 	DynamicGui_Init(playerid);
 
@@ -15753,7 +17217,7 @@ public DeleteObject(object_id)
 public query_OnLoadObjects()
 {
 	new objData[sObjectData], rows, last_uid,
-	    object_id, object_uid, object_model, object_world, object_interior, Float:object_pos[3], Float:object_rot[3], object_material[128];
+	    object_id, object_uid, object_model, object_world, object_interior, Float:object_pos[3], Float:object_rot[3], object_material[256];
 
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
@@ -15796,7 +17260,7 @@ public query_OnLoadObjects()
 				Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_STREAM_DISTANCE, MAX_DRAW_DISTANCE / 2);
 			
 				// Centrum (dwukrotna odleg³oœæ widzenia i obiekt statyczny)
-			    if(object_model >= -2017 && object_model <= -2001 || object_model == -2020 || object_model == -2021)
+			    if(object_model >= -2017 && object_model <= -2001 || object_model == -2020 || object_model == -2021 || object_model == -2089 || object_model == -2090 || object_model == -2099)
 			    {
 			        Streamer_SetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_WORLD_ID, -1);
 			        Streamer_SetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_INTERIOR_ID, -1);
@@ -15817,34 +17281,38 @@ public query_OnLoadObjects()
 			if(object_world != 0 && row <= 10)	Streamer_SetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_PRIORITY, true);
 			last_uid = object_uid;
 		}
-		cache_get_value_index(row, 25, object_material, 128);
+		cache_get_value_index(row, 25, object_material, 256);
 
 		if(strlen(object_material) > 5)
 		{
+		    new material_type, index, material_rest[256];
+		    sscanf(object_material, "p<^>dp<:>ds[128]", material_type, index, material_rest);
+		
  			// Materials
-			new index, color1, color2, modelid, txdname[32], texturename[64],
-			    matsize, fontsize, bold, alignment, fonttype[12], text[128];
+			new color1, color2, modelid, txdname[32], texturename[64],
+			    matsize, fontsize, bold, alignment, fonttype[12], text[256];
 			    
-		    if(strval(object_material[0]) == 0)
+		    if(material_type == 0)
 		    {
-      			sscanf(object_material, "'0''^'p<:>dxds[32]s[64]", index, color1, modelid, txdname, texturename);
+      			sscanf(material_rest, "p<:>dds[32]s[64]", color1, modelid, txdname, texturename);
         		SetDynamicObjectMaterial(object_id, index, modelid, txdname, texturename, color1);
 	        }
 
-			if(strval(object_material[0]) == 1)
+			if(material_type == 1)
 			{
- 				sscanf(object_material, "'1''^'p<:>ddddxxds[12]s[128]", index, matsize, fontsize, bold, color1, color2, alignment, fonttype, text);
+ 				sscanf(material_rest, "p<:>dddxxds[12]s[128]", matsize, fontsize, bold, color1, color2, alignment, fonttype, text);
 
    				format(text, sizeof(text), "%s", WordWrap(text, WRAP_MANUAL));
      			SetDynamicObjectMaterialText(object_id, index, text, matsize, fonttype, fontsize, bold, color1, color2, alignment);
 			}
+			print(object_material);
 		}
 		object_material = "";
 	}
 	return 1;
 }
 
-public Add3DTextLabel(LabelDesc[128], LabelColor, Float:LabelPosX, Float:LabelPosY, Float:LabelPosZ, Float:LabelDrawDistance, LabelWorld, LabelInteriorID)
+public Add3DTextLabel(LabelDesc[256], LabelColor, Float:LabelPosX, Float:LabelPosY, Float:LabelPosZ, Float:LabelDrawDistance, LabelWorld, LabelInteriorID)
 {
 	new query[512], label_uid;
 
@@ -15862,13 +17330,13 @@ public Add3DTextLabel(LabelDesc[128], LabelColor, Float:LabelPosX, Float:LabelPo
 public query_OnLoad3DTextLabels()
 {
 	new rows, label_uid, Text3D:label_id, col[20],
-	    label_desc[128], label_color, Float:label_pos[3], Float:label_draw, label_world, label_interior;
+	    label_desc[256], label_color, Float:label_pos[3], Float:label_draw, label_world, label_interior;
 	
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
 	{
 	    cache_get_value_index_int(row, 0, label_uid);
-	    cache_get_value_index(row, 3, label_desc, 128);
+	    cache_get_value_index(row, 3, label_desc, 256);
 
 		cache_get_value_index(row, 4, col, 20);
 		sscanf(col, "x", label_color);
@@ -16073,7 +17541,7 @@ public OnPlayerSendOffer(playerid, customerid, OfferName[], OfferType, OfferValu
 		    return 1;
 		}
 		
-		
+		/*
 		switch(OfferType)
 		{
 		    case OFFER_ITEM, OFFER_VEHICLE, OFFER_DOOR, OFFER_TOWING, OFFER_PAINT, OFFER_MONTAGE, OFFER_BUSINESS, OFFER_REGISTER, OFFER_PASS, OFFER_SALON:
@@ -16090,6 +17558,7 @@ public OnPlayerSendOffer(playerid, customerid, OfferName[], OfferType, OfferValu
 				}
 		    }
 		}
+		*/
 		
 		SendClientMessage(playerid, COLOR_INFO, "Oferta zosta³a wys³ana. Odczekaj chwilê, by przekonaæ siê, czy gracz zaakceptuje Twoj¹ ofertê.");
         printf("[offe] %s (UID: %d, GID: %d) wys³a³ ofertê dla %s (UID: %d, GID: %d). Typ oferty: %s, nazwa: %s, wartoœci: %d/%d, cena: $%d", PlayerRealName(playerid), PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerRealName(customerid), PlayerCache[customerid][pUID], PlayerCache[customerid][pGID], OfferTypeInfo[OfferType][oTypeName], OfferName, OfferValue1, OfferValue2, OfferPrice);
@@ -16234,10 +17703,7 @@ public OnPlayerAcceptOffer(playerid, offererid)
 				    PlayerCache[offererid][pBankCash] += offer_price;
 				}
 			}
-			PlayerItemCache[offererid][itemid][iPlace] = PLACE_PLAYER;
-			PlayerItemCache[offererid][itemid][iOwner] = PlayerCache[playerid][pUID];
-
-			orm_update(PlayerItemCache[offererid][itemid][iOrm]);
+			mysql_query_format("UPDATE `"SQL_PREF"items` SET item_ownertype = '%d', item_owner = '%d' WHERE item_uid = '%d' LIMIT 1", PLACE_PLAYER, PlayerCache[playerid][pUID], item_uid);
 
 			UnloadPlayerItem(offererid, itemid);
 			itemid = LoadPlayerItem(playerid, item_uid);
@@ -16638,8 +18104,8 @@ public OnPlayerAcceptOffer(playerid, offererid)
 
 		if(offer_type == OFFER_MONTAGE)
 		{
-			new item_uid = OfferData[playerid][oValue1],
-				veh_uid = OfferData[playerid][oValue2], vehid = GetVehicleID(veh_uid), itemid = GetPlayerItemID(offererid, item_uid);
+			new veh_uid = OfferData[playerid][oValue1],
+				item_uid = OfferData[playerid][oValue2], vehid = GetVehicleID(veh_uid), itemid = GetPlayerItemID(offererid, item_uid);
 
 			if(vehid == INVALID_VEHICLE_ID)
 			{
@@ -17509,7 +18975,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 	    	return 1;
 		}
 		CreateExplosion(DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], 9, 5.0);
-		TD_ShowSmallInfo(playerid, 5, "Wszedles do ~r~palacego ~w~sie budynku. Uzywaj ~y~gasnicy ~w~by gasic pozar.");
+		TD_ShowHint(playerid, HINT_NONE, 10, "Wszedles do ~r~palacego ~w~sie budynku. Uzywaj ~y~gasnicy ~w~by gasic pozar.~n~~n~Plomienie beda sie co chwile ~r~pojawiac~w~. Wypatruj ich i ~y~ugaszaj ~w~pozar bys nie splonal!");
 	}
 	if(PlayerCache[playerid][pFreeze] > 0)
 	{
@@ -17535,7 +19001,8 @@ public OnPlayerEnterDoor(playerid, doorid)
 	    }
 	    PlayStreamedAudioForPlayer(playerid, DoorData[dAudioURL]);
 	}
-	Streamer_UpdateEx(playerid, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], DoorData[dExitVW], DoorData[dExitInt], STREAMER_TYPE_OBJECT, true, freeze_time);
+	OnPlayerFreeze(playerid, true, freeze_time);
+	Streamer_UpdateEx(playerid, DoorData[dExitX], DoorData[dExitY], DoorData[dExitZ], DoorData[dExitVW], DoorData[dExitInt], STREAMER_TYPE_OBJECT);
 
 	if(!IsPlayerInAnyVehicle(playerid))
 	{
@@ -17643,6 +19110,57 @@ public OnPlayerEnterDoor(playerid, doorid)
 				}
 			}
 			*/
+
+			// Przemycony towar
+			if(MissionData[playerid][mUID] != 0)
+			{
+			    if(MissionData[playerid][mType] == MISSION_SMUGGLE && MissionData[playerid][mLevel] == 3)
+			    {
+			        if(MissionData[playerid][mLeader] && MissionData[playerid][mGroup] == group_id)
+			        {
+						GroupData[group_id][gCash] += MissionData[playerid][mAward];
+						orm_update(GroupData[group_id][gOrm]);
+
+						switch(random(1))
+						{
+		    				case 0:
+						    {
+						        new weapon_id = 22 + random(10);
+          						CreateDoorProduct(doorid, "Bron z przemytu", ITEM_WEAPON, weapon_id, (GetWeaponType(weapon_id) == WEAPON_TYPE_LIGHT) ? random(70) : random(300), 1, MissionData[playerid][mMembers]);
+						    }
+						    case 1:
+						    {
+			       				new drug_type = random(5);
+		        				CreateDoorProduct(doorid, DrugTypeInfo[drug_type][dName], ITEM_DRUG, drug_type, 1, 1, MissionData[playerid][mMembers] * 20);
+						    }
+						}
+			            foreach(new i : MissionPlayer[playerid])
+			            {
+			                TD_ShowHint(i, HINT_NONE, 15, "Zadanie zostalo ~g~pomyslnie ~w~wykonane! Na konto grupy ~y~%s (UID: %d) ~w~zostalo dodane ~g~$%d~w~.~n~~n~W magazynie grupy pojawil sie takze ~b~losowy ~w~towar (~p~/g magazyn~w~), ktory mozecie wykorzystac do gry.", GroupData[group_id][gName], GroupData[group_id][gUID], MissionData[playerid][mAward]);
+						}
+						DeleteMission(MissionData[playerid][mUID]);
+						
+						// Jeœli ktoœ chcia³ przerwaæ zadanie
+						new mission_uid;
+						foreach(new i : Player)
+						{
+						    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+						    {
+						        if(MissionData[i][mUID] != 0 && MissionData[i][mType] == MISSION_CHASE)
+						        {
+						            if(MissionData[i][mVictim] == PlayerCache[playerid][pUID])
+						            {
+						                mission_uid = MissionData[i][mUID];
+										TD_ShowHint(i, HINT_NONE, 10, "~r~Lider ~w~grupy przemytniczej dotarl do swojej ~y~siedziby~w~. Zadanie ~r~nie zostalo ~w~wykonane prawidlowo.");
+						            }
+						        }
+						    }
+						}
+						DeleteMission(mission_uid);
+			        }
+			    }
+			}
+			
 		}
 		
 		new group_id = GetGroupID(DoorData[dOwner]);
@@ -17650,7 +19168,7 @@ public OnPlayerEnterDoor(playerid, doorid)
 		{
 		    case G_TYPE_GOV:
 		    {
-		        TD_ShowHint(playerid, HINT_GOV, 15, "Wszedles do ~y~Urzedu Miasta~w~, udaj sie do okienka i patrzac na stojacego tam aktora wcisnij klawisz ~r~Y~w~.~n~~n~Ten klawisz odpowiada za ~y~interakcje ~w~z otoczeniem i jest bardzo obszernie rozbudowany, jednak dowiesz sie o nim wiecej w dalszym etapie gry.~n~~n~Wyrob sobie ~y~identyfikator ~w~(dowod osobisty) i ~y~licencje ~w~(prawo jazdy), te z pewnoscia przydadza Ci sie do gry. :)");
+		        TD_ShowHint(playerid, HINT_GOV, 15, "Wszedles do ~y~Ratusza~w~, udaj sie do okienka i patrzac na stojacego tam aktora wcisnij klawisz ~r~Y~w~.~n~~n~Ten klawisz odpowiada za ~y~interakcje ~w~z otoczeniem i jest bardzo obszernie rozbudowany, jednak dowiesz sie o nim wiecej w dalszym etapie gry.~n~~n~Wyrob sobie ~y~identyfikator ~w~(dowod osobisty) i ~y~licencje ~w~(prawo jazdy), te z pewnoscia przydadza Ci sie do gry. :)");
 		    }
 		    case G_TYPE_BANK:
 		    {
@@ -17730,7 +19248,8 @@ public OnPlayerExitDoor(playerid, doorid)
 	}
 	*/
 	
-	Streamer_UpdateEx(playerid, door_enter[0], door_enter[1], door_enter[2], door_entervw, door_enterint, STREAMER_TYPE_OBJECT, true, 3);
+	OnPlayerFreeze(playerid, true, 3);
+	Streamer_UpdateEx(playerid, door_enter[0], door_enter[1], door_enter[2], door_entervw, door_enterint, STREAMER_TYPE_OBJECT);
 
   	if(!IsPlayerInAnyVehicle(playerid))
   	{
@@ -17780,7 +19299,7 @@ public OnPlayerExitDoor(playerid, doorid)
 public OnPlayerEnterDynamicArea(playerid, areaid)
 {
 	new AreaData[sAreaData];
-	Streamer_GetArrayData(areaid, STREAMER_TYPE_AREA, E_STREAMER_EXTRA_ID, AreaData);
+	Streamer_GetArrayData(STREAMER_TYPE_AREA, areaid, E_STREAMER_EXTRA_ID, AreaData);
 	
 	/*
 	if(AreaData[aOwnerType] == OWNER_GROUP)
@@ -17802,6 +19321,142 @@ public OnPlayerEnterDynamicArea(playerid, areaid)
 		}
 	}
 	*/
+	if(AreaData[aFlags] & A_FLAG_LUMBERJACK)
+	{
+	    if(WorkInfo[playerid][wID] == JOB_LUMBERJACK)
+	    {
+	        SetPlayerAttachedObject(playerid, SLOT_EXTRA, 341, 6);
+			TD_ShowHint(playerid, HINT_NONE, 15, "Praca drwala~n~~n~Podejdz do pobliskiego ~r~drzewa~w~, a nastepnie uzyj klawisza ~y~LPM~w~, by scinac drzewo i zbierac z nich drewno.~n~~n~Sciete drewno magazynowac bedziesz w swoim ~b~ekwipunku~w~, ktore mozesz pozniej ~g~sprzedac ~w~w tartaku.");
+
+			WorkInfo[playerid][wValue][0] = areaid;
+			
+			new objData[sObjectData],
+				Float:PosX, Float:PosY, Float:PosZ, virtual_world = GetPlayerVirtualWorld(playerid);
+
+			GetPlayerPos(playerid, PosX, PosY, PosZ);
+
+			new ObjectData[MAX_VIS_OBJECTS], object_id = INVALID_OBJECT_ID,
+				count_objects = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, 100.0, 9999);
+
+			for (new object = 0; object < count_objects; object++)
+			{
+   				object_id = ObjectData[object];
+				if(GetObjectModel(object_id) == OBJECT_TREE)
+				{
+					Streamer_GetArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_EXTRA_ID, objData);
+					if(objData[objExtraID] != 0 && gettime() - objData[objExtraID] > 3600)
+					{
+						Streamer_SetIntData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_WORLD_ID, virtual_world);
+						Streamer_SetFloatData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_R_Y, 0.0);
+					}
+				}
+			}
+			new	Float:objX, Float:objY, Float:objZ;
+			object_id = GetClosestObjectType(playerid, OBJECT_TREE, 30.0);
+			
+			if(object_id != INVALID_OBJECT_ID)
+			{
+				GetDynamicObjectPos(object_id, objX, objY, objZ);
+				SetPlayerCheckpoint(playerid, objX, objY, objZ, 2.0);
+			}
+			Streamer_Update(playerid, STREAMER_TYPE_OBJECT);
+		}
+	}
+	
+ 	if(AreaData[aFlags] & A_FLAG_MISSION)
+    {
+        if(MissionData[playerid][mUID] != 0 && MissionData[playerid][mVictim] == AreaData[aUID])
+        {
+	    	new mission_uid = MissionData[playerid][mUID], mission_type = MissionData[playerid][mType],
+	     		mission_leader = GetMissionLeader(mission_uid);
+
+			if(MissionData[playerid][mDate] + MissionData[playerid][mTime] < gettime())
+			{
+				foreach(new i : MissionPlayer[mission_leader])
+				{
+					TD_ShowHint(i, HINT_NONE, 15, "Czas wykonania zadania zostal ~r~przekroczony~w~. Niestety ~r~nie udalo ~w~sie go prawidlowo wykonac.");
+
+					DisablePlayerCheckpoint(i);
+					PlayerCache[i][pCheckpoint] = CHECKPOINT_NONE;
+				}
+				DeleteMission(mission_uid);
+			    return 1;
+			}
+
+			if(MissionData[playerid][mMembers] > 0)
+			{
+				new count_members;
+			    foreach(new i : MissionPlayer[mission_leader])
+			    {
+       				if(IsPlayerInDynamicArea(i, areaid))
+			        {
+						count_members ++;
+      				}
+		    	}
+			    if(count_members < MissionData[playerid][mMembers])
+			    {
+					TD_ShowSmallInfo(playerid, 5, "Zaczekaj, az wszyscy ~y~czlonkowie ~w~zadania pojawia sie na ~r~miejscu~w~.");
+     				return 1;
+		    	}
+			}
+	  		if(mission_type == MISSION_SMUGGLE)
+	    	{
+				// Przyjazd na miejsce
+	   			if(MissionData[playerid][mLevel] == 0)
+	      		{
+					if(!IsPlayerInAnyVehicle(playerid) || GetPlayerState(playerid) != PLAYER_STATE_DRIVER)
+					{
+	    				TD_ShowSmallInfo(playerid, 5, "Musicie w to miejsce wjechac ~r~pojazdem ~w~dostawczym.");
+					    return 1;
+					}
+					new vehid = GetPlayerVehicleID(playerid);
+					if(!IsVehicleVan(vehid))
+					{
+	    				TD_ShowSmallInfo(playerid, 5, "Ten pojazd ~r~nie jest ~w~pojazdem dostawczym (np. Rumpo).");
+					    return 1;
+					}
+					new object_id, crates = 0,
+						Float:PosX, Float:PosY, Float:PosZ, virtual_world = GetPlayerVirtualWorld(playerid);
+
+					GetPlayerPos(playerid, PosX, PosY, PosZ);
+
+					new ObjectData[MAX_VIS_OBJECTS],
+						count_objects = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_OBJECT, ObjectData, MAX_VIS_OBJECTS, 200.0, virtual_world);
+
+					for (new object = 0; object < count_objects; object++)
+					{
+						object_id = ObjectData[object];
+						if(GetObjectModel(object_id) == OBJECT_SMUGGLE_CRATE)
+						{
+							GetDynamicObjectPos(object_id, PosX, PosY, PosZ);
+		 					foreach(new i : MissionPlayer[mission_leader])
+							{
+			    				SetPlayerMapIcon(i, crates, PosX, PosY, PosZ, 56, 0);
+			    				if(!Streamer_IsInArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_PLAYER_ID, i))	Streamer_AppendArrayData(STREAMER_TYPE_OBJECT, object_id, E_STREAMER_PLAYER_ID, i);
+
+                                Streamer_Update(i, STREAMER_TYPE_OBJECT);
+							}
+							crates ++;
+						}
+					}
+
+					foreach(new i : MissionPlayer[mission_leader])
+					{
+	    				MissionData[i][mLevel] = 1;
+
+						MissionData[i][mPoints] = 0;
+						MissionData[i][mNeedPoints] = crates;
+
+						MissionData[i][mValue][0] = vehid;
+		    			MissionData[i][mValue][1] = gettime();
+
+		    			TD_ShowHint(i, HINT_NONE, 0, "Musicie teraz zapakowac ~y~towar ~w~na busa. Na minimapie pokazano miejsca, w ktorych znajduja sie ~r~skrzynki~w~.~n~~n~Podejdz do skrzynki i wcisnij klawisz ~y~Y~w~, by ja podniesc.~n~~n~Zapakowane towary: %d~n~Pozostalo: %d", MissionData[i][mPoints], MissionData[i][mNeedPoints]);
+					}
+					return 1;
+				}
+    		}
+		}
+    }
     
 	if(strlen(AreaData[aAudioURL]) > 1)
 	{
@@ -17845,6 +19500,15 @@ public OnPlayerLeaveDynamicArea(playerid, areaid)
 		{
 	 		if(PlayerCache[playerid][pItemPlayer] != INVALID_ITEM_ID)	return 1;
 			StopStreamedAudioForPlayer(playerid);
+		}
+		
+		if(AreaData[aFlags] & A_FLAG_LUMBERJACK)
+		{
+		    if(WorkInfo[playerid][wID] == JOB_LUMBERJACK)
+		    {
+		        RemovePlayerAttachedObject(playerid, SLOT_EXTRA);
+		        WorkInfo[playerid][wValue][0] = 0;
+		    }
 		}
 		
 		/*
@@ -18091,7 +19755,7 @@ public LoadPlayerBans(playerid)
 		PlayerCache[playerid][pBanned] = true;
 		defer OnKickPlayer(playerid);
    	}
-   	if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
+    if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
 	return 1;
 }
 
@@ -18101,54 +19765,98 @@ public crp_CreateActor(actor_name[32], modelid, Float:aX, Float:aY, Float:aZ, Fl
 	mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"actors` (actor_name, actor_skin, actor_x, actor_y, actor_z, actor_r, actor_vw, actor_interior) VALUES ('%e', '%d', '%f', '%f', '%f', '%f', '%d', '%d')", actor_name, modelid, aX, aY, aZ, aR, aVW, aInterior);
 	mysql_query(connHandle, query);
 	
-	new actor_uid = cache_insert_id();
+	new actor_uid = cache_insert_id(),
+		rows, Cache:tmp_cache, ActorData[sActorData], actor_id,
+		Float:actor_pos[4], actor_vw, actor_interior;
+		
 	mysql_format(connHandle, query, sizeof(query), "SELECT * FROM `"SQL_PREF"actors` WHERE actor_uid = '%d' LIMIT 1", actor_uid);
-	mysql_tquery(connHandle, query, "query_OnLoadActors", "");
+	tmp_cache = mysql_query(connHandle, query);
+
+	cache_get_row_count(rows);
+	if(rows > 0)
+	{
+	    cache_get_value_index_int(0, 0, ActorData[aUID]);
+
+	    cache_get_value_index(0, 1, ActorData[aName], 32);
+	    cache_get_value_index_int(0, 2, modelid);
+
+		cache_get_value_index_float(0, 3, actor_pos[0]);
+		cache_get_value_index_float(0, 4, actor_pos[1]);
+		cache_get_value_index_float(0, 5, actor_pos[2]);
+		cache_get_value_index_float(0, 6, actor_pos[3]);
+
+		cache_get_value_index_int(0, 7, ActorData[aType]);
+		cache_get_value_index_int(0, 8, ActorData[aAnim]);
+
+		cache_get_value_index_int(0, 10, actor_vw);
+		cache_get_value_index_int(0, 11, actor_interior);
+
+		cache_get_value_index(0, 12, ActorData[aText], 128);
+
+		if(ActorData[aType] == ACTOR_CORPSE)
+		{
+			ActorData[aLabel] = CreateDynamic3DTextLabel(ActorData[aName], COLOR_RED, actor_pos[0], actor_pos[1], actor_pos[2] - 0.5, 20.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 0, actor_vw, actor_interior);
+		}
+
+		if(ActorData[aType] == ACTOR_VICTIM)
+		{
+		    ActorData[aLabel] = CreateDynamic3DTextLabel("(!!!)", COLOR_RED, actor_pos[0], actor_pos[1], actor_pos[2] + 1.5, 20.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 0, actor_vw, actor_interior);
+		}
+
+		if(ActorData[aType] == ACTOR_SPECIAL)
+		{
+		    ActorData[aLabel] = CreateDynamic3DTextLabel("(???)", COLOR_WHITE, actor_pos[0], actor_pos[1], actor_pos[2] + 1.5, 20.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 0, actor_vw, actor_interior);
+		}
+
+		actor_id = CreateDynamicActor(modelid, actor_pos[0], actor_pos[1], actor_pos[2], actor_pos[3], true, 100.0, actor_vw, actor_interior);
+		Streamer_SetArrayData(STREAMER_TYPE_ACTOR, actor_id, E_STREAMER_EXTRA_ID, ActorData);
+	}
 	
-	return actor_uid;
+	if(cache_is_valid(tmp_cache)) cache_delete(tmp_cache);
+	return actor_id;
 }
 
 public query_OnLoadActors()
 {
 	new rows, ActorData[sActorData], actor_id,
 		modelid, Float:actor_pos[4], actor_vw, actor_interior;
-	
+
 	cache_get_row_count(rows);
 	for(new row = 0; row != rows; row++)
 	{
 	    cache_get_value_index_int(row, 0, ActorData[aUID]);
-	    
+
 	    cache_get_value_index(row, 1, ActorData[aName], 32);
 	    cache_get_value_index_int(row, 2, modelid);
-	    
+
 		cache_get_value_index_float(row, 3, actor_pos[0]);
 		cache_get_value_index_float(row, 4, actor_pos[1]);
 		cache_get_value_index_float(row, 5, actor_pos[2]);
 		cache_get_value_index_float(row, 6, actor_pos[3]);
-		
+
 		cache_get_value_index_int(row, 7, ActorData[aType]);
 		cache_get_value_index_int(row, 8, ActorData[aAnim]);
-		
+
 		cache_get_value_index_int(row, 10, actor_vw);
 		cache_get_value_index_int(row, 11, actor_interior);
 
 		cache_get_value_index(row, 12, ActorData[aText], 128);
-		
+
 		if(ActorData[aType] == ACTOR_CORPSE)
 		{
 			ActorData[aLabel] = CreateDynamic3DTextLabel(ActorData[aName], COLOR_RED, actor_pos[0], actor_pos[1], actor_pos[2] - 0.5, 20.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 0, actor_vw, actor_interior);
 		}
-		
+
 		if(ActorData[aType] == ACTOR_VICTIM)
 		{
 		    ActorData[aLabel] = CreateDynamic3DTextLabel("(!!!)", COLOR_RED, actor_pos[0], actor_pos[1], actor_pos[2] + 1.5, 20.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 0, actor_vw, actor_interior);
 		}
-		
+
 		if(ActorData[aType] == ACTOR_SPECIAL)
 		{
 		    ActorData[aLabel] = CreateDynamic3DTextLabel("(???)", COLOR_WHITE, actor_pos[0], actor_pos[1], actor_pos[2] + 1.5, 20.0, INVALID_PLAYER_ID, INVALID_VEHICLE_ID, 0, actor_vw, actor_interior);
 		}
-		
+
 		actor_id = CreateDynamicActor(modelid, actor_pos[0], actor_pos[1], actor_pos[2], actor_pos[3], true, 100.0, actor_vw, actor_interior);
 		Streamer_SetArrayData(STREAMER_TYPE_ACTOR, actor_id, E_STREAMER_EXTRA_ID, ActorData);
 	}
@@ -18290,8 +19998,10 @@ public OnPlayerInteractActor(playerid, actorid)
 	            WorkInfo[playerid][wValue][0] = 20;
 	            TD_ShowSmallInfo(playerid, 5, "Odebrales ~y~20 sztuk ~w~gazet. Rozwiez je do ~r~zaznaczonych ~w~na mapie miejsc.");
 
-				new random_doorid = GetRandomDoorID(OWNER_PLAYER),
-					Float:PosX, Float:PosY, Float:PosZ;
+                new Float:PosX, Float:PosY, Float:PosZ;
+				Streamer_GetItemPos(STREAMER_TYPE_PICKUP, doorid, PosX, PosY, PosZ);
+                
+				new random_doorid = GetNearRandomDoorID(PosX, PosY, PosZ, OWNER_PLAYER);
 					
 				WorkInfo[playerid][wExtraID] = random_doorid;
 				Streamer_GetItemPos(STREAMER_TYPE_PICKUP, random_doorid, PosX, PosY, PosZ);
@@ -18364,7 +20074,7 @@ public OnPlayerInteractActor(playerid, actorid)
 			    return 1;
 			}
 			new title[64], veh_visual[4],
-				repair_price = 1000 - floatround(CarInfo[vehid][cHealth], floatround_ceil), visual_price = 0;
+				repair_price = 2000 - floatround(CarInfo[vehid][cHealth], floatround_ceil), visual_price = 0;
 			
 			sscanf(CarInfo[vehid][cVisual], "a<d>[4]", veh_visual);
 			
@@ -18372,7 +20082,7 @@ public OnPlayerInteractActor(playerid, actorid)
 			{
 			    if(veh_visual[i] > 0)
 			    {
-					visual_price += 35;
+					visual_price += 45;
 			    }
 			}
 			
@@ -18385,6 +20095,8 @@ public OnPlayerInteractActor(playerid, actorid)
 			format(title, sizeof(title), "Wybierz us³ugê dla pojazdu %s (%d):", GetVehicleName(CarInfo[vehid][cModel]), CarInfo[vehid][cUID]);
 			format(string, sizeof(string), "*\tUs³uga\n1\tCa³kowita naprawa\n2\tWygl¹d wizualny\n3\tNaprawa techniczna");
 
+			TD_ShowHint(playerid, HINT_NONE, 5, "Naprawiajac pojazd u ~y~innego gracza ~w~(pracownika warsztatu lub mechanika) otrzymasz bardziej ~g~korzystna ~w~oferte.");
+			
 			ShowPlayerDialog(playerid, D_ACTOR_WORKSHOP, DIALOG_STYLE_TABLIST_HEADERS, title, string, "Wybierz", "Anuluj");
 			PlayerCache[playerid][pMainTable] = actorid;
 	    }
@@ -18501,7 +20213,7 @@ public OnPlayerInteractActor(playerid, actorid)
 				    ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Zabójcy uda³o siê idealnie zatrzeæ dowody zbrodni.");
 				}
 		    }
-		    case G_TYPE_MEDICAL:
+		    case G_TYPE_MEDICAL, G_TYPE_FIREDEPT:
 		    {
 		        if(strfind(ActorData[aName], "(niezidentyfikowane)", true) != -1)
 		        {
@@ -18584,6 +20296,13 @@ public OnPlayerInteractActor(playerid, actorid)
 		    }
 		}
 	}
+	
+	if(actor_type == ACTOR_TRADER)
+	{
+	    ShowPlayerDialog(playerid, D_ACTOR_TRADER, DIALOG_STYLE_LIST, "Wybierz rodzaj przemiotu sprzeda¿y:", "1\tDrewno\n2\tRyby\n3\tBi¿uteria", "Wybierz", "Zamknij");
+	    PlayerCache[playerid][pMainTable] = actorid;
+	}
+	
  	if(strlen(editingString) > 0)	SendClientFormatMessage(playerid, COLOR_FADE1, "%s mówi: %s", ActorData[aName], editingString);
 	return 1;
 }
@@ -18703,6 +20422,15 @@ public UpdatePlayerStatus(playerid)
 	    format(status_string, sizeof(status_string), "%s", name_string);
 	}
 	
+	if(PlayerCache[playerid][pDuty][DUTY_GROUP] != INVALID_GROUP_ID)
+	{
+ 		new group_id = PlayerCache[playerid][pDuty][DUTY_GROUP];
+   		if(GroupData[group_id][gFlags] & G_FLAG_DUTY)
+    	{
+			format(status_string, sizeof(status_string), "%s\n[%s]", status_string, GroupData[group_id][gTag]);
+		}
+	}
+	
 	new player_color = Streamer_GetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_COLOR);
 	UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][pNameTag], player_color, status_string);
 	return 1;
@@ -18722,12 +20450,13 @@ public CreatePlayerCorpse(playerid, killer_uid, weapon_uid)
 	if(PlayerCache[playerid][pDocuments])	format(corpse_name, sizeof(corpse_name), "Zwloki %s", PlayerRealName(playerid));
 	else                                    corpse_name = "Zwloki (niezidentyfikowane)";
 	
-	new actor_uid = crp_CreateActor(corpse_name, PlayerCache[playerid][pSkin], PosX, PosY, PosZ, PosA, VirtualWorldID, InteriorID);
-	mysql_query_format("INSERT INTO `"SQL_PREF"corpses` (corpse_owner, corpse_killer, corpse_death, corpse_weapon, corpse_body, corpse_actor, corpse_date) VALUES ('%d', '%d', '%d', '%d', '%d', '%d', '%d')", PlayerCache[playerid][pUID], killer_uid, corpse_death, weapon_uid, PlayerCache[playerid][pDeathBody], actor_uid, date);
-
-	new actorid = GetActorID(actor_uid), ActorData[sActorData];
+	new actorid = crp_CreateActor(corpse_name, PlayerCache[playerid][pSkin], PosX, PosY, PosZ, PosA, VirtualWorldID, InteriorID);
+	
+	new ActorData[sActorData];
 	Streamer_GetArrayData(STREAMER_TYPE_ACTOR, actorid, E_STREAMER_EXTRA_ID, ActorData);
 	
+	mysql_query_format("INSERT INTO `"SQL_PREF"corpses` (corpse_owner, corpse_killer, corpse_death, corpse_weapon, corpse_body, corpse_actor, corpse_date) VALUES ('%d', '%d', '%d', '%d', '%d', '%d', '%d')", PlayerCache[playerid][pUID], killer_uid, corpse_death, weapon_uid, PlayerCache[playerid][pDeathBody], ActorData[aUID], date);
+
 	ActorData[aType] = ACTOR_CORPSE;
 	ActorData[aLabel] = CreateDynamic3DTextLabel(corpse_name, COLOR_RED, PosX, PosY, PosZ - 0.5, 20.0);
 	
@@ -18775,6 +20504,36 @@ public OnPlayerRequestDownload(playerid, type, crc)
 
 public OnPlayerFinishedDownloading(playerid, virtualworld)
 {
+    foreach(new i : Player)
+	{
+	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+	    {
+	        if(PlayerCache[i][pSpectate] == playerid)
+	        {
+         		SetPlayerVirtualWorld(i, virtualworld);
+	            //SetPlayerInterior(i, GetPlayerInterior(playerid));
+	            
+	            switch(GetPlayerState(playerid))
+	            {
+      		    	case 0, 1, 7, 8:
+				    {
+						PlayerSpectatePlayer(i, playerid);
+					}
+	    			case 2, 3:
+	    			{
+						PlayerSpectateVehicle(i , GetPlayerVehicleID(playerid));
+					}
+		   			case 9:
+				    {
+				        SetPlayerSpawn(i);
+				    }
+	            }
+	        }
+	    }
+	}
+	
+	SetPlayerVirtualWorld(playerid, virtualworld);
+
 	if(PlayerCache[playerid][pLogged])  return 1;
 	TD_HideSmallInfo(playerid);
 
@@ -18838,10 +20597,10 @@ public OnPlayerFinishedDownloading(playerid, virtualworld)
     orm_addvar_int(orm_id, PlayerCache[playerid][pHint], "char_hint");
     orm_addvar_float(orm_id, PlayerCache[playerid][pMileage], "char_mileage");
     
-    orm_setkey(orm_id, "char_name");
+    orm_addvar_int(orm_id, PlayerCache[playerid][pEpisode], "char_episode");
     
+    orm_setkey(orm_id, "char_name");
     PlayerCache[playerid][pWalkStyle] = GetAnimID(PlayerCache[playerid][pWalkStyle]);
-    if(PlayerCache[playerid][pLastPayday] > 1573412400)	PlayerCache[playerid][pLastPayday] = 1573412400;
 
     printf("OnPlayerConnect - %d, %d, %s", PlayerCache[playerid][pUID], PlayerCache[playerid][pGID], PlayerCache[playerid][pCharName]);
     orm_select(orm_id, "OnPlayerLogin", "d", playerid);
@@ -18866,22 +20625,52 @@ public OnDynamicActorStreamIn(actorid, forplayerid)
 /* Komendy */
 cmd:test(playerid, params[])
 {
-	new Float:pos[3];
-	if(sscanf(params, "a<f>[3]", pos))
+/*
+	new slot, Float:rotx, Float:roty, Float:rotz, Float:zoom;
+	sscanf(params, "dffff", slot, rotx, roty, rotz, zoom);
+
+    TextDrawSetPreviewRot(GII_Option[slot], rotx, roty, rotz, zoom);
+*/
+
+
+
+
+
+	/*
+	new type, Float:handling;
+	if(sscanf(params, "df", type, handling))
 	{
-	    ShowTipForPlayer(playerid, "/test [x, y, zoom]");
+	    new Float:hand;
+	    ShowTipForPlayer(playerid, "/test [typ œwiate³] [handling]");
+	    
+    	if(IsPlayerInAnyVehicle(playerid))
+		{
+	    	new vehid = GetPlayerVehicleID(playerid);
+	    	GetVehicleHandlingFloat(vehid, HANDL_TR_FENGINEACCELERATION, hand);
+
+	    	ShowTipForPlayer(playerid, "VELOCITY: %f", hand);
+		}
 	    return 1;
 	}
 	
-	TextDrawTextSize(TextDrawMainLogo, pos[0], pos[1]);
-	TextDrawSetPreviewRot(TextDrawMainLogo, 90.000000, 180.000000, 0.000000, pos[2]);
-	
-	TextDrawShowForPlayer(playerid, Text:TextDrawMainLogo);
+	if(IsPlayerInAnyVehicle(playerid))
+	{
+	    new vehid = GetPlayerVehicleID(playerid);
+	    SetVehicleHandlingFloat(vehid, HANDL_TR_FENGINEACCELERATION, handling);
+	    
+	    TD_ShowSmallInfo(playerid, 5, "Ustawiono handling na %f", handling);
+	}
+	*/
 	return 1;
 }
 
 cmd:qs(playerid, params[])
 {
+	if(PlayerCache[playerid][pBusTravel] != INVALID_OBJECT_ID)
+	{
+	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie mo¿esz tego teraz zrobiæ.");
+	    return 1;
+	}
 	new string[128],
 	    Float:PosX, Float:PosY, Float:PosZ;
 	    
@@ -19262,6 +21051,61 @@ cmd:g(playerid, params[])
 		ShowPlayerDialog(playerid, D_PLAYER_LIST, DIALOG_STYLE_LIST, "Cz³onkowie online:", list_workers, "PW", "Zamknij");
 		return 1;
 	}
+	if(!strcmp(type, "zadania", true) || !strcmp(type, "quest", true))
+	{
+	    new group_id = PlayerGroup[playerid][group_slot][gpID];
+	    if(PlayerCache[playerid][pDuty][DUTY_GROUP] == INVALID_GROUP_ID)
+	    {
+	        ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Musisz byæ na s³u¿bie grupy, by móc wybraæ zadanie.");
+	        return 1;
+	    }
+	    
+		new query[256], title[128], list_missions[1024],
+			Cache:tmp_cache, rows;
+			
+		new mission_uid, mission_type, mission_members, mission_award, mission_date, mission_limit, mission_time, mission_hours, mission_minutes;
+		format(list_missions, sizeof(list_missions), "Typ zadania\tIloœæ osób\tNagroda\tCzas wykonania");
+			
+		mysql_format(connHandle, query, sizeof(query), "SELECT `mission_uid`, `mission_type`, `mission_members`, `mission_award`, `mission_date`, `mission_limit`, `mission_time` FROM `"SQL_PREF"group_missions` WHERE mission_owner = '%d' AND mission_extraid = 0 OR mission_owner = 0 AND mission_extraid = '%d'", GroupData[group_id][gType], GroupData[group_id][gUID]);
+	    tmp_cache = mysql_query(connHandle, query);
+	    
+	    DynamicGui_Init(playerid);
+	    
+	    cache_get_row_count(rows);
+		for(new row = 0; row < rows; row++)
+		{
+		    cache_get_value_index_int(row, 0, mission_uid);
+		    cache_get_value_index_int(row, 1, mission_type);
+		    cache_get_value_index_int(row, 2, mission_members);
+		    cache_get_value_index_int(row, 3, mission_award);
+		    cache_get_value_index_int(row, 4, mission_date);
+            cache_get_value_index_int(row, 5, mission_limit);
+            cache_get_value_index_int(row, 6, mission_time);
+            
+    		mission_hours = floatround(mission_time / 3600, floatround_floor),
+			mission_minutes = floatround(mission_time / 60, floatround_floor) % 60;
+		
+		    mission_type -= 1;
+			if(mission_date + mission_limit < gettime())
+			{
+				format(list_missions, sizeof(list_missions), "%s\n%s\tx%d\t$%d\t%dh %dm", list_missions, MissionTypeInfo[mission_type][mName], mission_members, mission_award, mission_hours, mission_minutes);
+                DynamicGui_AddRow(playerid, D_NONE, mission_uid);
+			}
+		}
+		DynamicGui_SetDialogValue(playerid, group_id);
+		if(cache_is_valid(tmp_cache))	cache_delete(tmp_cache);
+		
+		if(rows > 0)
+		{
+			format(title, sizeof(title), "Zadania dla grupy %s (UID: %d)", GroupData[group_id][gName], GroupData[group_id][gUID]);
+			ShowPlayerDialog(playerid, D_MISSION_DESC, DIALOG_STYLE_TABLIST_HEADERS, title, list_missions, "Szczegó³y", "Zamknij");
+		}
+		else
+		{
+		    TD_ShowSmallInfo(playerid, 3, "Grupa ~r~nie posiada ~w~zadnych aktywnych zadan do wykonania.");
+		}
+	    return 1;
+	}
 	if(!strcmp(type, "sluzba", true) || !strcmp(type, "duty", true))
 	{
 		if(GetCustomerID(playerid) != INVALID_PLAYER_ID)
@@ -19329,7 +21173,7 @@ cmd:g(playerid, params[])
 	            PlayerCache[playerid][pDuty][DUTY_GROUP] = INVALID_GROUP_ID;
 	            PlayerCache[playerid][pSession][SESSION_GROUP] = 0;
 
-	            PlayerCache[playerid][pNickColor] = COLOR_NICK;
+	            PlayerCache[playerid][pNickColor] = (COLOR_NICK & ~0xFF) | clamp(0x88, 0x00, 0xFF);
 	            Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_COLOR, PlayerCache[playerid][pNickColor]);
 	            
 				PlayerTextDrawHide(playerid, TextDrawDuty[playerid]);
@@ -19357,7 +21201,7 @@ cmd:g(playerid, params[])
 			    Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pNameTag], E_STREAMER_COLOR, PlayerCache[playerid][pNickColor]);
 			}
 		}
-		TD_ShowLargeInfo(playerid, 10, "Sluzba: ~b~~h~grupa               ~y~%s (UID: %d)~n~~n~~w~Rozpoczeto: ~g~~h~%02d:%02d          ~w~Tytul: ~r~~h~%s", GroupData[group_id][gName], GroupData[group_id][gUID], start_hour, start_minute, PlayerGroup[playerid][group_slot][gpTitle]);
+		TD_ShowLargeInfo(playerid, 10, "Sluzba: ~b~~h~grupa               ~y~%s (UID: %d)~n~~n~~w~Rozpoczeto: ~g~~h~%02d:%02d          ~w~Tytul: ~r~~h~%s~n~~n~~y~%s", GroupData[group_id][gName], GroupData[group_id][gUID], start_hour, start_minute, PlayerGroup[playerid][group_slot][gpTitle], GroupData[group_id][gAdvertise]);
 	    SendClientFormatMessage(playerid, GroupData[group_id][gColor], "» Wszed³eœ na s³u¿bê grupy %s (UID: %d). Aby zejœæ ze s³u¿by wpisz /g %d duty.", GroupData[group_id][gName], GroupData[group_id][gUID], group_slot + 1);
 
 		PlayerTextDrawSetString(playerid, TextDrawDuty[playerid], GroupData[group_id][gTag]);
@@ -19421,7 +21265,7 @@ cmd:g(playerid, params[])
 		PlayerGroup[giveplayer_id][giveplayer_group_slot][gpUID] = GroupData[group_id][gUID];
 		PlayerGroup[giveplayer_id][giveplayer_group_slot][gpID] = group_id;
 		
-	    mysql_query_format("INSERT INTO `"SQL_PREF"char_groups` (`char_uid`, `group_belongs`) VALUES ('%d', '%d')", PlayerCache[giveplayer_id][pUID], GroupData[group_id][gUID]);
+	    mysql_query_format("INSERT INTO `"SQL_PREF"char_groups` (`char_uid`, `group_belongs`, `char_joined`) VALUES ('%d', '%d', '%d')", PlayerCache[giveplayer_id][pUID], GroupData[group_id][gUID], gettime());
 		
 		ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Zaprosi³eœ gracza %s do grupy %s (UID: %d).\nPamiêtaj, by ustawiæ mu odpowiednie uprawnienia w panelu grupy.", PlayerName(giveplayer_id), GroupData[group_id][gName], GroupData[group_id][gUID]);
 		SendClientFormatMessage(giveplayer_id, GroupData[group_id][gColor], "Gracz %s zaprosi³ Ciê do grupy %s (UID: %d).", PlayerName(playerid), GroupData[group_id][gName], GroupData[group_id][gUID]);
@@ -20344,7 +22188,7 @@ cmd:pojazd(playerid, params[])
 			else
 			{
 			    TD_ShowSmallInfo(playerid, 3, "Nie posiadasz ~r~zadnych ~w~pojazdow.", 3000, 3);
-			    TD_ShowHint(playerid, HINT_CARDEALER, 15, "Twoja postac moze posiadac niezliczona ilosc ~y~pojazdow~w~. To wszystko zalezy od Ciebie i zawartosci Twojego ~g~portfela~w~.~n~~n~Musisz jednak wiedziec gdzie taki pojazd zakupic. Dlatego na mapie zostaly ~r~zaznaczone ~w~wszystkie ~y~salony samochodowe~w~ (ikonka samochodu), gdzie bedziesz mogl nabyc swoje pierwsze cztery kolka.");
+			    TD_ShowHint(playerid, HINT_CARDEALER, 15, "Twoja postac moze posiadac niezliczona ilosc ~y~pojazdow~w~. To wszystko zalezy od Ciebie i zawartosci Twojego ~g~portfela~w~.~n~~n~Musisz jednak wiedziec gdzie taki pojazd zakupic. Dlatego na mapie sa widoczne ~w~wszystkie ~y~salony samochodowe~w~ (ikonka samochodu), gdzie bedziesz mogl nabyc swoje pierwsze cztery kolka.");
 			}
 			
 			ShowTipForPlayer(playerid, "/pojazd [namierz, zaparkuj, tuning, przypisz, zamknij, info, opis]");
@@ -20767,27 +22611,33 @@ cmd:pojazd(playerid, params[])
 			    }
 			}
 		}
-		new desc[128];
-		if(sscanf(varchar, "s[128]", desc))
+		new desc[256];
+		if(sscanf(varchar, "s[256]", desc))
 		{
-		    ShowTipForPlayer(playerid, "/v opis [Treœæ opisu] | Aby usun¹æ opis, u¿yj komendy /opis usun.");
+		    ShowTipForPlayer(playerid, "/v opis [Treœæ opisu] | Aby usun¹æ opis, u¿yj komendy /v opis usun.");
 			return 1;
+		}
+		if(!strcmp(desc, "usun", true))
+		{
+	 		UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][vDescTag], COLOR_DESC, " ");
+			TD_ShowSmallInfo(playerid, 3, "Opis pojazdu zostal ~g~pomyslnie ~w~usuniety.");
+		    return 1;
 		}
 		for (new i = 0; i < MAX_PLAYERS; i++)
 		{
-			if(Streamer_GetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][pDescTag], E_STREAMER_ATTACHED_VEHICLE) == vehid)
+			if(Streamer_GetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][vDescTag], E_STREAMER_ATTACHED_VEHICLE) == vehid)
   			{
-  				UpdateDynamic3DTextLabelText(Text3D:PlayerCache[i][pDescTag], COLOR_DESC, " ");
-				Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][pDescTag], E_STREAMER_ATTACHED_PLAYER, i);
+  				UpdateDynamic3DTextLabelText(Text3D:PlayerCache[i][vDescTag], COLOR_DESC, " ");
+				Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[i][vDescTag], E_STREAMER_ATTACHED_PLAYER, i);
 			}
 		}
 		format(desc, sizeof(desc), "%s", WordWrap(desc, WRAP_AUTO));
 		
-		UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][pDescTag], COLOR_DO, desc);
+		UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][vDescTag], COLOR_DO, desc);
 		ShowPlayerInfoDialog(playerid, D_TYPE_INFO, "Ustalono nowy opis pojazdu:\n\n%s", desc);
 
-		Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_ATTACHED_VEHICLE, vehid);
-  		Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][pDescTag], E_STREAMER_Z, 0.3);
+		Streamer_SetIntData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][vDescTag], E_STREAMER_ATTACHED_VEHICLE, vehid);
+  		Streamer_SetFloatData(STREAMER_TYPE_3D_TEXT_LABEL, Text3D:PlayerCache[playerid][vDescTag], E_STREAMER_Z, 0.3);
 		return 1;
 	}
 	return 1;
@@ -20902,7 +22752,7 @@ cmd:adrzwi(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_NO_PERM, "Nie mo¿esz zarz¹dzaæ drzwiami.");
 	    return 1;
 	}
-	new type[32], varchar[64], string[128];
+	new type[32], varchar[64];
 	if(sscanf(params, "s[32]S()[64]", type, varchar))
 	{
 	    ShowTipForPlayer(playerid, "/adrzwi [stworz, usun, nazwa, pickup, goto, przypisz, interior, zamknij]");
@@ -21177,6 +23027,8 @@ cmd:adrzwi(playerid, params[])
 	    
 	    new DoorData[sDoorInfo];
 	    Streamer_GetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
+	    
+	    if(DoorData[dMapIcon])	Streamer_SetItemPos(STREAMER_TYPE_MAP_ICON, DoorData[dMapIcon], PosX, PosY, PosZ);
 	    
 	    DoorData[dEnterA] = PosA;
 	    Streamer_SetArrayData(STREAMER_TYPE_PICKUP, doorid, E_STREAMER_EXTRA_ID, DoorData);
@@ -21983,21 +23835,24 @@ cmd:tel(playerid, params[])
 					SetPlayerSpecialAction(i, SPECIAL_ACTION_STOPUSECELLPHONE);
 					RemovePlayerAttachedObject(i, SLOT_PHONE);
 					
-    				SendClientMessage(playerid, COLOR_YELLOW, "Rozmowa zosta³a pomyœlnie zakoñczona.");
 	            	SendClientMessage(i, COLOR_YELLOW, "Rozmowa zosta³a pomyœlnie zakoñczona.");
 		        }
 		    }
 		}
-		PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
 		
-  		if(GetPlayerSpecialAction(playerid) == SPECIAL_ACTION_USECELLPHONE)
-	    {
-			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
+		if(PlayerCache[playerid][pCallingTo] != INVALID_PLAYER_ID)
+		{
+		    SendClientMessage(playerid, COLOR_YELLOW, "Rozmowa zosta³a pomyœlnie zakoñczona.");
+		    PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
+		    
+   			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
 			RemovePlayerAttachedObject(playerid, SLOT_PHONE);
-			return 1;
-	    }
-		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aktualnie z nikim nie rozmawiasz oraz nikt nie próbuje siê z Tob¹ po³¹czyæ.");
-	    return 1;
+		}
+		else
+		{
+			ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aktualnie z nikim nie rozmawiasz oraz nikt nie próbuje siê z Tob¹ po³¹czyæ.");
+		}
+		return 1;
 	}
 	
 	if(!strcmp(params, "odbierz", true) || !strcmp(params, "od", true))
@@ -22110,96 +23965,61 @@ cmd:tel(playerid, params[])
 	}
 	
 	// Taxi
-	if(phone_number == NUMBER_TAXI)
+	if(phone_number == NUMBER_TAXI || phone_number == NUMBER_GASTRONOMY || phone_number == NUMBER_NEWS || phone_number == NUMBER_ALARM)
 	{
-		new list_taxi_corp[1024];
+	    new group_type, group_flag;
+	    switch(phone_number)
+		{
+		    case NUMBER_TAXI:   	group_type = G_TYPE_TAXI;
+		    case NUMBER_GASTRONOMY: group_type = G_TYPE_BAR;
+		    case NUMBER_NEWS:       group_type = G_TYPE_NEWS;
+		    case NUMBER_ALARM:      group_flag = G_FLAG_911;
+		}
+		
+		DynamicGui_Init(playerid);
+	
+		new list_groups[1024], count_groups;
+		format(list_groups, sizeof(list_groups), "Nazwa grupy\tNa s³u¿bie");
+		
 		foreach(new group_id : Groups)
 		{
-            if(GroupData[group_id][gUID])
-            {
-                if(GroupData[group_id][gType] == G_TYPE_TAXI)
-                {
-                    new workers;
+ 	 		if(GroupData[group_id][gUID])
+  			{
+  				if((group_type != 0 && GroupData[group_id][gType] == group_type) || (group_flag != 0 && GroupData[group_id][gFlags] & group_flag))
+  				{
+  					new workers;
 					foreach(new i : Player)
 					{
-					    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
-					    {
-					        if(PlayerCache[i][pDuty][DUTY_GROUP] == group_id)
-					        {
-             					workers ++;
-					        }
-					    }
+					  	if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+					  	{
+						  	if(PlayerCache[i][pDuty][DUTY_GROUP] == group_id)
+						  	{
+								workers ++;
+  							}
+  						}
 					}
-					if(workers)
-					{
-					    format(list_taxi_corp, sizeof(list_taxi_corp), "%s\n%d\t(na s³u¿bie %d)\t%s", list_taxi_corp, group_id, workers, GroupData[group_id][gName]);
-					}
-                }
-            }
-        }
-		if(strlen(list_taxi_corp))
+					count_groups ++;
+					
+					format(list_groups, sizeof(list_groups), "%s\n%s\tx%d", list_groups, GroupData[group_id][gName], workers);
+  					DynamicGui_AddRow(playerid, D_NONE, group_id);
+				}
+    		}
+      	}
+		if(count_groups > 0)
 		{
   			SetPlayerAttachedObject(playerid, SLOT_PHONE, 330, 6);
 			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_USECELLPHONE);
 
-			PlayerCache[playerid][pCallingTo] = NUMBER_TAXI;
-			ShowPlayerDialog(playerid, D_TAXI_CORP_SELECT, DIALOG_STYLE_LIST, "Firmy taksówkarskie", list_taxi_corp, "Dalej", "Anuluj");
+			PlayerCache[playerid][pCallingTo] = phone_number;
+			ShowPlayerDialog(playerid, D_GROUP_SELECT, DIALOG_STYLE_TABLIST_HEADERS, "Wybierz grupê, do której chcesz zadzwoniæ:", list_groups, "Dalej", "Anuluj");
 		}
 		else
 		{
-		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "W chwili obecnej nie ma ¿adnej taksówki na s³u¿bie.");
+		    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "W chwili obecnej nie ma ¿adnych firm.");
 		}
 	    return 1;
 	}
-	
-	// Alarmowy
-	if(phone_number == NUMBER_ALARM)
-	{
- 		SetPlayerAttachedObject(playerid, SLOT_PHONE, 330, 6);
-		SetPlayerSpecialAction(playerid, SPECIAL_ACTION_USECELLPHONE);
 
-		PlayerCache[playerid][pCallingTo] = NUMBER_ALARM;
-
-		SendClientMessage(playerid, COLOR_YELLOW, "Sekretarka: Witaj, po³¹czy³eœ siê z numerem alarmowym centrali Los Santos, z kim po³¹czyæ?");
-		
-		new list_groups[512];
-		DynamicGui_Init(playerid);
-		
-		foreach(new group_id : Groups)
-		{
-		    if(GroupData[group_id][gUID])
-		    {
-		        if(GroupData[group_id][gFlags] & G_FLAG_911)
-		        {
-		            format(list_groups, sizeof(list_groups), "%s\n%s", list_groups, GroupData[group_id][gName]);
-		            DynamicGui_AddRow(playerid, D_NONE, group_id);
-		        }
-		    }
-		}
-		if(strlen(list_groups) <= 0)
-		{
-			TD_ShowSmallInfo(playerid, 3, "Zakonczono ~r~polaczenie ~w~z numerem alarmowym.");
-			PlayerCache[playerid][pCallingTo] = INVALID_PLAYER_ID;
-
-			SetPlayerSpecialAction(playerid, SPECIAL_ACTION_STOPUSECELLPHONE);
-			RemovePlayerAttachedObject(playerid, SLOT_PHONE);
-		    return 1;
-		}
-        ShowPlayerDialog(playerid, D_ALARM_SELECT, DIALOG_STYLE_LIST, "Z kim chcesz siê po³¹czyæ?", list_groups, "Wybierz", "Anuluj");
-	    return 1;
-	}
-	
-	// San News
-	if(phone_number == NUMBER_NEWS)
-	{
-		SetPlayerAttachedObject(playerid, SLOT_PHONE, 330, 6);
-		SetPlayerSpecialAction(playerid, SPECIAL_ACTION_USECELLPHONE);
-
-		PlayerCache[playerid][pCallingTo] = NUMBER_NEWS;
- 		ShowPlayerDialog(playerid, D_CALL_NEWS, DIALOG_STYLE_INPUT, "Los Santos News", "Dodzwoni³eœ siê do radiostacji w Los Santos.\nPowiedz nam po krótce w czym rzecz.", "Dalej", "Anuluj");
-	    return 1;
-	}
-	
 	foreach(new i : Player)
 	{
 	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
@@ -22564,6 +24384,36 @@ cmd:skuj(playerid, params[])
 	            return 1;
 	        }
 	    }
+	}
+	
+	// Zadanie
+	if(MissionData[playerid][mUID] != 0)
+	{
+ 		if(MissionData[playerid][mType] == MISSION_CHASE)
+ 		{
+			if(MissionData[playerid][mVictim] == PlayerCache[giveplayer_id][pUID])
+   			{
+				new mission_leader = GetMissionLeader(MissionData[playerid][mUID]);
+				group_id = MissionData[playerid][mGroup];
+				
+				foreach(new i : MissionPlayer[mission_leader])
+				{
+					TD_ShowHint(i, HINT_NONE, 10, "Zadanie zostalo wykonane ~g~pomyslnie~w~.Na konto grupy ~y~%s (UID: %d) ~w~dodano ~g~%d", GroupData[group_id][gName], GroupData[group_id][gUID], MissionData[playerid][mAward]);
+				}
+
+				GroupData[group_id][gCash] += MissionData[playerid][mAward];
+				orm_update(GroupData[group_id][gOrm]);
+
+				DeleteMission(MissionData[playerid][mUID]);
+				
+				mission_leader = giveplayer_id;
+				foreach(new i : MissionPlayer[mission_leader])
+				{
+				    TD_ShowHint(i, HINT_NONE, 10, "Lider grupy wykonujacej zadanie zostal ~r~skuty~w~. Zadanie ~r~nie zostalo ~w~wykonanie prawidlowo.");
+				}
+				DeleteMission(MissionData[mission_leader][mUID]);
+    		}
+    	}
 	}
 	PlayerCache[giveplayer_id][pCuffedTo] = playerid;
 	
@@ -23803,7 +25653,7 @@ cmd:oferuj(playerid, params[])
 		}
 		
 		format(string, sizeof(string), "%s (%d)", PlayerItemCache[playerid][itemid][iName], PlayerItemCache[playerid][itemid][iUID]);
-		OnPlayerSendOffer(playerid, giveplayer_id, string, OFFER_MONTAGE, PlayerItemCache[playerid][itemid][iUID], CarInfo[vehid][cUID], price);
+		OnPlayerSendOffer(playerid, giveplayer_id, string, OFFER_MONTAGE, CarInfo[vehid][cUID], PlayerItemCache[playerid][itemid][iUID], price);
 	    return 1;
 	}
 	
@@ -24844,7 +26694,7 @@ cmd:bankomat(playerid, params[])
 	if(!PlayerCache[playerid][pBankNumber])
 	{
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Aby móc korzystaæ z bankomatu, musisz posiadaæ konto bankowe.");
-	    TD_ShowHint(playerid, HINT_ATM, 15, "Ups! Nie posiadasz konta w ~g~banku~w~? Musisz je czym predzej zalozyc, by moc trzymac tam bezpiecznie swoje oszczednosci.~n~~n~Zalozenie konta w banku ~r~nic nie kosztuje~w~, a daje wiele korzysci - miedzy innymi mozliwosc ~y~placenia ~w~karta za uslugi.~n~~n~Konto zalozysz w siedzibie ~g~banku~w~, ktorych w miescie jest kilka. Na mapie zaznaczono banki, udaj sie do najblizszego (to znak ~g~$~w~).");
+	    TD_ShowHint(playerid, HINT_ATM, 15, "Ups! Nie posiadasz konta w ~g~banku~w~? Musisz je czym predzej zalozyc, by moc trzymac tam bezpiecznie swoje oszczednosci.~n~~n~Zalozenie konta w banku ~r~nic nie kosztuje~w~, a daje wiele korzysci - miedzy innymi mozliwosc ~y~placenia ~w~karta za uslugi.~n~~n~Konto zalozysz w siedzibie ~g~banku~w~, ktorych w miescie jest kilka. Na mapie widac banki, udaj sie do najblizszego (to znak ~g~$~w~).");
 	    return 1;
 	}
 	ApplyAnimation(playerid, "PED", "ATM", 4.0, 0, 0, 0, 0, 0, true);
@@ -25182,7 +27032,7 @@ cmd:mmat(playerid, params[])
 	    
 	    if(cache_affected_rows() <= 0)
 	    {
-	        mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"materials` (material_owner, material_texture, material_index) VALUES ('%d', '0^%d:%x:%d:%s:%s', '%d')", object_uid, index, color, modelid, txdname, texturename, index);
+	        mysql_format(connHandle, query, sizeof(query), "INSERT INTO `"SQL_PREF"materials` (material_owner, material_texture, material_index) VALUES (%d, '0^%d:%x:%d:%s:%s', %d)", object_uid, index, color, modelid, txdname, texturename, index);
             mysql_query(connHandle, query);
 		}
 	    
@@ -25193,8 +27043,8 @@ cmd:mmat(playerid, params[])
 	// Tekst
 	if(material_type == 1)
 	{
-	    new index, matsize, fontsize, bold, fontcolor, backcolor, alignment, fonttype[12], text[128], query[512];
-	    if(sscanf(varchar, "ddddxxds[12]s[128]", index, matsize, fontsize, bold, fontcolor, backcolor, alignment, fonttype, text))
+	    new index, matsize, fontsize, bold, fontcolor, backcolor, alignment, fonttype[12], text[256], query[512];
+	    if(sscanf(varchar, "ddddxxds[12]s[256]", index, matsize, fontsize, bold, fontcolor, backcolor, alignment, fonttype, text))
 	    {
 	        ShowTipForPlayer(playerid, "/mmat 1 [Index (0-15)] [Matsize (10-140)] [Fontsize (24-255)] [Bold] [Fontcol] [Backcol] [Align (0-2)] [Font] [Txt]");
 	        return 1;
@@ -25250,11 +27100,12 @@ cmd:mcopy(playerid, params[])
 	SetDynamicObjectRot(copy_object_id, object_rot[0], object_rot[1], object_rot[2]);
 	
 	// Materials
-	new materials_count = 0, color1[16], color2[16], modelid[16], txdname[16][32], texturename[16][64],
+	new color1[16], color2[16], modelid[16], txdname[16][32], texturename[16][64],
  		matsize[16], fontsize[16], bold[16], alignment[16], fonttype[16][12], text[16][128];
 		
- 	new query[256], main_query[2048];
- 	format(main_query, sizeof(main_query), "INSERT INTO `"SQL_PREF"materials` (material_owner, material_texture, material_index) VALUES ");
+ 	new main_query[2048];
+ 	format(main_query, sizeof(main_query), "INSERT INTO `"SQL_PREF"materials` (material_owner, material_texture, material_index) (SELECT %d, material_texture, material_index FROM `"SQL_PREF"materials` WHERE material_owner = '%d')", object_uid, GetObjectUID(object_id));
+ 	mysql_query(connHandle, main_query);
  	
 	for(new i; i < 16; i++)
 	{
@@ -25262,31 +27113,13 @@ cmd:mcopy(playerid, params[])
 		{
 			GetDynamicObjectMaterial(object_id, i, modelid[i], txdname[i], texturename[i], color1[i]);
 			SetDynamicObjectMaterial(copy_object_id, i, modelid[i], txdname[i], texturename[i], color1[i]);
-
-			format(query, sizeof(query), "('%d', '0^%d:%x:%d:%s:%s', '%d'),", object_uid, i, color1[i], modelid[i], txdname[i], texturename[i], i);
-            strcat(main_query, query, sizeof(main_query));
-            
-            materials_count ++;
 		}
 
 		if(IsDynamicObjectMaterialTextUsed(object_id, i))
 		{
 			GetDynamicObjectMaterialText(object_id, i, text[i], matsize[i], fonttype[i], fontsize[i], bold[i], color1[i], color2[i], alignment[i]);
 			SetDynamicObjectMaterialText(copy_object_id, i, text[i], matsize[i], fonttype[i], fontsize[i], bold[i], color1[i], color2[i], alignment[i]);
-			
-			format(query, sizeof(query), "('%d', '1^%d:%d:%d:%d:%x:%x:%d:%s:%s', '%d'),", object_uid, i, matsize[i], fontsize[i], bold[i], color1[i], color2[i], alignment[i], fonttype[i], text[i], i);
-			strcat(main_query, query, sizeof(main_query));
-			
-			materials_count ++;
 		}
-	}
-
-	if(materials_count > 0)
-	{
-		strdel(main_query, strlen(main_query) - 1, strlen(main_query));
-		
-		mysql_escape_string(main_query, main_query, 1024);
-		mysql_query(connHandle, main_query);
 	}
 	
 	PlayerCache[playerid][pLastObject] = INVALID_OBJECT_ID;
@@ -25315,7 +27148,7 @@ cmd:mget(playerid, params[])
 		if(IsDynamicObjectMaterialUsed(object_id, i))
 		{
 			GetDynamicObjectMaterial(object_id, i, modelid[i], txdname[i], texturename[i], color1[i]);
-			SendClientFormatMessage(playerid, COLOR_INFO, "/mmat 0 %d %x %d %s %s", i, modelid[i], color1[i], txdname[i], texturename[i]);
+			SendClientFormatMessage(playerid, COLOR_INFO, "/mmat 0 %d %x %d %s %s", i, color1[i], modelid[i], txdname[i], texturename[i]);
 		}
 
 		if(IsDynamicObjectMaterialTextUsed(object_id, i))
@@ -25514,14 +27347,14 @@ cmd:brama(playerid, params[])
        	 		{
        	 		    if(objData[objGateStatus])
        	 		    {
-       	 		        GameTextForPlayer(playerid, "~w~Brama ~g~otwarta", 4000, 6);
+       	 		        GameTextForPlayer(playerid, "~w~Brama ~r~zamknieta", 4000, 6);
 						MoveDynamicObject(object_id, objData[objGateX], objData[objGateY], objData[objGateZ], 3.0, objData[objGateRX], objData[objGateRY], objData[objGateRZ]);
 
 						objData[objGateStatus] = false;
        	 		    }
        	 		    else
        	 		    {
-       	 		        GameTextForPlayer(playerid, "~w~Brama ~r~zamknieta", 4000, 6);
+       	 		        GameTextForPlayer(playerid, "~w~Brama ~g~otwarta", 4000, 6);
        	 		        MoveDynamicObject(object_id, objData[objGateX], objData[objGateY], objData[objGateZ], 3.0, objData[objGateRX], objData[objGateRY], objData[objGateRZ]);
 
 						objData[objGateStatus] = true;
@@ -25553,8 +27386,8 @@ cmd:brama(playerid, params[])
 
 cmd:ec(playerid, params[])
 {
-	new Float:distance, desc[128];
-	if(sscanf(params, "fs[128]", distance, desc))
+	new Float:distance, desc[256];
+	if(sscanf(params, "fs[256]", distance, desc))
 	{
 	    ShowTipForPlayer(playerid, "/ec [Odleg³oœæ] [Treœæ]");
 	    return 1;
@@ -25597,9 +27430,10 @@ cmd:ec(playerid, params[])
 
 	GetPlayerPos(playerid, PosX, PosY, PosZ);
 	GetXYInFrontOfPlayer(playerid, PosX, PosY, 2.0);
+	
+	format(desc, sizeof(desc), "%s", WordWrap(desc, WRAP_MANUAL));
 
-
-	Add3DTextLabel(WordWrap(desc, WRAP_MANUAL), COLOR_WHITE, PosX, PosY, PosZ, distance, world_id, interior_id);
+	Add3DTextLabel(desc, COLOR_WHITE, PosX, PosY, PosZ, distance, world_id, interior_id);
 	Streamer_Update(playerid, STREAMER_TYPE_3D_TEXT_LABEL);
 	
 	ShowPlayerInfoDialog(playerid, D_TYPE_SUCCESS, "Etykieta 3D zosta³a pomyœlnie stworzona, powinna pojawiæ siê tu¿ przed Tob¹.\nAby zarz¹dzaæ stworzon¹ etykiet¹ u¿yj komendy /esel w pobli¿u jej.");
@@ -27356,13 +29190,35 @@ cmd:gps(playerid, params[])
 	{
 		CarInfo[vehid][cGPS] = true;
 		TD_ShowSmallInfo(playerid, 3, "Nadajnik ~b~GPS ~w~zostal ~g~uruchomiony~w~.");
+		
+  		foreach(new i : Player)
+	    {
+     		if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+       		{
+         		if(IsPlayerInAnyVehicle(i))
+           		{
+					vehid = GetPlayerVehicleID(i);
+					if(CarInfo[vehid][cGPS])
+					{
+	    				SetPlayerMarkerForPlayer(playerid, i, COLOR_BLUE);
+					    SetPlayerMarkerForPlayer(i, playerid, COLOR_BLUE);
+					}
+     			}
+        	}
+	    }
 	}
 	else
 	{
 	    CarInfo[vehid][cGPS] = false;
    		TD_ShowSmallInfo(playerid, 3, "Nadajnik ~b~GPS ~w~zostal ~r~wylaczony~w~.");
    		
-   		for(new icon_id = 0; icon_id < 100; icon_id++) RemovePlayerMapIcon(playerid, icon_id);
+	    foreach(new i : Player)
+	    {
+     		if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+       		{
+	    		SetPlayerMarkerForPlayer(playerid, i, COLOR_NICK);
+       		}
+	    }
 	}
 	return 1;
 }
@@ -28214,7 +30070,6 @@ cmd:taguj(playerid, params[])
 	return 1;
 }
 
-/*
 cmd:kosz(playerid, params[])
 {
 	if(PlayerCache[playerid][pBasketObject] != INVALID_OBJECT_ID)
@@ -28252,7 +30107,6 @@ cmd:kosz(playerid, params[])
 	}
 	return 1;
 }
-*/
 
 cmd:admins(playerid, params[])
 {
@@ -29046,8 +30900,8 @@ alias:anim("animacje");
 
 cmd:opis(playerid, params[])
 {
-	new desc[128];
-	if(sscanf(params, "s[128]", desc))
+	new desc[256];
+	if(sscanf(params, "s[256]", desc))
 	{
 	    ShowTipForPlayer(playerid, "/opis [Treœæ opisu] | Aby usun¹æ opis, u¿yj komendy /opis usun.");
 		return 1;
@@ -29055,7 +30909,7 @@ cmd:opis(playerid, params[])
 	if(!strcmp(desc, "usun", true))
 	{
  		UpdateDynamic3DTextLabelText(Text3D:PlayerCache[playerid][pDescTag], COLOR_DESC, " ");
-		TD_ShowSmallInfo(playerid, 3, "Opis zostal ~g~pomyslnie ~w~usuniety.");
+		TD_ShowSmallInfo(playerid, 3, "Opis postaci zostal ~g~pomyslnie ~w~usuniety.");
 	    return 1;
 	}
 	format(desc, sizeof(desc), "%s", WordWrap(desc, WRAP_AUTO));
@@ -29131,10 +30985,10 @@ cmd:yo(playerid, params[])
 	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Wprowadzono nieprawid³owy typ powitania (1-7).");
 	    return 1;
 	}
-	new giveplayer_id = GetClosestPlayer(playerid);
+	new giveplayer_id = GetPlayerCameraTargetPlayer(playerid);
 	if(giveplayer_id == INVALID_PLAYER_ID)
 	{
-	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znaleziono ¿adnego gracza w pobli¿u.");
+	    ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie znaleziono ¿adnego gracza w pobli¿u (musisz na niego patrzeæ).");
 	    return 1;
 	}
 	if(!PlayerCache[giveplayer_id][pLogged])
@@ -29648,6 +31502,30 @@ cmd:bw(playerid, params[])
 	if(sscanf(params, "ud", giveplayer_id, time))
 	{
 	    ShowTipForPlayer(playerid, "/bw [ID gracza] [Czas (min - 0 zdejmuje bw, jeœli ma)]");
+	    
+		new list_bw[256], killer_id, count_bw;
+		format(list_bw, sizeof(list_bw), "ID\tPostaæ\tCzas BW\tKto zabi³\n");
+		
+	    foreach(new i : Player)
+	    {
+	        if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+	        {
+	            if(PlayerCache[i][pBW] > 0)
+	            {
+	                killer_id = GetPlayerID(PlayerCache[i][pDeathKiller]);
+	                if(killer_id == INVALID_PLAYER_ID)
+	                {
+	                	format(list_bw, sizeof(list_bw), "%s\n%d\t%s\t%dm\tBrak (%d)", list_bw, i, PlayerName(i), PlayerCache[i][pBW] / 60, PlayerCache[i][pDeathKiller]);
+					}
+					else
+					{
+					    format(list_bw, sizeof(list_bw), "%s\n%d\t%s\t%dm\t%s (%d)", list_bw, i, PlayerName(i), PlayerCache[i][pBW], PlayerName(killer_id), PlayerCache[i][pDeathKiller]);
+					}
+					count_bw ++;
+				}
+	        }
+	    }
+	    if(count_bw > 0)    ShowPlayerDialog(playerid, D_PLAYER_LIST, DIALOG_STYLE_TABLIST_HEADERS, "Lista graczy z BW:", list_bw, "Wybierz", "Zamknij");
 	    return 1;
 	}
 	if(giveplayer_id == INVALID_PLAYER_ID)
@@ -29950,7 +31828,11 @@ cmd:spec(playerid, params[])
 	SetPlayerInterior(playerid, GetPlayerInterior(giveplayer_id));
 	SetPlayerVirtualWorld(playerid, GetPlayerVirtualWorld(giveplayer_id));
 	
-	TD_ShowSmallInfo(playerid, 0, "Podglad gracza jest teraz ~y~aktywny~w~.~n~~n~Uzywaj klawiszy ~r~~k~~SNEAK_ABOUT~ ~w~oraz ~r~~k~~PED_SPRINT~~w~, aby swobodnie ~g~przeskakiwac ~w~miedzy graczami.");
+	new sp = giveplayer_id, year, month, day, hour, minute, second;
+	TimestampToDate(PlayerCache[giveplayer_id][pSession][SESSION_GAME], year, month, day, hour, minute, second, 1);
+	
+	TD_ShowLargeInfo(playerid, 0, "Postac: ~y~%s (%d)    ~w~Globalny: ~g~%s (%d)~w~~n~Zalogowany od: ~y~%02d:%02d~w~     Czas gry: ~b~%dh %dm~w~~n~~n~HP: ~r~%.0f%%~w~     Gotowka: ~g~$%d~w~     Bank: ~g~$%d~w~", PlayerName(sp), PlayerCache[sp][pUID], PlayerCache[sp][pGlobName], PlayerCache[sp][pGID], hour, minute, PlayerCache[sp][pHours], PlayerCache[sp][pMinutes], PlayerCache[sp][pHealth], PlayerCache[sp][pCash], PlayerCache[sp][pBankCash]);
+	TD_ShowHint(playerid, HINT_NONE, 5, "Podglad gracza jest teraz ~y~aktywny~w~.~n~~n~Uzywaj klawiszy ~r~~k~~SNEAK_ABOUT~ ~w~oraz ~r~~k~~PED_SPRINT~~w~, aby swobodnie ~g~przeskakiwac ~w~miedzy graczami.~n~Klawisz ~y~~k~~PED_JUMPING~ ~w~odswieza podglad.");
 	return 1;
 }
 alias:spec("recon", "rc");
@@ -30584,8 +32466,8 @@ cmd:atext(playerid, params[])
 		ShowPlayerInfoDialog(playerid, D_TYPE_ERROR, "Nie edytujesz aktualnie ¿adnego aktora.");
 		return 1;
 	}
-	new actor_text[128];
-	if(sscanf(params, "s[128]", actor_text))
+	new actor_text[256];
+	if(sscanf(params, "s[256]", actor_text))
 	{
 	    ShowTipForPlayer(playerid, "/atext [Tekst, który aktor bêdzie wymawia³ po interakcji (128 znaków)]");
 	    SendClientMessage(playerid, COLOR_WHITE, "----------------------------------------------------------------------");
@@ -30691,7 +32573,7 @@ cmd:attach(playerid, params[])
 	return 1;
 }
 
-CMD:corner(playerid, params[])
+cmd:corner(playerid, params[])
 {
 	new areaid = GetPlayerAreaID(playerid);
 	if(areaid == INVALID_AREA_ID)
@@ -30748,6 +32630,32 @@ CMD:corner(playerid, params[])
 	TD_ShowHint(playerid, HINT_NONE, 15, "Rozpoczales ~y~handel ~w~narkotykami. Oczekuj cierpliwie na klienta i ~r~nie oddalaj ~w~sie od tego miejsca.~n~~n~Klient zaoferuje Ci swoja cene, Ty mozesz z nim negocjowac lekko ja zawyzajac, lub po prostu ~g~zaakceptowac ~w~oferte i przytulic gotowke.~n~~n~Pamietaj, by posiadac w swoim ~p~ekwipunku ~w~narkotyki (nie w torbie), w innym wypadku handel zostanie przerwany.");
 	return 1;
 }
+alias:corner("handel", "handluj");
+
+cmd:screenshot(playerid, params[])
+{
+	new color;
+	if(sscanf(params, "x", color))	color = 0x000000FF;
+	
+	if(!PlayerCache[playerid][pScreenShot])
+	{
+	    TD_ShowSmallInfo(playerid, 3, "Klawisz ~y~ESC ~w~lub ~p~/ss ~w~wylacza tryb zrzutu ekranu.~n~Mozesz takze wprowadzic wlasny kolor np. ~g~/screenshot 0x33AA33FF");
+	
+		PlayerTextDrawBoxColor(playerid, TextDrawScreenShot[playerid], color);
+		PlayerTextDrawShow(playerid, TextDrawScreenShot[playerid]);
+		
+        SelectTextDraw(playerid, color);
+	}
+	else
+	{
+	    PlayerTextDrawHide(playerid, TextDrawScreenShot[playerid]);
+	    CancelSelectTextDraw(playerid);
+	}
+	
+	PlayerCache[playerid][pScreenShot] = !PlayerCache[playerid][pScreenShot];
+	return 1;
+}
+alias:screenshot("ss");
 
 /* STOCKI */
 stock PlayerRealName(playerid)
@@ -31276,44 +33184,6 @@ stock TD_ShowHint(playerid, hintType, showTime = 0, infoString[], va_args<>)
 	    {
 	    
 	    }
-	    case HINT_ATM, HINT_CARDEALER:
-	    {
-  			new DoorData[sDoorInfo], group_id, group_type, Float:door_pos[3], icon_id, icon_model,
-				count_doors = Streamer_GetUpperBound(STREAMER_TYPE_PICKUP);
-				
-			if(hintType == HINT_ATM)
-			{
-				group_type = G_TYPE_BANK;
-				icon_model = 52;
-			}
-			
-			if(hintType == HINT_CARDEALER)
-			{
-			    group_type = G_TYPE_CARDEALER;
-			    icon_model = 55;
-			}
-
-			for (new door = 0; door <= count_doors; door++)
-			{
-   				if(IsValidDynamicPickup(door))
-			    {
-			    	Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
-				    if(DoorData[dOwnerType] == OWNER_GROUP)
-				    {
-						group_id = GetGroupID(DoorData[dOwner]);
-						if(GroupData[group_id][gType] == group_type)
-						{
-						    Streamer_GetItemPos(STREAMER_TYPE_PICKUP, door, door_pos[0], door_pos[1], door_pos[2]);
-					     	SetPlayerMapIcon(playerid, icon_id, door_pos[0], door_pos[1], door_pos[2], icon_model, 0, MAPICON_GLOBAL);
-
-							icon_id ++;
-							
-							if(icon_id >= 100)  break;
-						}
-				    }
-				}
-			}
-	    }
 	    case HINT_BANK:
 	    {
 	        // Samouczek przydziela trochê kasy
@@ -31327,10 +33197,11 @@ stock TD_ShowHint(playerid, hintType, showTime = 0, infoString[], va_args<>)
 	    {
 	        switch(WorkInfo[playerid][wID])
 	        {
-	            case JOB_COURIER:	CreatePlayerItem(playerid, "Czapka kuriera", ITEM_CLOTH_ACCESS, 0, 236);
-	            case JOB_NEWSPAPER: CreatePlayerItem(playerid, "Plecak na gazety", ITEM_CLOTH_ACCESS, 0, 237);
-	            case JOB_MECHANIC:  CreatePlayerItem(playerid, "Klucz mechanika", ITEM_CLOTH_ACCESS, 0, 239);
-	            case JOB_SELLER:    CreatePlayerItem(playerid, "Czapka sprzedawcy", ITEM_CLOTH_ACCESS, 0, 300);
+	            case JOB_COURIER:		CreatePlayerItem(playerid, "Czapka kuriera", ITEM_CLOTH_ACCESS, 0, 236);
+	            case JOB_NEWSPAPER: 	CreatePlayerItem(playerid, "Plecak na gazety", ITEM_CLOTH_ACCESS, 0, 237);
+	            case JOB_MECHANIC:  	CreatePlayerItem(playerid, "Klucz mechanika", ITEM_CLOTH_ACCESS, 0, 239);
+	            case JOB_SELLER:    	CreatePlayerItem(playerid, "Czapka sprzedawcy", ITEM_CLOTH_ACCESS, 0, 300);
+	            case JOB_LUMBERJACK:	CreatePlayerItem(playerid, "Sluchawki drwala", ITEM_CLOTH_ACCESS, 0, 330);
 			}
    		}
 	}
@@ -31469,6 +33340,34 @@ stock TD_CreateForPlayer(playerid)
 	PlayerTextDrawColor(playerid, TextDrawDuty[playerid], -1);
 	PlayerTextDrawSetOutline(playerid, TextDrawDuty[playerid], 1);
 	// ***  *** //
+	
+	// ***  TextDraw GII    *** //
+	GII_VisualItem[playerid] = CreatePlayerTextDraw(playerid, 310.000000, 160.000000, "_");
+	PlayerTextDrawColor(playerid, GII_VisualItem[playerid], COLOR_GREY);
+	PlayerTextDrawAlignment(playerid, GII_VisualItem[playerid], 2);
+	PlayerTextDrawFont(playerid, GII_VisualItem[playerid], 1);
+	PlayerTextDrawLetterSize(playerid, GII_VisualItem[playerid], 0.319999, 1.300000);
+	PlayerTextDrawColor(playerid, GII_VisualItem[playerid], -1);
+	PlayerTextDrawSetOutline(playerid, GII_VisualItem[playerid], 1);
+	PlayerTextDrawSetProportional(playerid, GII_VisualItem[playerid], 1);
+	// *** *** //
+	
+	
+	// *** ScreenShot   *** //
+	TextDrawScreenShot[playerid] = CreatePlayerTextDraw(playerid, -20.000000,2.000000, "|");
+	PlayerTextDrawUseBox(playerid, TextDrawScreenShot[playerid],1);
+	PlayerTextDrawBoxColor(playerid, TextDrawScreenShot[playerid],0x000000ff);
+	PlayerTextDrawTextSize(playerid, TextDrawScreenShot[playerid],660.000000,22.000000);
+	PlayerTextDrawAlignment(playerid, TextDrawScreenShot[playerid],0);
+	PlayerTextDrawBackgroundColor(playerid, TextDrawScreenShot[playerid],0x000000ff);
+	PlayerTextDrawFont(playerid, TextDrawScreenShot[playerid],3);
+	PlayerTextDrawLetterSize(playerid, TextDrawScreenShot[playerid],1.000000,52.200000);
+	PlayerTextDrawColor(playerid, TextDrawScreenShot[playerid],0x000000ff);
+	PlayerTextDrawSetOutline(playerid, TextDrawScreenShot[playerid],1);
+	PlayerTextDrawSetProportional(playerid, TextDrawScreenShot[playerid],1);
+	PlayerTextDrawSetShadow(playerid, TextDrawScreenShot[playerid],1);
+	PlayerTextDrawSetSelectable(playerid, TextDrawScreenShot[playerid], 1);
+	//  *** *** //
 	return 1;
 }
 
@@ -32002,6 +33901,16 @@ stock IsVehicleBike(vehid)
 	return false;
 }
 
+stock IsVehicleVan(vehid)
+{
+	new model = GetVehicleModel(vehid);
+	if(model == 413 || model == 414 || model == 440 || model == 456 || model == 459 || model == 482 || model == 498 || model == 499 || model == 609)
+	{
+	    return true;
+	}
+	return false;
+}
+
 stock GetDoorID(door_uid)
 {
 	new doorid = INVALID_DOOR_ID, DoorData[sDoorInfo],
@@ -32101,22 +34010,22 @@ stock GetPlayerDoorID(playerid)
 	return doorid;
 }
 
-stock GetRandomDoorID(door_ownertype)
+stock GetNearRandomDoorID(Float:PosX, Float:PosY, Float:PosZ, door_ownertype)
 {
-	new DoorData[sDoorInfo],
-		count_doors = Streamer_GetUpperBound(STREAMER_TYPE_PICKUP);
+	new DoorData[sDoorInfo], NearDoor[MAX_VIS_DOORS],
+		count_doors = Streamer_GetNearbyItems(PosX, PosY, PosZ, STREAMER_TYPE_PICKUP, NearDoor, MAX_VIS_DOORS, 500.0, 0);
 
-	new Doors[100], doors;
-	for (new door = 0; door <= count_doors; door++)
+    new Doors[100], doors;
+	for (new door = 0; door < count_doors; door++)
 	{
- 		if(IsValidDynamicPickup(door))
+ 		if(IsValidDynamicPickup(NearDoor[door]))
    		{
-   			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, door, E_STREAMER_EXTRA_ID, DoorData);
+   			Streamer_GetArrayData(STREAMER_TYPE_PICKUP, NearDoor[door], E_STREAMER_EXTRA_ID, DoorData);
    			if(DoorData[dOwnerType] == door_ownertype)
    			{
-		    	Doors[doors] = door;
+		    	Doors[doors] = NearDoor[door];
 		    	doors ++;
-		    	
+
 		    	if(doors >= 100)    break;
 			}
 	    }
@@ -32124,10 +34033,10 @@ stock GetRandomDoorID(door_ownertype)
 	return Doors[random(doors)];
 }
 
-stock WordWrap(givenString[128], wrap_type)
+stock WordWrap(givenString[256], wrap_type, spaces = 5)
 {
-	new editingString[128], spaceCounter = 0;
-	memcpy(editingString, givenString, 0, 128 * 4);
+	new editingString[256], spaceCounter = 0;
+	memcpy(editingString, givenString, 0, 256 * 4);
 
 	switch(wrap_type)
 	{
@@ -32149,7 +34058,7 @@ stock WordWrap(givenString[128], wrap_type)
 					spaceCounter++;
 				}
 
-			    if(spaceCounter >= 5)
+			    if(spaceCounter >= spaces)
 				{
 					editingString[i] = '\n';
 					spaceCounter = 0;
@@ -32395,7 +34304,7 @@ stock GetPlayerItemWeight(playerid, itemid)
 	    {
 	        item_weight = ItemTypeInfo[item_type][iTypeWeight] * item_value2;
 	    }
-	    case ITEM_BAG, ITEM_NOTEBOOK, ITEM_CHECKBOOK:
+	    case ITEM_BAG, ITEM_NOTEBOOK, ITEM_CHECKBOOK, ITEM_WOOD:
 		{
 		    item_weight = ItemTypeInfo[item_type][iTypeWeight] + item_value1;
 		}
@@ -32616,16 +34525,44 @@ stock GetPlayerAreaID(playerid)
 	return AreaID;
 }
 
+stock GetRandomAreaID(flags)
+{
+	new areaid = INVALID_AREA_ID, AreaData[sAreaData],
+		count_areas = Streamer_GetUpperBound(STREAMER_TYPE_AREA);
+
+	new Areas[100], areas;
+	for (new area = 0; area <= count_areas; area++)
+	{
+ 		if(IsValidDynamicArea(area))
+   		{
+   			Streamer_GetArrayData(STREAMER_TYPE_AREA, area, E_STREAMER_EXTRA_ID, AreaData);
+   			if(AreaData[aFlags] & flags)
+   			{
+		    	Areas[areas] = area;
+		    	areas ++;
+
+		    	if(areas >= 100)    break;
+			}
+	    }
+	}
+	if(areas > 0)	areaid = Areas[random(areas) - 1];
+
+	return areaid;
+}
+
 stock GetActorID(actor_uid)
 {
 	new actorid = INVALID_ACTOR_ID, actors = Streamer_GetUpperBound(STREAMER_TYPE_ACTOR);
 	for (new i = 0; i <= actors; i++)
 	{
-	    if(Streamer_IsInArrayData(STREAMER_TYPE_ACTOR, i, E_STREAMER_EXTRA_ID, actor_uid))
+	    if(IsValidDynamicActor(i))
 	    {
-	        actorid = i;
-	        break;
-	    }
+		    if(Streamer_IsInArrayData(STREAMER_TYPE_ACTOR, i, E_STREAMER_EXTRA_ID, actor_uid))
+		    {
+		        actorid = i;
+		        break;
+		    }
+		}
 	}
 	return actorid;
 }
@@ -32712,7 +34649,6 @@ stock GetClosestObjectType(playerid, object_model, Float:prevdist = 5.0)
 		    ObjectID = object_id;
 		    break;
 		}
-	
 	}
 	return ObjectID;
 }
@@ -33299,7 +35235,7 @@ stock GetPlayerStatus(playerid)
 	if(PlayerCache[playerid][pAFK] > 0)                                 player_status += STATUS_TYPE_AFK;
 	if(PlayerCache[playerid][pBelts])                                  	player_status += STATUS_TYPE_BELTS;
 	if(PlayerCache[playerid][pDrugLevel] >= 10)                         player_status += STATUS_TYPE_STONED;
-	if(PlayerCache[playerid][pGlove])                                  	player_status += STATUS_TYPE_GLOVES;
+	if(PlayerCache[playerid][pItemGloves] != INVALID_ITEM_ID)           player_status += STATUS_TYPE_GLOVES;
 	if(PlayerCache[playerid][pHealth] <= 10.0)                          player_status += STATUS_TYPE_INJURED;
 	
 	return player_status;
@@ -33328,6 +35264,26 @@ stock GetSexName(sex_type)
 	    case 1: sex_name = "mê¿czyzna";
 	}
 	return sex_name;
+}
+
+stock GetMissionLeader(mission_uid)
+{
+	new leader = INVALID_PLAYER_ID;
+	foreach(new i : Player)
+	{
+	    if(PlayerCache[i][pLogged] && PlayerCache[i][pSpawned])
+	    {
+	        if(MissionData[i][mUID] == mission_uid)
+	        {
+	            if(MissionData[i][mLeader] == true)
+	            {
+	                leader = i;
+					break;
+	            }
+	        }
+	    }
+	}
+	return leader;
 }
 
 SSCANF:item_type(string[])

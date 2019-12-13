@@ -13,7 +13,7 @@ native DateToTimestamp(str[11]);
 
 #define SPLITTER .
 
-new MonthTimes[12][4] = 
+new MonthTimes[13][4] = 
 {
 	{ 31, 31, 2678400, 2678400 },
 	{ 28, 29, 2419200, 2505600 },
@@ -26,6 +26,7 @@ new MonthTimes[12][4] =
 	{ 30, 30, 2592000, 2592000 },
 	{ 31, 31, 2678400, 2678400 },
 	{ 30, 30, 2592000, 2592000 },
+	{ 31, 31, 2678400, 2678400 },
 	{ 31, 31, 2678400, 2678400 }
 };
 
@@ -61,7 +62,7 @@ stock TimestampToDate(Timestamp, &year, &month, &day, &hour, &minute, &second, H
 		}
 		else break;
 	}		
-	for(new i = 0; i < 12; i ++)
+	for(new i = 0; i < 13; i ++)
 	{
 		if(Timestamp >= MonthTimes[i][2 + IsLeapYear(year)])
 		{
