@@ -3,10 +3,6 @@
 Autorem skryptu jest Mario. Wszelkie prawa zastrzeżone.
 Głównym pomysłodawcą rozwiązań jest autor we własnej osobie.
 
-UPDATE ipb_characters SET char_hours = 0, char_minutes = (SELECT SUM(session_end - session_start) FROM ipb_game_sessions WHERE session_type = 1 AND session_owner = char_uid) WHERE char_episode = 1
-
-UPDATE ipb_characters SET char_hours = char_minutes / 3600, char_minutes = (char_minutes / 60) % 60 WHERE char_minutes > 60
-KUTAS 321321
 */
 
 // Includes
@@ -3415,15 +3411,11 @@ task OnSecondTask[1000]()
    				new vehid = GetPlayerVehicleID(i),
 					speed = GetPlayerSpeed(i, true), componentid;
 
-   				// Anty SpeedHack
-   				//if(!IsPlayerUsingCHandling(i))
-   				//{
-					if(speed >= VehicleModelData[CarInfo[vehid][cModel] - 400][vMaxSpeed] + 40)
-					{
-						GivePlayerPunish(i, INVALID_PLAYER_ID, PUNISH_KICK, "SpeedHack.", 0, 0);
-						continue;
-					}
-				//}
+				if(speed >= VehicleModelData[CarInfo[vehid][cModel] - 400][vMaxSpeed] + 40)
+				{
+					GivePlayerPunish(i, INVALID_PLAYER_ID, PUNISH_KICK, "SpeedHack.", 0, 0);
+					continue;
+				}
 
 				// Kierowca
 	   			if(GetPlayerState(i) == PLAYER_STATE_DRIVER || GetPlayerVehicleSeat(i) == 0)
@@ -4125,7 +4117,9 @@ task OnSecondTask[1000]()
 						                new drug_string[512],
 											price = (DrugTypeInfo[drug_type][dCornerPrice] + random(floatround(DrugTypeInfo[drug_type][dCornerPrice] * price_multiplier))) * drug_value;
 
-						                format(drug_string, sizeof(drug_string), "Pojawił się nowy klient chętny na zakup %s (%dg). Jego oferta: $%d ($%d za gram).\n\nMożesz zaakceptować tę ofertę, lub podać swoją cenę (co niekoniecznie\nmoże się udać), bądź odrzucić tę ofertę i poczekać na korzystniejszą.\n\nWprowadź poniżej ile oczekujesz za gram tego produktu\njeśli natomiast akceptujesz złożoną ofertę przez klienta - zostaw okno puste.", PlayerItemCache[i][itemid][iName], drug_value, price, price / drug_value);
+										format(drug_string, sizeof(drug_string), "Pojawił się nowy klient chętny na zakup %s (%dg). Jego oferta: $%d ($%d za gram).", PlayerItemCache[i][itemid][iName], drug_value, price, price / drug_value);
+						                format(drug_string, sizeof(drug_string), "%s\n\nMożesz zaakceptować tę ofertę, lub podać swoją cenę (co niekoniecznie\nmoże się udać), bądź odrzucić tę ofertę i poczekać na korzystniejszą.\n\nWprowadź poniżej ile oczekujesz za gram tego produktu\njeśli natomiast akceptujesz złożoną ofertę przez klienta - zostaw okno puste.", drug_string);
+
 						                ShowPlayerDialog(i, D_CORNER_OFFER, DIALOG_STYLE_INPUT, "Handel » Nowy klient", drug_string, "Negocjuj", "Odrzuć");
 						                
 										PlayerCache[i][pItemArray][ITEM_DRUG] = itemid;
@@ -12222,7 +12216,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 	            case 3:
 	            {
 	                PlayerCache[playerid][pMainTable] = JOB_NEWSPAPER;
-	                ShowPlayerDialog(playerid, D_WORK_ACCEPT, DIALOG_STYLE_MSGBOX, "Dorywcza » Rozwoziciel gazet", "W każdym mieście codziennie pojawia się gazeta lokalna, w której znajdują się\nwydarzenia z okolicy. Twoim zadaniem będzie takie gazety dostarczyć\ndo mieszkańców, możesz to robić piechotą, albo za pomocą roweru.\n\nNajpierw będziesz musiał jednak udać się do siedziby\nredakcji i odebrać gazety od stojącego tam aktora.\nCzy chcesz spróbować swoich sił w tej pracy dorywczej?", "Tak", "Nie");
+	                ShowPlayerDialog(playerid, D_WORK_ACCEPT, DIALOG_STYLE_MSGBOX, "Dorywcza » Rozwoziciel gazet", "W każdym mieście codziennie pojawia się gazeta lokalna, w której znajdują się\nwydarzenia z okolicy. Twoim zadaniem będzie takie gazety dostarczyć\ndo mieszkańców, możesz to robić piechotą, albo za pomocą roweru.\n\nCzy chcesz spróbować swoich sił w tej pracy dorywczej?", "Tak", "Nie");
 	            }
 	            case 4:
 	            {
@@ -12305,7 +12299,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 								else
 								{
 								    flag_type = A_FLAG_LUMBERJACK;
-								    ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Pomoc » Praca dorywcza", "Praca drwala polega na wycince drzew, a następnie\nzbiorze materiałów i sprzedaży ich u pobliskiego pracownika.\n\nPo wejściu w strefę wycinki drzew otrzymasz\nodpowiednie narzędzia, którymi będziesz mógł pracować (flaga wycinki drzew).\n\nNa mapie powinieneś ujrzeć strefy, w których możesz pracować jako drwal,\nznajdziesz tam między innymi drzewa, które możesz ściąć oraz pracownika.", "OK", "");
+								    ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Pomoc » Praca dorywcza", "Praca drwala polega na wycince drzew, a następnie\nzbiorze materiałów i sprzedaży ich u pobliskiego pracownika.\n\nPo wejściu w strefę wycinki drzew otrzymasz\nodpowiednie narzędzia, którymi będziesz mógł pracować (flaga wycinki drzew).\n\nNa mapie powinieneś ujrzeć strefy, w których możesz pracować jako drwal.", "OK", "");
 								}
 								
 								new AreaData[sAreaData],
@@ -12403,7 +12397,7 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 						return 1;
 					}
 
-					ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Pomoc » Praca dorywcza", "Oprócz pracy w firmach lub organizacjach, możesz również\nzarobić trochę gotówki korzystając z prac dorywczych.\n\nUdaj się do urzędu miasta i porozmawiaj z urzędnikiem,\na z pewnością znajdziesz coś co Ci odpowiada i będziesz mógł zarobić.\n\nDostępne prace:\n   • mechanik\n   • kurier\n   • sprzedawca\n   • rozwoziciel gazet\n\nPo wyborze jednej z prac będziesz mógł rozpocząć zarabianie.", "OK", "");
+					ShowPlayerDialog(playerid, D_NONE, DIALOG_STYLE_MSGBOX, "Pomoc » Praca dorywcza", "Oprócz pracy w firmach lub organizacjach, możesz również\nzarobić trochę gotówki korzystając z prac dorywczych.\n\nUdaj się do urzędu miasta i porozmawiaj z urzędnikiem,\na z pewnością znajdziesz coś co Ci odpowiada i będziesz mógł zarobić.\n\nDostępne prace:\n   • mechanik\n   • kurier\n   • sprzedawca\n   • rozwoziciel gazet", "OK", "");
 					return 1;
 				}
 				
@@ -13022,8 +13016,10 @@ public OnDialogResponse(playerid, dialogid, response, listitem, inputtext[])
 			        return 1;
 			    }
 			    new string[512];
+
+				format(string, sizeof(string), "Pojawił się nowy klient chętny na zakup %s (%dg). Jego oferta: $%d ($%d za gram).", PlayerItemCache[playerid][itemid][iName], drug_value, (new_price * drug_value), new_price);
+				format(string, sizeof(string), "%s\n\nMożesz zaakceptować tę ofertę, lub podać swoją cenę (co niekoniecznie\nmoże się udać), bądź odrzucić tę ofertę i poczekać na korzystniejszą.\n\nWprowadź poniżej ile oczekujesz za gram tego produktu\njeśli natomiast akceptujesz złożoną ofertę przez klienta - zostaw okno puste.", string);
 			    
-       			format(string, sizeof(string), "Pojawił się nowy klient chętny na zakup %s (%dg). Jego oferta: $%d ($%d za gram).\n\nMożesz zaakceptować tę ofertę, lub podać swoją cenę (co niekoniecznie\nmoże się udać), bądź odrzucić tę ofertę i poczekać na korzystniejszą.\n\nWprowadź poniżej ile oczekujesz za gram tego produktu\njeśli natomiast akceptujesz złożoną ofertę przez klienta - zostaw okno puste.", PlayerItemCache[playerid][itemid][iName], drug_value, (new_price * drug_value), new_price);
           		ShowPlayerDialog(playerid, D_CORNER_OFFER, DIALOG_STYLE_INPUT, "Handel » Nowy klient", string, "Negocjuj", "Odrzuć");
 
 				PlayerCache[playerid][pItemArray][ITEM_DRUG] = itemid;
@@ -27052,12 +27048,6 @@ cmd:mc(playerid, params[])
 			        return 1;
 			    }
 			}
-			if(Streamer_CountVisibleItems(playerid, STREAMER_TYPE_OBJECT) <= 0 && priority == false)
-			{
-			    PlayerCache[playerid][pMainTable] = modelid;
-			    ShowPlayerDialog(playerid, D_OBJECT_PRIORITY, DIALOG_STYLE_MSGBOX, "Pierwszy obiekt", "Prawdopodobnie próbujesz postawić pierwszy obiekt w tych drzwiach.\nW zasadzie pierwszym obiektem powinna być podłoga - jeśli to podłoga wybierz TAK, w innym wypadku postaraj się zacząć budowę od niej.\n\nPo wybraniu opcji skrypt automatycznie ustawi ten obiekt jako priorytet wczytywania, co zniweluje spadanie graczy pod interior.\nCzy obiekt, który zamierzasz postawić JEST PODŁOGĄ?", "Tak", "Nie");
-			    return 1;
-			}
 		}
 		else
 		{
@@ -34517,7 +34507,7 @@ stock ColorFade(color, minvalue, maxvalue)
 }
 
 stock escape_pl(name[])
-{
+{/*
     for(new i = 0; name[i] != 0; i++)
     {
 	    if(name[i] == 'ś') name[i] = 's';
@@ -34539,6 +34529,7 @@ stock escape_pl(name[])
 	    else if(name[i] == 'Ć') name[i] = 'C';
 	    else if(name[i] == 'Ń') name[i] = 'N';
     }
+	*/
 }
 
 stock GetPlayerItemID(playerid, item_uid)
