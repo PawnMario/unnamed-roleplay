@@ -6,7 +6,7 @@ Głównym pomysłodawcą rozwiązań jest autor we własnej osobie.
 UPDATE ipb_characters SET char_hours = 0, char_minutes = (SELECT SUM(session_end - session_start) FROM ipb_game_sessions WHERE session_type = 1 AND session_owner = char_uid) WHERE char_episode = 1
 
 UPDATE ipb_characters SET char_hours = char_minutes / 3600, char_minutes = (char_minutes / 60) % 60 WHERE char_minutes > 60
-KUTAS
+KUTAS 321321
 */
 
 // Includes
