@@ -1,0 +1,27 @@
+CREATE TABLE IF NOT EXISTS `myrp_vehicles` (
+  `vehicle_uid` int(11) NOT NULL AUTO_INCREMENT,
+  `vehicle_model` int(11) NOT NULL,
+  `vehicle_posx` float NOT NULL,
+  `vehicle_posy` float NOT NULL,
+  `vehicle_posz` float NOT NULL,
+  `vehicle_posa` float NOT NULL,
+  `vehicle_world` int(11) NOT NULL,
+  `vehicle_interior` int(11) NOT NULL,
+  `vehicle_color1` smallint(4) NOT NULL,
+  `vehicle_color2` smallint(4) NOT NULL,
+  `vehicle_fuel` float NOT NULL,
+  `vehicle_fueltype` smallint(2) NOT NULL,
+  `vehicle_health` float NOT NULL DEFAULT 1000,
+  `vehicle_mileage` float NOT NULL DEFAULT 0,
+  `vehicle_locked` tinyint(1) NOT NULL,
+  `vehicle_visual` varchar(32) NOT NULL DEFAULT '0,0,0,0',
+  `vehicle_paintjob` smallint(3) NOT NULL,
+  `vehicle_access` int(11) NOT NULL,
+  `vehicle_blockwheel` int(11) NOT NULL,
+  `vehicle_register` varchar(12) NOT NULL,
+  `vehicle_owner` int(11) NOT NULL,
+  `vehicle_ownertype` smallint(3) NOT NULL,
+
+  PRIMARY KEY (`vehicle_uid`),
+  INDEX `owners` (`vehicle_owner`, `vehicle_ownertype`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

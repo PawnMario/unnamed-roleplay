@@ -1,0 +1,1 @@
+ALTER TABLE `core_members` ADD `member_game_admin_perm` int(11) NOT NULL DEFAULT '0' AFTER `member_game_points`;

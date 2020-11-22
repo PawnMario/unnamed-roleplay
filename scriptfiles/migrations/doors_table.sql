@@ -1,0 +1,28 @@
+CREATE TABLE IF NOT EXISTS `myrp_doors` (
+  `door_uid` int(11) NOT NULL AUTO_INCREMENT,
+  `door_name` varchar(64) NOT NULL,
+  `door_ownertype` smallint(2) NOT NULL,
+  `door_owner` int(11) NOT NULL,
+  `door_enterx` float NOT NULL,
+  `door_entery` float NOT NULL,
+  `door_enterz` float NOT NULL,
+  `door_entera` float NOT NULL,
+  `door_entervw` int(11) NOT NULL,
+  `door_enterint` int(11) NOT NULL,
+  `door_exitx` float NOT NULL,
+  `door_exity` float NOT NULL,
+  `door_exitz` float NOT NULL,
+  `door_exita` float NOT NULL,
+  `door_exitvw` int(11) NOT NULL,
+  `door_exitint` int(11) NOT NULL,
+  `door_pickupid` int(11) NOT NULL DEFAULT '1239',
+  `door_lock` tinyint(1) NOT NULL DEFAULT 0,
+  `door_garage` tinyint(1) NOT NULL DEFAULT 0,
+  `door_enterpay` int(11) NOT NULL DEFAULT 0,
+  `door_audiourl` varchar(128) NOT NULL,
+  `door_access` int(11) NOT NULL,
+  `door_hour` smallint(3) NOT NULL,
+
+  PRIMARY KEY (`door_uid`),
+  INDEX `owners` (`door_ownertype`, `door_owner` )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
