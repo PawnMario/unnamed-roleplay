@@ -19,7 +19,7 @@ Głównym pomysłodawcą rozwiązań jest autor we własnej osobie.
 #include <dynamicgui>
 #include <bcrypt>
 #include <timestamptodate>
-//#include <Pawn.RakNet>
+#include <Pawn.RakNet>
 
 // Main config
 #define GAMEMODE		"MRP ©"
